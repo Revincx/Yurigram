@@ -156,7 +156,7 @@ jobs:
           </html>
           EOF
 
-      - uses: actions/upload-pages-artifact@v3.0.1
+      - uses: actions/upload-pages-artifact@v4.0.0
         name: Upload artifact.
         with:
           path: website
