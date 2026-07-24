@@ -1,0 +1,185 @@
+name: Linux Packaged ARM64.
+
+on:
+  release:
+    types: [published]
+
+env:
+  PACKAGE_NAME: yurigram
+  REPO_TAG: ${{ github.event.release.tag_name }}
+  IMAGE_REPOSITORY: ghcr.io/${{ github.repository }}/centos_env
+  IMAGE_RECIPE_VERSION: v1
+
+jobs:
+  image:
+    name: Get or Build ARM64 Docker Image
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 360
+    permissions:
+      contents: read
+      packages: write
+    concurrency:
+      group: linux-packaged-arm64-image
+      cancel-in-progress: false
+    outputs:
+      image-ref: ${{ steps.image.outputs.image-ref }}
+
+    steps:
+      - name: Clone.
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.REPO_TAG }}
+
+      - name: Free up disk space.
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        with:
+          tool-cache: true
+          swap-storage: false
+
+      - name: Get or build Docker image.
+        id: image
+        env:
+          CONTEXT_HASH: ${{ hashFiles('Telegram/build/docker/centos_env/**') }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$CONTEXT_HASH" ]; then
+            echo "Docker build context was not found."
+            exit 1
+          fi
+
+          IMAGE_REPOSITORY="${IMAGE_REPOSITORY,,}"
+          IMAGE_TAG="$IMAGE_REPOSITORY:arm64-$IMAGE_RECIPE_VERSION-$CONTEXT_HASH"
+
+          echo "$GH_TOKEN" \
+            | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+          INSPECT_LOG="$RUNNER_TEMP/arm64-image-inspect.log"
+          if docker buildx imagetools inspect "$IMAGE_TAG" \
+              >/dev/null 2>"$INSPECT_LOG"; then
+            echo "Using existing image $IMAGE_TAG."
+          elif grep -Eiq \
+              'manifest unknown|no such manifest|not found' \
+              "$INSPECT_LOG"; then
+            export PATH="$HOME/.local/bin:$PATH"
+
+            curl -sSL https://install.python-poetry.org | python3 -
+
+            cd Telegram/build/docker/centos_env
+            poetry install --no-interaction --no-ansi
+            DEBUG= LTO= poetry run gen_dockerfile \
+              > "$RUNNER_TEMP/centos-env-arm64.Dockerfile"
+
+            docker buildx create \
+              --driver docker-container \
+              --name centos-env-arm64 \
+              --use
+            docker buildx inspect --bootstrap
+            docker buildx build \
+              --platform linux/arm64 \
+              --file "$RUNNER_TEMP/centos-env-arm64.Dockerfile" \
+              --tag "$IMAGE_TAG" \
+              --label \
+                "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+              --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+              --cache-from type=gha,scope=centos-env-arm64 \
+              --cache-to type=gha,mode=max,scope=centos-env-arm64 \
+              --push \
+              .
+          else
+            cat "$INSPECT_LOG" >&2
+            exit 1
+          fi
+
+          docker buildx imagetools inspect "$IMAGE_TAG" >/dev/null
+          echo "image-ref=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build Linux ARM64 Release Package
+    needs: image
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 360
+    permissions:
+      contents: write
+      packages: read
+
+    steps:
+      - name: Clone.
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          path: ${{ env.PACKAGE_NAME }}
+          ref: ${{ env.REPO_TAG }}
+
+      - name: Free up disk space.
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        with:
+          tool-cache: true
+          swap-storage: false
+
+      - name: Build and package.
+        id: build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_REF: ${{ needs.image.outputs.image-ref }}
+        run: |
+          set -euo pipefail
+
+          echo "$GH_TOKEN" \
+            | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker pull "$IMAGE_REF"
+
+          IMAGE_ARCH=$(docker image inspect "$IMAGE_REF" \
+            --format '{{.Architecture}}')
+          if [ "$IMAGE_ARCH" != "arm64" ]; then
+            echo "Expected an arm64 image, got $IMAGE_ARCH."
+            exit 1
+          fi
+
+          USERFLAGS=0:0
+          if ! docker info -f "{{println .SecurityOptions}}" \
+              | grep -q rootless; then
+            USERFLAGS=$(id -u):$(id -g)
+          fi
+
+          docker run --rm \
+            -u "$USERFLAGS" \
+            -v "$PWD/$PACKAGE_NAME:/usr/src/tdesktop" \
+            -e CONFIG=Release \
+            "$IMAGE_REF" \
+            /usr/src/tdesktop/Telegram/build/docker/centos_env/build.sh \
+            -D DESKTOP_APP_USE_PACKAGED=ON \
+            -D TDESKTOP_API_ID="${{ secrets.API_ID }}" \
+            -D TDESKTOP_API_HASH="${{ secrets.API_HASH }}"
+
+          docker run --rm \
+            -u "$USERFLAGS" \
+            -v "$PWD/$PACKAGE_NAME:/usr/src/tdesktop" \
+            -e CONFIG=Release \
+            -e DESTDIR=/usr/src/tdesktop \
+            -w /usr/src/tdesktop/Telegram \
+            "$IMAGE_REF" \
+            cmake --install /usr/src/tdesktop/out \
+              --config Release \
+              --prefix /pkg/usr
+
+          ARCHIVE="$PACKAGE_NAME-$REPO_TAG-aarch64.tar.gz"
+          tar -czf "$ARCHIVE" -C "$PACKAGE_NAME/pkg" .
+          echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact.
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.PACKAGE_NAME }}-${{ env.REPO_TAG }}-aarch64
+          path: ${{ env.PACKAGE_NAME }}/pkg
+          if-no-files-found: error
+
+      - name: Upload release package.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload \
+            "$REPO_TAG" \
+            "${{ steps.build.outputs.archive }}" \
+            --clobber
