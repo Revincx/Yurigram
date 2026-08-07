@@ -177,11 +177,10 @@ not_null<Ui::RpWidget*> Ui::AddForwardRecentTabsStrip(
 							Window::GifPauseReason::Layer));
 			});
 		slider->setSectionIcons(std::move(icons));
-		if (!sectionsChanged) {
-			return;
-		}
 		state->rebuildLifetime.destroy();
-		slider->fitWidthToSections();
+		if (sectionsChanged) {
+			slider->fitWidthToSections();
+		}
 
 		if (controller) {
 			const auto reorderAll = session->user()->isPremium();
