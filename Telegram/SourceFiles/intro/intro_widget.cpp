@@ -96,6 +96,8 @@ Widget::Widget(
 		this,
 		account,
 		rpl::single(true))) {
+		setAttribute(Qt::WA_TranslucentBackground, true);
+	_background = QPixmap(QStringLiteral(":/gui/art/yuri.jpg"));
 	_settings->entity()->setTextTransform(Ui::RoundButtonTextTransform::ToUpper);
 	controller->setDefaultFloatPlayerDelegate(floatPlayerDelegate());
 
@@ -807,6 +809,24 @@ void Widget::paintEvent(QPaintEvent *e) {
 	if (!trivial) {
 		p.setClipRect(e->rect());
 	}
+
+	// Draw background
+	if (!_background.isNull()) {
+		const auto scaled = _background.scaled(
+			size(),
+			Qt::KeepAspectRatioByExpanding,
+			Qt::SmoothTransformation);
+		const auto x = (width() - scaled.width()) / 2;
+		const auto y = (height() - scaled.height()) / 2;
+		p.drawPixmap(x, y, scaled);
+
+		auto overlay = st::windowBg->c;
+		overlay.setAlpha(160);
+		p.fillRect(rect(), overlay);
+	} else {
+		p.fillRect(e->rect(), st::windowBg);
+	}
+
 	if (_showAnimation) {
 		_showAnimation->paintContents(p);
 		return;
