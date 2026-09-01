@@ -831,7 +831,6 @@ void Widget::paintEvent(QPaintEvent *e) {
 		_showAnimation->paintContents(p);
 		return;
 	}
-	p.fillRect(e->rect(), st::windowBg);
 }
 
 void Widget::resizeEvent(QResizeEvent *e) {
