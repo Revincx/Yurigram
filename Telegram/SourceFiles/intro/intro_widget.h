@@ -192,6 +192,8 @@ private:
 
 	std::unique_ptr<Window::SlideAnimation> _showAnimation;
 
+	QPixmap _background;
+
 	std::vector<details::Step*> _stepHistory;
 	rpl::lifetime _stepLifetime;
 
