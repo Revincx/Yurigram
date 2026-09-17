@@ -760,9 +760,8 @@ rpl::lifetime &PlaybackSponsored::lifetime() {
 	return _lifetime;
 }
 
-bool PlaybackSponsored::Has(HistoryItem *item) {
-	return item
-		&& item->history()->session().sponsoredMessages().canHaveFor(item);
+bool PlaybackSponsored::Has(HistoryItem*) {
+	return false;
 }
 
 } // namespace Media::View
