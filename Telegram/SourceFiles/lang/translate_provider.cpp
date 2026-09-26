@@ -22,7 +22,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 namespace {
 
 base::options::option<QString> OptionTranslateUrlTemplate({
-	.id = "translate-url-template",
+	.id = Ui::kOptionTranslateUrlTemplate,
 	.name = "Translate URL template",
 	.description = "Template URL for custom translation provider."
 		" Supports %q text, %f source language and %t target language.",
@@ -31,6 +31,8 @@ base::options::option<QString> OptionTranslateUrlTemplate({
 } // namespace
 
 namespace Ui {
+
+const char kOptionTranslateUrlTemplate[] = "translate-url-template";
 
 std::unique_ptr<TranslateProvider> CreateTranslateProvider(
 		not_null<Main::Session*> session) {

@@ -45,6 +45,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "info/profile/tabs/adapters/info_profile_tab_media.h"
 #include "info/profile/tabs/info_profile_tabs_host.h"
 #include "lang/lang_keys.h"
+#include "lang/translate_provider.h"
 #include "mainwindow.h"
 #include "mainwidget.h"
 #include "media/player/media_player_instance.h"
@@ -276,17 +277,18 @@ QString AddOption(
 	return searchable;
 }
 
-QString AddFavoriteLinkButton(
+QString AddStringOptionButton(
 		not_null<Window::Controller*> window,
 		not_null<Ui::VerticalLayout*> container,
+		base::options::option<QString> &option,
+		Fn<void()> edit,
 		rpl::producer<QString> query,
 		Fn<void(const QString&, not_null<QWidget*>)> registerHighlight) {
-	const auto option = &base::options::lookup<QString>(
-		Window::kOptionFolderFavoriteLink);
-	const auto name = option->name().isEmpty()
-		? option->id()
-		: option->name();
-	const auto &description = option->description();
+	const auto name = option.name().isEmpty()
+		? option.id()
+		: option.name();
+	const auto &description = option.description();
+	const auto optionPtr = &option;
 
 	const auto wrap = container->add(
 		object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
@@ -299,24 +301,22 @@ QString AddFavoriteLinkButton(
 	auto label = rpl::single(
 		rpl::empty
 	) | rpl::then(
-		option->changes()
-	) | rpl::map([option] {
-		return option->value();
+		option.changes()
+	) | rpl::map([optionPtr] {
+		return optionPtr->value();
 	});
 	const auto button = AddButtonWithLabel(
 		inner,
 		rpl::single(name),
 		std::move(label),
 		st::settingsButtonNoIcon);
-	button->setClickedCallback([=] {
-		window->show(Box(Window::EditFolderFavoriteLinkBox));
-	});
+	button->setClickedCallback(std::move(edit));
 
 	if (registerHighlight) {
-		registerHighlight(u"experimental/"_q + option->id(), button);
+		registerHighlight(u"experimental/"_q + option.id(), button);
 	}
 
-	SetupCopyDeepLink(window, button, option->id());
+	SetupCopyDeepLink(window, button, option.id());
 
 	const auto searchable = name + ' ' + description;
 	const auto terms = SearchWords(searchable);
@@ -329,6 +329,38 @@ QString AddFavoriteLinkButton(
 	}, wrap->lifetime());
 
 	return searchable;
+}
+
+void EditTranslateUrlTemplateBox(not_null<Ui::GenericBox*> box) {
+	const auto option = &base::options::lookup<QString>(
+		Ui::kOptionTranslateUrlTemplate);
+	box->setTitle(rpl::single(option->name()));
+	box->addRow(object_ptr<Ui::FlatLabel>(
+		box,
+		option->description(),
+		st::boxLabel));
+	const auto field = box->addRow(object_ptr<Ui::InputField>(
+		box,
+		st::defaultInputField,
+		rpl::single(u"URL template (%q required)"_q),
+		option->value()));
+	field->setInputMethodHints(Qt::ImhUrlCharactersOnly
+		| Qt::ImhNoAutoUppercase
+		| Qt::ImhNoPredictiveText);
+	box->setFocusCallback([=] { field->setFocusFast(); });
+	const auto submit = [=] {
+		const auto urlTemplate = field->getLastText().trimmed();
+		if (!urlTemplate.isEmpty() && !urlTemplate.contains(u"%q"_q)) {
+			field->showError();
+			return;
+		}
+		option->set(urlTemplate);
+		box->closeBox();
+	};
+	field->submits(
+	) | rpl::on_next([=](auto) { submit(); }, field->lifetime());
+	box->addButton(tr::lng_settings_save(), submit);
+	box->addButton(tr::lng_cancel(), [=] { box->closeBox(); });
 }
 
 void SetupExperimental(
@@ -531,9 +563,18 @@ void SetupExperimental(
 		if (base::options::lookup<bool>(kOptionFastButtonsMode).value()) {
 			searchable.push_back(addOption(inner, kOptionFastButtonsMode));
 		}
-		searchable.push_back(AddFavoriteLinkButton(
+		searchable.push_back(AddStringOptionButton(
 			window,
 			inner,
+			base::options::lookup<QString>(Window::kOptionFolderFavoriteLink),
+			[=] { window->show(Box(Window::EditFolderFavoriteLinkBox)); },
+			rpl::duplicate(query),
+			registerHighlight));
+		searchable.push_back(AddStringOptionButton(
+			window,
+			inner,
+			base::options::lookup<QString>(Ui::kOptionTranslateUrlTemplate),
+			[=] { window->show(Box(EditTranslateUrlTemplateBox)); },
 			rpl::duplicate(query),
 			registerHighlight));
 	});
