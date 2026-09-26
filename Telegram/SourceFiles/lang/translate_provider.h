@@ -20,6 +20,17 @@ namespace Ui {
 
 extern const char kOptionTranslateUrlTemplate[];
 
+struct TranslateProviderInfo {
+	QString id;
+	QString name;
+	bool available = false;
+};
+
+[[nodiscard]] QString SelectedTranslateProviderId();
+[[nodiscard]] std::vector<TranslateProviderInfo> TranslateProviders();
+[[nodiscard]] QString TranslateProviderName(const QString &id);
+[[nodiscard]] bool TranslateProviderAvailable(const QString &id);
+
 [[nodiscard]] std::unique_ptr<TranslateProvider> CreateTranslateProvider(
 	not_null<Main::Session*> session);
 

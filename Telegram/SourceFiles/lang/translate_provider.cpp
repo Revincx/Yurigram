@@ -8,16 +8,19 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/translate_provider.h"
 
 #include "base/options.h"
-#include "core/application.h"
-#include "core/core_settings.h"
+#include "base/platform/base_platform_info.h"
 #include "core/enhanced_settings.h"
 #include "data/data_msg_id.h"
 #include "data/data_peer.h"
 #include "data/data_session.h"
 #include "history/history_item.h"
+#include "lang/lang_keys.h"
+#include "lang/translate_google_provider.h"
 #include "lang/translate_mtproto_provider.h"
 #include "lang/translate_url_provider.h"
 #include "platform/platform_translate_provider.h"
+
+#include <QtCore/QUrl>
 
 namespace {
 
@@ -28,24 +31,113 @@ base::options::option<QString> OptionTranslateUrlTemplate({
 		" Supports %q text, %f source language and %t target language.",
 });
 
+[[nodiscard]] bool ValidUrlTemplate(const QString &value) {
+	if (!value.contains(u"%q"_q)) {
+		return false;
+	}
+	auto example = value;
+	example.replace(u"%q"_q, u"text"_q);
+	example.replace(u"%f"_q, u"auto"_q);
+	example.replace(u"%t"_q, u"en"_q);
+	const auto url = QUrl(example);
+	return url.isValid() && !url.scheme().isEmpty();
+}
+
+class UnavailableTranslateProvider final : public Ui::TranslateProvider {
+public:
+	[[nodiscard]] bool supportsMessageId() const override {
+		return false;
+	}
+
+	void request(
+			Ui::TranslateProviderRequest,
+			LanguageId,
+			Fn<void(Ui::TranslateProviderResult)> done) override {
+		done(Ui::TranslateProviderResult{
+			.error = Ui::TranslateProviderError::Unknown,
+		});
+	}
+
+};
+
 } // namespace
 
 namespace Ui {
 
 const char kOptionTranslateUrlTemplate[] = "translate-url-template";
 
+QString SelectedTranslateProviderId() {
+	return EnhancedSettings::Get(EnhancedSettings::Option::TranslateProvider);
+}
+
+bool TranslateProviderAvailable(const QString &id) {
+	if (id == u"telegram"_q || id == u"google"_q) {
+		return true;
+	} else if (id == u"crow"_q) {
+		return Platform::IsLinux()
+			&& Platform::IsTranslateProviderAvailable();
+	} else if (id == u"apple"_q) {
+		return Platform::IsMac()
+			&& Platform::IsTranslateProviderAvailable();
+	} else if (id == u"url"_q) {
+		return ValidUrlTemplate(OptionTranslateUrlTemplate.value());
+	}
+	return false;
+}
+
+QString TranslateProviderName(const QString &id) {
+	if (id == u"telegram"_q) {
+		return tr::lng_translate_provider_telegram(tr::now);
+	} else if (id == u"crow"_q) {
+		return tr::lng_translate_provider_crow(tr::now);
+	} else if (id == u"apple"_q) {
+		return tr::lng_translate_provider_apple(tr::now);
+	} else if (id == u"google"_q) {
+		return tr::lng_translate_provider_google(tr::now);
+	} else if (id == u"url"_q) {
+		return tr::lng_translate_provider_url(tr::now);
+	}
+	return tr::lng_translate_provider_unknown(tr::now);
+}
+
+std::vector<TranslateProviderInfo> TranslateProviders() {
+	auto result = std::vector<TranslateProviderInfo>();
+	const auto selected = SelectedTranslateProviderId();
+	const auto add = [&](const QString &id) {
+		const auto available = TranslateProviderAvailable(id);
+		if (available || selected == id) {
+			result.push_back({ id, TranslateProviderName(id), available });
+		}
+	};
+	add(u"telegram"_q);
+	if (Platform::IsLinux()) {
+		add(u"crow"_q);
+	} else if (Platform::IsMac()) {
+		add(u"apple"_q);
+	}
+	add(u"google"_q);
+	add(u"url"_q);
+	if (!ranges::contains(result, selected, &TranslateProviderInfo::id)) {
+		result.push_back({ selected, TranslateProviderName(selected), false });
+	}
+	return result;
+}
+
 std::unique_ptr<TranslateProvider> CreateTranslateProvider(
 		not_null<Main::Session*> session) {
-	const auto urlTemplate = OptionTranslateUrlTemplate.value();
-	if (!urlTemplate.isEmpty()
-		&& urlTemplate.contains(u"%q"_q)) {
-		return CreateUrlTranslateProvider(urlTemplate);
-	}
-	if (Core::App().settings().usePlatformTranslation()
-		&& Platform::IsTranslateProviderAvailable()) {
+	const auto id = SelectedTranslateProviderId();
+	if (!TranslateProviderAvailable(id)) {
+		return std::make_unique<UnavailableTranslateProvider>();
+	} else if (id == u"telegram"_q) {
+		return CreateMTProtoTranslateProvider(session);
+	} else if (id == u"google"_q) {
+		return CreateGoogleTranslateProvider();
+	} else if (id == u"url"_q) {
+		return CreateUrlTranslateProvider(OptionTranslateUrlTemplate.value());
+	} else if (id == u"crow"_q || id == u"apple"_q) {
 		return Platform::CreateTranslateProvider();
 	}
-	return CreateMTProtoTranslateProvider(session);
+	return std::make_unique<UnavailableTranslateProvider>();
 }
 
 QString TranslateProviderTargetCode(LanguageId to) {

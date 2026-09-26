@@ -30,7 +30,9 @@ https://github.com/TDesktop-x64/tdesktop/blob/dev/LEGAL
 #include "boxes/connection_box.h"
 #include "boxes/enhanced_options_box.h"
 #include "boxes/link_preview_rules_box.h"
+#include "lang/translate_provider.h"
 #include "ui/layers/generic_box.h"
+#include "ui/boxes/single_choice_box.h"
 #include "boxes/about_box.h"
 #include "ui/boxes/confirm_box.h"
 #include "platform/platform_specific.h"
@@ -430,10 +432,11 @@ struct DecodeEnhancedSettingsResult {
 
 	builder.add(nullptr, [] {
 		return Builder::SearchEntry{
-			.id = u"enhanced/use-gt-api"_q,
-			.title = tr::lng_settings_use_gt_api(tr::now),
-			.keywords = { u"translate"_q, u"google"_q, u"api"_q, u"gt"_q },
-			.deeplink = u"tg://settings/enhanced/use-gt-api"_q,
+			.id = u"enhanced/translation-provider"_q,
+			.title = tr::lng_translate_provider_setting(tr::now),
+			.keywords = { u"translate"_q, u"google"_q, u"crow"_q,
+				u"apple"_q, u"provider"_q },
+			.deeplink = u"tg://settings/enhanced/translation-provider"_q,
 		};
 	});
 
@@ -868,11 +871,57 @@ struct DecodeEnhancedSettingsResult {
 	}
 
 	void Enhanced::setupTranslation(not_null<Ui::VerticalLayout*> content) {
-		addToggleOption(content, EnhancedSettings::Option::UseGtApi);
+		const auto key = EnhancedSettings::Option::TranslateProvider;
+		addLabeledActionOption(
+			content,
+			key.id,
+			EnhancedSettings::Watch(key) | rpl::map([](QString id) {
+				return Ui::TranslateProviderName(id);
+			}),
+			[=] {
+				const auto providers = std::make_shared<
+					std::vector<Ui::TranslateProviderInfo>>(
+						Ui::TranslateProviders());
+				const auto options = std::make_shared<std::vector<QString>>();
+				auto selected = 0;
+				for (auto i = 0; i != int(providers->size()); ++i) {
+					const auto &provider = (*providers)[i];
+					options->push_back(provider.available
+						? provider.name
+						: provider.name + u" ("_q
+							+ tr::lng_translate_provider_unavailable_short(tr::now)
+							+ u")"_q);
+					if (provider.id == EnhancedSettings::Get(key)) {
+						selected = i;
+					}
+				}
+				controller()->show(Box([=](not_null<Ui::GenericBox*> box) {
+					SingleChoiceBox(box, {
+						.title = tr::lng_translate_provider_setting(),
+						.options = *options,
+						.initialSelection = selected,
+						.callback = [=](int index) {
+							const auto &chosen = (*providers)[index];
+							if (chosen.available) {
+								EnhancedSettings::ApplyOption(
+									controller(), key, chosen.id);
+							} else {
+								controller()->showToast(
+									tr::lng_translate_provider_unavailable(tr::now));
+							}
+						},
+					});
+				}));
+			});
 
 		const auto langPackBaseId = Lang::GetInstance().baseId();
+		const auto langPackId = Lang::GetInstance().id();
 		if (langPackBaseId == u"zh-hant-raw"_q
-			|| langPackBaseId == u"zh-hans-raw"_q) {
+			|| langPackBaseId == u"zh-hans-raw"_q
+		    || langPackBaseId == u"zh-hant"_q
+			|| langPackBaseId == u"zh-hans"_q
+			|| langPackId == u"zh-hant"_q
+			|| langPackId == u"zh-hans"_q) {
 			addToggleOption(content, EnhancedSettings::Option::TranslateToTc);
 		}
 	}

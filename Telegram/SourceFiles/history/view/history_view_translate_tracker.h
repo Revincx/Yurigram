@@ -63,6 +63,7 @@ private:
 	void switchTranslation(not_null<HistoryItem*> item, LanguageId id);
 
 	const not_null<History*> _history;
+	const QString _providerId;
 	const std::unique_ptr<Ui::TranslateProvider> _provider;
 	MTP::Sender _api;
 	rpl::variable<bool> _trackingLanguage = false;
@@ -78,6 +79,7 @@ private:
 	std::vector<FullMsgId> _requested;
 	uint64 _requestToken = 0;
 	bool _requestInProcess = false;
+	bool _unavailableNotified = false;
 
 	rpl::lifetime _trackingLifetime;
 	rpl::lifetime _lifetime;
@@ -85,4 +87,3 @@ private:
 };
 
 } // namespace HistoryView
-

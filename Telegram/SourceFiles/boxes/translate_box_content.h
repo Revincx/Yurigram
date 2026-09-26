@@ -21,6 +21,7 @@ enum class TranslateBoxContentError {
 	None = 0,
 	Unknown,
 	LocalLanguagePackMissing,
+	Unavailable,
 };
 
 struct TranslateBoxContentResult {
@@ -51,10 +52,7 @@ struct TranslateBoxContentArgs {
 	Text::MarkedContext textContext;
 	LanguageId currentTo;
 	rpl::producer<LanguageId> to;
-	rpl::producer<QString> provider;
-	rpl::producer<> refresh;
 	Fn<void()> chooseTo;
-	Fn<void()> chooseProvider;
 	Fn<void(LanguageId, Fn<void(TranslateBoxContentResult)>)> request;
 };
 

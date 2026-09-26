@@ -106,17 +106,11 @@ void TranslateBoxContent(
 	const auto currentTo = args.currentTo;
 	const auto chooseTo = std::make_shared<Fn<void()>>(
 		std::move(args.chooseTo));
-	const auto chooseProvider = std::make_shared<Fn<void()>>(
-		std::move(args.chooseProvider));
 	const auto request = std::make_shared<
 		Fn<void(LanguageId, Fn<void(TranslateBoxContentResult)>)>>(
 			std::move(args.request));
 
 	auto to = std::move(args.to) | rpl::start_spawning(box->lifetime());
-	auto provider = std::move(args.provider)
-		| rpl::start_spawning(box->lifetime());
-	auto refresh = std::move(args.refresh)
-		| rpl::start_spawning(box->lifetime());
 	const auto toTitle = rpl::duplicate(to) | rpl::map(LanguageName);
 	const auto toDirection = rpl::duplicate(to) | rpl::map([=](
 			LanguageId id) {
@@ -220,10 +214,12 @@ void TranslateBoxContent(
 
 	const auto showText = [=](TranslateBoxContentResult result) {
 		using UiError = TranslateBoxContentError;
-		auto value = result.text.value_or(
-			tr::italic(((result.error == UiError::LocalLanguagePackMissing)
-				? tr::lng_translate_box_error_language_pack_not_installed
-				: tr::lng_translate_box_error)(tr::now)));
+		const auto phrase = (result.error == UiError::LocalLanguagePackMissing)
+			? tr::lng_translate_box_error_language_pack_not_installed(tr::now)
+			: (result.error == UiError::Unavailable)
+			? tr::lng_translate_provider_unavailable(tr::now)
+			: tr::lng_translate_box_error(tr::now);
+		auto value = result.text.value_or(tr::italic(phrase));
 		translated->entity()->setMarkedText(value, textContext);
 		translated->show(anim::type::instant);
 		loading->hide(anim::type::instant);
@@ -243,9 +239,6 @@ void TranslateBoxContent(
 		});
 	};
 	std::move(to) | rpl::on_next(send, box->lifetime());
-	std::move(refresh) | rpl::on_next([=] {
-		send(state->to);
-	}, box->lifetime());
 
 	box->addLeftButton(tr::lng_settings_language(), [=] {
 		if (loading->toggled()) {
@@ -253,14 +246,6 @@ void TranslateBoxContent(
 		}
 		(*chooseTo)();
 	});
-	if (*chooseProvider) {
-		box->addLeftButton(std::move(provider), [=] {
-			if (loading->toggled()) {
-				return;
-			}
-			(*chooseProvider)();
-		});
-	}
 }
 
 } // namespace Ui

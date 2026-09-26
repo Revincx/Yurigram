@@ -7518,6 +7518,15 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_translate_settings_use_platform_mac_about" = "Translation on macOS won't work until you download local language packs in System Settings.";
 "lng_translate_settings_use_platform_linux" = "Use KDE's Crow Translate";
 "lng_translate_settings_chat" = "Translate Entire Chats";
+"lng_translate_provider_setting" = "Translation provider";
+"lng_translate_provider_telegram" = "Telegram";
+"lng_translate_provider_google" = "Google Translate";
+"lng_translate_provider_apple" = "Apple Translations";
+"lng_translate_provider_crow" = "KDE Crow Translate";
+"lng_translate_provider_url" = "URL Template";
+"lng_translate_provider_unknown" = "Unknown provider";
+"lng_translate_provider_unavailable" = "Translation provider is unavailable.";
+"lng_translate_provider_unavailable_short" = "Unavailable";
 "lng_translate_settings_choose" = "Do Not Translate";
 "lng_translate_settings_about" = "The 'Translate' button will appear in the context menu of messages containing text.";
 "lng_translate_settings_one" = "Please choose at least one language so that it can be used as the \"Translate to\" language.";

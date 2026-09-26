@@ -504,11 +504,19 @@ public:
 	[[nodiscard]] Data::SendError errorTextForForwardIgnoreRights(
 		not_null<Data::Thread*> to) const;
 	[[nodiscard]] const HistoryMessageTranslation *translation() const;
-	[[nodiscard]] bool translationShowRequiresCheck(LanguageId to) const;
-	bool translationShowRequiresRequest(LanguageId to);
-	void translationDone(LanguageId to, TextWithEntities result);
+	[[nodiscard]] bool translationShowRequiresCheck(
+		LanguageId to,
+		const QString &providerId = QString()) const;
+	bool translationShowRequiresRequest(
+		LanguageId to,
+		const QString &providerId = QString());
 	void translationDone(
 		LanguageId to,
+		const QString &providerId,
+		TextWithEntities result);
+	void translationDone(
+		LanguageId to,
+		const QString &providerId,
 		std::shared_ptr<const Iv::RichPage> result);
 
 	[[nodiscard]] bool canReact() const;
@@ -746,6 +754,7 @@ private:
 		bool used);
 	void translationDone(
 		LanguageId to,
+		const QString &providerId,
 		TextWithEntities result,
 		std::shared_ptr<const Iv::RichPage> page);
 	void setSelfDestruct(HistorySelfDestructType type, TimeId ttlSeconds);

@@ -60,34 +60,39 @@ void GTranslate::translate(
 	setHeader("Sec-Fetch-Site", "cross-site");
 
 	QNetworkReply *reply = manager->get(request);
-	connect(reply, &QNetworkReply::finished, this, [this, reply, onFinished]() {
-			if (reply->error() == QNetworkReply::NoError) {
-				auto all = reply->readAll();
-				auto json = QJsonDocument::fromJson(all);
-				auto sentences = json["sentences"];
-				if (sentences.isNull() || sentences.isUndefined()) {
+	connect(reply, &QNetworkReply::finished, this, [reply, onFinished]() {
+			reply->deleteLater();
+			if (reply->error() != QNetworkReply::NoError) {
+				onFinished({});
+				return;
+			}
+			auto error = QJsonParseError();
+			const auto json = QJsonDocument::fromJson(reply->readAll(), &error);
+			if (error.error != QJsonParseError::NoError || !json.isObject()) {
+				onFinished({});
+				return;
+			}
+			const auto sentences = json.object().value(u"sentences"_q);
+			if (!sentences.isArray() || sentences.toArray().isEmpty()) {
+				onFinished({});
+				return;
+			}
+			auto text = QString();
+			for (const auto &sentence : sentences.toArray()) {
+				if (!sentence.isObject()) {
 					onFinished({});
 					return;
 				}
-
-				std::stringstream out;
-				auto sentencesArray = sentences.toArray();
-				auto sentencesSize = sentencesArray.size();
-				for (int i = 0; i < sentencesSize; i++) {
-					auto sentence = sentencesArray[i];
-					auto sentenceObj = sentence.toObject();
-
-					out << sentenceObj["trans"].toString().toStdString();
+				const auto translated = sentence.toObject().value(u"trans"_q);
+				if (!translated.isString()) {
+					onFinished({});
+					return;
 				}
-
-				onFinished({
-					.text = QString::fromStdString(out.str()),
-					.success = true,
-				});
-			} else {
-				onFinished({});
+				text += translated.toString();
 			}
-			reply->deleteLater();
+			onFinished(text.trimmed().isEmpty()
+				? TranslationResult{}
+				: TranslationResult{ .text = text, .success = true });
 		}
 	);
 }

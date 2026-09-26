@@ -72,7 +72,7 @@ enum class OptionId {
 	HideDeleteForOthersCheckbox,
 	StickerHeight,
 	HideCounter,
-	UseGtApi,
+	TranslateProvider,
 	TranslateToTc,
 	HideStories,
 	ForceMobile,
@@ -151,7 +151,8 @@ inline constexpr auto HideDeleteForOthersCheckbox
 	= Key<bool>{ OptionId::HideDeleteForOthersCheckbox };
 inline constexpr auto StickerHeight = Key<int>{ OptionId::StickerHeight };
 inline constexpr auto HideCounter = Key<bool>{ OptionId::HideCounter };
-inline constexpr auto UseGtApi = Key<bool>{ OptionId::UseGtApi };
+inline constexpr auto TranslateProvider
+	= Key<QString>{ OptionId::TranslateProvider };
 inline constexpr auto TranslateToTc = Key<bool>{ OptionId::TranslateToTc };
 inline constexpr auto HideStories = Key<bool>{ OptionId::HideStories };
 inline constexpr auto ForceMobile = Key<bool>{ OptionId::ForceMobile };
