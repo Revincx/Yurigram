@@ -7533,6 +7533,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_translate_llm_model" = "Model name";
 "lng_translate_llm_key" = "API key";
 "lng_translate_llm_extra_parameters" = "Extra request parameters";
+"lng_translate_llm_test" = "Test";
+"lng_translate_llm_test_success" = "LLM API test succeeded.";
 "lng_translate_llm_context" = "Smart context translation";
 "lng_translate_llm_context_desc" = "Add surrounding messages and reply message chains as translation context information.";
 "lng_translate_llm_error_auth" = "LLM translation authentication failed. Check the API key.";

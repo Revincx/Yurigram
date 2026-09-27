@@ -8,11 +8,16 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/llm_translate_config_box.h"
 
 #include "core/enhanced_settings.h"
+#include "info/channel_statistics/boosts/giveaway/boost_badge.h"
 #include "lang/lang_keys.h"
+#include "lang/translate_llm_provider.h"
 #include "ui/layers/generic_box.h"
+#include "ui/toast/toast.h"
+#include "ui/widgets/buttons.h"
 #include "ui/widgets/fields/input_field.h"
 #include "ui/widgets/fields/password_input.h"
 
+#include "styles/style_chat_helpers.h"
 #include "styles/style_layers.h"
 
 namespace Ui {
@@ -108,6 +113,41 @@ void LLMTranslateConfigBox(not_null<GenericBox*> box) {
 		}
 	});
 	box->addButton(tr::lng_cancel(), [=] { box->closeBox(); });
+	const auto testing = box->lifetime().make_state<rpl::variable<bool>>(
+		false);
+	const auto testButton = box->addLeftButton(rpl::conditional(
+		testing->value(),
+		rpl::single(QString()),
+		tr::lng_translate_llm_test()), [=] {
+		if (testing->current()) {
+			return;
+		}
+		const auto config = validated();
+		if (!config) {
+			return;
+		}
+		*testing = true;
+		TestLLMTranslateConfig(*config, box, [=](QString error) {
+			*testing = false;
+			if (error.isEmpty()) {
+				box->showToast({
+					.text = { tr::lng_translate_llm_test_success(tr::now) },
+					.iconLottie = u"toast/contact_check"_q,
+					.iconLottieSize = st::toastLottieIconSize,
+				});
+			} else {
+				box->showToast(error);
+			}
+		});
+	});
+	testButton->setFullWidth(testButton->width());
+	using namespace Info::Statistics;
+	const auto animation = InfiniteRadialAnimationWidget(
+		testButton.data(),
+		testButton->height() / 2,
+		&st::editStickerSetNameLoading);
+	AddChildToWidgetCenter(testButton.data(), animation);
+	animation->showOn(testing->value());
 }
 
 } // namespace Ui

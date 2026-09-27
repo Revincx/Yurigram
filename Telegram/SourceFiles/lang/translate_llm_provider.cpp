@@ -55,7 +55,7 @@ constexpr auto kMaxDebugErrorBodyBytes = 4096;
 }
 
 [[nodiscard]] QByteArray RequestBody(
-		not_null<Main::Session*> session,
+		Main::Session *session,
 		const LLMTranslateConfig &config,
 		const TranslateProviderRequest &request,
 		const QString &targetCode) {
@@ -63,7 +63,7 @@ constexpr auto kMaxDebugErrorBodyBytes = 4096;
 		{ u"target_language"_q, targetCode },
 		{ u"target_text"_q, request.text.text },
 	};
-	if (config.context && request.peerId && request.msgId) {
+	if (session && config.context && request.peerId && request.msgId) {
 		const auto id = FullMsgId(
 			PeerId(request.peerId),
 			MsgId(request.msgId));
@@ -144,6 +144,34 @@ struct ParsedReply {
 	return { { .text = TextWithEntities{ .text = content.toString() } }, {} };
 }
 
+void ConfigureNetwork(QNetworkAccessManager &network) {
+	const auto proxy = Core::App().settings().proxy().isEnabled()
+		? Core::App().settings().proxy().selected()
+		: MTP::ProxyData();
+	if (proxy.type == MTP::ProxyData::Type::Socks5
+		|| proxy.type == MTP::ProxyData::Type::Http) {
+		network.setProxy(MTP::ToNetworkProxy(
+			MTP::ToDirectIpProxy(proxy)));
+	}
+}
+
+[[nodiscard]] QNetworkRequest CreateRequest(
+		const QUrl &url,
+		const QByteArray &apiKey) {
+	auto request = QNetworkRequest(url);
+	request.setHeader(
+		QNetworkRequest::ContentTypeHeader,
+		u"application/json"_q);
+	request.setAttribute(
+		QNetworkRequest::RedirectPolicyAttribute,
+		QNetworkRequest::ManualRedirectPolicy);
+	request.setTransferTimeout(kTransferTimeout);
+	if (!apiKey.isEmpty()) {
+		request.setRawHeader("Authorization", "Bearer " + apiKey);
+	}
+	return request;
+}
+
 class LLMTranslateProvider final : public QObject, public TranslateProvider {
 public:
 	LLMTranslateProvider(
@@ -153,14 +181,7 @@ public:
 	, _config(ReadLLMTranslateConfig())
 	, _url(*LLMTranslateCompletionUrl(_config.endpoint))
 	, _errorReporter(std::move(errorReporter)) {
-		const auto proxy = Core::App().settings().proxy().isEnabled()
-			? Core::App().settings().proxy().selected()
-			: MTP::ProxyData();
-		if (proxy.type == MTP::ProxyData::Type::Socks5
-			|| proxy.type == MTP::ProxyData::Type::Http) {
-			_network.setProxy(MTP::ToNetworkProxy(
-				MTP::ToDirectIpProxy(proxy)));
-		}
+		ConfigureNetwork(_network);
 	}
 
 	~LLMTranslateProvider() override {
@@ -217,20 +238,8 @@ private:
 				).arg(id).arg(_url.host()));
 			auto elapsed = QElapsedTimer();
 			elapsed.start();
-			auto request = QNetworkRequest(_url);
-			request.setHeader(
-				QNetworkRequest::ContentTypeHeader,
-				u"application/json"_q);
-			request.setAttribute(
-				QNetworkRequest::RedirectPolicyAttribute,
-				QNetworkRequest::ManualRedirectPolicy);
-			request.setTransferTimeout(kTransferTimeout);
-			if (!_config.apiKey.isEmpty()) {
-				request.setRawHeader(
-					"Authorization",
-					"Bearer " + _config.apiKey);
-			}
-			const auto reply = _network.post(request, pending.body);
+			const auto reply = _network.post(
+				CreateRequest(_url, _config.apiKey), pending.body);
 			_replies.push_back(reply);
 			++_active;
 			QObject::connect(reply, &QNetworkReply::finished, this, [=,
@@ -295,6 +304,28 @@ std::unique_ptr<TranslateProvider> CreateLLMTranslateProvider(
 	return std::make_unique<LLMTranslateProvider>(
 		session,
 		std::move(errorReporter));
+}
+
+void TestLLMTranslateConfig(
+		const LLMTranslateConfig &config,
+		not_null<QObject*> context,
+		Fn<void(QString)> done) {
+	const auto url = LLMTranslateCompletionUrl(config.endpoint);
+	Expects(url.has_value());
+	const auto network = new QNetworkAccessManager(context.get());
+	ConfigureNetwork(*network);
+	const auto body = RequestBody(nullptr, config, {
+		.text = TextWithEntities{ .text = u"Bonjour"_q },
+	}, u"en"_q);
+	const auto reply = network->post(
+		CreateRequest(*url, config.apiKey), body);
+	QObject::connect(reply, &QNetworkReply::finished, context.get(), [=,
+			done = std::move(done)]() mutable {
+		auto parsed = ParseReply(reply, reply->readAll());
+		reply->deleteLater();
+		network->deleteLater();
+		done(std::move(parsed.error));
+	});
 }
 
 } // namespace Ui
