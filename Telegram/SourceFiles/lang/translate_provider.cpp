@@ -16,6 +16,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_item.h"
 #include "lang/lang_keys.h"
 #include "lang/translate_google_provider.h"
+#include "lang/translate_llm_provider.h"
+#include "lang/translate_llm_settings.h"
 #include "lang/translate_mtproto_provider.h"
 #include "lang/translate_url_provider.h"
 #include "platform/platform_translate_provider.h"
@@ -70,6 +72,13 @@ QString SelectedTranslateProviderId() {
 	return EnhancedSettings::Get(EnhancedSettings::Option::TranslateProvider);
 }
 
+QString SelectedTranslateCacheBase() {
+	const auto id = SelectedTranslateProviderId();
+	return (id == u"llm"_q)
+		? LLMTranslateCacheBase(ReadLLMTranslateConfig())
+		: id;
+}
+
 bool TranslateProviderAvailable(const QString &id) {
 	if (id == u"telegram"_q || id == u"google"_q) {
 		return true;
@@ -81,6 +90,8 @@ bool TranslateProviderAvailable(const QString &id) {
 			&& Platform::IsTranslateProviderAvailable();
 	} else if (id == u"url"_q) {
 		return ValidUrlTemplate(OptionTranslateUrlTemplate.value());
+	} else if (id == u"llm"_q) {
+		return LLMTranslateConfigured();
 	}
 	return false;
 }
@@ -96,6 +107,8 @@ QString TranslateProviderName(const QString &id) {
 		return tr::lng_translate_provider_google(tr::now);
 	} else if (id == u"url"_q) {
 		return tr::lng_translate_provider_url(tr::now);
+	} else if (id == u"llm"_q) {
+		return tr::lng_translate_provider_llm(tr::now);
 	}
 	return tr::lng_translate_provider_unknown(tr::now);
 }
@@ -106,7 +119,8 @@ std::vector<TranslateProviderInfo> TranslateProviders() {
 	const auto add = [&](const QString &id) {
 		const auto available = TranslateProviderAvailable(id);
 		if (available || selected == id) {
-			result.push_back({ id, TranslateProviderName(id), available });
+			result.push_back({
+				id, TranslateProviderName(id), available, available });
 		}
 	};
 	add(u"telegram"_q);
@@ -117,14 +131,21 @@ std::vector<TranslateProviderInfo> TranslateProviders() {
 	}
 	add(u"google"_q);
 	add(u"url"_q);
+	result.push_back({
+		u"llm"_q,
+		TranslateProviderName(u"llm"_q),
+		TranslateProviderAvailable(u"llm"_q),
+	});
 	if (!ranges::contains(result, selected, &TranslateProviderInfo::id)) {
-		result.push_back({ selected, TranslateProviderName(selected), false });
+		result.push_back({
+			selected, TranslateProviderName(selected), false, false });
 	}
 	return result;
 }
 
 std::unique_ptr<TranslateProvider> CreateTranslateProvider(
-		not_null<Main::Session*> session) {
+		not_null<Main::Session*> session,
+		Fn<void(QString)> errorReporter) {
 	const auto id = SelectedTranslateProviderId();
 	if (!TranslateProviderAvailable(id)) {
 		return std::make_unique<UnavailableTranslateProvider>();
@@ -134,6 +155,9 @@ std::unique_ptr<TranslateProvider> CreateTranslateProvider(
 		return CreateGoogleTranslateProvider();
 	} else if (id == u"url"_q) {
 		return CreateUrlTranslateProvider(OptionTranslateUrlTemplate.value());
+	} else if (id == u"llm"_q) {
+		return CreateLLMTranslateProvider(
+			session, std::move(errorReporter));
 	} else if (id == u"crow"_q || id == u"apple"_q) {
 		return Platform::CreateTranslateProvider();
 	}

@@ -428,16 +428,23 @@ void TranslateBox(
 		TextWithEntities text,
 	bool hasCopyRestriction) {
 	struct State {
-		State(not_null<Main::Session*> session)
+		State(
+			not_null<Main::Session*> session,
+			not_null<GenericBox*> box)
 		: providerId(SelectedTranslateProviderId())
-		, provider(CreateTranslateProvider(session)) {
+		, provider(CreateTranslateProvider(
+			session,
+			crl::guard(box, [=](QString error) {
+				box->showToast(error);
+			}))) {
 		}
 
 		QString providerId;
 		std::unique_ptr<TranslateProvider> provider;
 		rpl::variable<LanguageId> to;
 	};
-	const auto state = box->lifetime().make_state<State>(&peer->session());
+	const auto state = box->lifetime().make_state<State>(
+		&peer->session(), box);
 	if (IsServerMsgId(msgId)) {
 		if (const auto item = peer->owner().message(peer->id, msgId)) {
 			if (const auto page = item->richPage()) {

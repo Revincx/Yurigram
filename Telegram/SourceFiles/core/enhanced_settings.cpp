@@ -251,6 +251,27 @@ const DescriptorList &DescriptorData() {
 			"enhanced/hide-star-ratings"),
 		Bool(OptionId::ShowPeerId, "show_peer_id",
 			&tr::lng_settings_show_peer_id, "enhanced/show-peer-id"),
+		Descriptor{
+			.id = OptionId::LlmTranslateEndpoint,
+			.storageKey = "llm_translate_endpoint",
+			.title = &tr::lng_translate_llm_endpoint,
+			.defaultValue = QString(),
+		},
+		Descriptor{
+			.id = OptionId::LlmTranslateModel,
+			.storageKey = "llm_translate_model",
+			.title = &tr::lng_translate_llm_model,
+			.defaultValue = QString(),
+		},
+		Bool(OptionId::LlmTranslateContext, "llm_translate_context",
+			&tr::lng_translate_llm_context,
+			"enhanced/llm-translate-context"),
+		Descriptor{
+			.id = OptionId::LlmTranslateExtraParameters,
+			.storageKey = "llm_translate_extra_parameters",
+			.title = &tr::lng_translate_llm_extra_parameters,
+			.defaultValue = QString(),
+		},
 	};
 	return result;
 }

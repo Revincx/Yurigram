@@ -30,7 +30,9 @@ https://github.com/TDesktop-x64/tdesktop/blob/dev/LEGAL
 #include "boxes/connection_box.h"
 #include "boxes/enhanced_options_box.h"
 #include "boxes/link_preview_rules_box.h"
+#include "boxes/llm_translate_config_box.h"
 #include "lang/translate_provider.h"
+#include "lang/translate_llm_settings.h"
 #include "ui/layers/generic_box.h"
 #include "ui/boxes/single_choice_box.h"
 #include "boxes/about_box.h"
@@ -887,6 +889,7 @@ struct DecodeEnhancedSettingsResult {
 				for (auto i = 0; i != int(providers->size()); ++i) {
 					const auto &provider = (*providers)[i];
 					options->push_back(provider.available
+						|| provider.id == u"llm"_q
 						? provider.name
 						: provider.name + u" ("_q
 							+ tr::lng_translate_provider_unavailable_short(tr::now)
@@ -902,7 +905,7 @@ struct DecodeEnhancedSettingsResult {
 						.initialSelection = selected,
 						.callback = [=](int index) {
 							const auto &chosen = (*providers)[index];
-							if (chosen.available) {
+							if (chosen.selectable) {
 								EnhancedSettings::ApplyOption(
 									controller(), key, chosen.id);
 							} else {
@@ -913,6 +916,28 @@ struct DecodeEnhancedSettingsResult {
 					});
 				}));
 			});
+		const auto configButton = AddButtonWithIcon(
+			content,
+			tr::lng_translate_llm_config(),
+			st::settingsButtonNoIcon);
+		registerHighlight(
+			u"enhanced/llm-translate"_q,
+			std::nullopt,
+			configButton,
+			[=] {
+				return Ui::LLMTranslateShareLink(
+					&controller()->session(),
+					Ui::ReadLLMTranslateConfig());
+			});
+		configButton->addClickHandler([=] {
+			controller()->show(Box([=](not_null<Ui::GenericBox*> box) {
+				Ui::LLMTranslateConfigBox(box);
+			}));
+		});
+		addToggleOption(
+			content,
+			EnhancedSettings::Option::LlmTranslateContext,
+			tr::lng_translate_llm_context_desc());
 
 		const auto langPackBaseId = Lang::GetInstance().baseId();
 		const auto langPackId = Lang::GetInstance().id();
@@ -1068,8 +1093,11 @@ struct DecodeEnhancedSettingsResult {
 	void Enhanced::registerHighlight(
 			QString id,
 			std::optional<EnhancedSettings::OptionId> option,
-			not_null<Ui::RpWidget*> widget) {
+			not_null<Ui::RpWidget*> widget,
+			Fn<QString()> shareLink) {
 		_highlightControls.emplace_back(id, widget.get());
+		const auto shared = std::make_shared<Fn<QString()>>(
+			std::move(shareLink));
 
 		const auto prefix = u"enhanced/"_q;
 		Expects(id.startsWith(prefix));
@@ -1101,13 +1129,17 @@ struct DecodeEnhancedSettingsResult {
 				tr::lng_auction_menu_copy_link(tr::now),
 				[=] { copy(link); },
 				&st::menuIconCopy);
-			if (option) {
+			const auto sharedLink = (!option && *shared)
+				? (*shared)()
+				: QString();
+			if (option || !sharedLink.isEmpty()) {
 				(*menu)->addAction(
 					tr::lng_settings_share_current_setting(tr::now),
 					[=] {
-						copy(EnhancedSettings::DeepLinkWithCurrentValue(
-							session,
-							*option));
+						copy(option
+							? EnhancedSettings::DeepLinkWithCurrentValue(
+								session, *option)
+							: sharedLink);
 					},
 					&st::menuIconCopy);
 			}

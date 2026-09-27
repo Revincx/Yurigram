@@ -45,6 +45,7 @@ private:
 	struct ItemToRequest {
 		int length = 0;
 		bool rich = false;
+		QString providerKey;
 	};
 
 	void setup();
@@ -61,9 +62,12 @@ private:
 	void cancelSentRequest();
 	void stopAndRevert();
 	void switchTranslation(not_null<HistoryItem*> item, LanguageId id);
+	[[nodiscard]] QString providerKey(not_null<HistoryItem*> item) const;
 
 	const not_null<History*> _history;
 	const QString _providerId;
+	const QString _providerCacheBase;
+	const bool _llmContext;
 	const std::unique_ptr<Ui::TranslateProvider> _provider;
 	MTP::Sender _api;
 	rpl::variable<bool> _trackingLanguage = false;
@@ -77,9 +81,11 @@ private:
 	base::flat_map<not_null<HistoryItem*>, LanguageId> _switchTranslations;
 	base::flat_map<FullMsgId, ItemToRequest> _itemsToRequest;
 	std::vector<FullMsgId> _requested;
+	std::vector<QString> _requestedKeys;
 	uint64 _requestToken = 0;
 	bool _requestInProcess = false;
 	bool _unavailableNotified = false;
+	bool _errorNotified = false;
 
 	rpl::lifetime _trackingLifetime;
 	rpl::lifetime _lifetime;

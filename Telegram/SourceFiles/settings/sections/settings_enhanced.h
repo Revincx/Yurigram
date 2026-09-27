@@ -90,7 +90,8 @@ namespace Settings {
 		void registerHighlight(
 			QString id,
 			std::optional<EnhancedSettings::OptionId> option,
-			not_null<Ui::RpWidget*> widget);
+			not_null<Ui::RpWidget*> widget,
+			Fn<QString()> shareLink = {});
 
 		std::vector<std::pair<QString, QPointer<QWidget>>> _highlightControls;
 

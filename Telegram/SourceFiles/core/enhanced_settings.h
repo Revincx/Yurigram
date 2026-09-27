@@ -84,6 +84,10 @@ enum class OptionId {
 	AllowScreenshots,
 	HideStarRatings,
 	ShowPeerId,
+	LlmTranslateEndpoint,
+	LlmTranslateModel,
+	LlmTranslateContext,
+	LlmTranslateExtraParameters,
 	Count,
 };
 
@@ -170,6 +174,14 @@ inline constexpr auto AllowScreenshots
 inline constexpr auto HideStarRatings
 	= Key<bool>{ OptionId::HideStarRatings };
 inline constexpr auto ShowPeerId = Key<bool>{ OptionId::ShowPeerId };
+inline constexpr auto LlmTranslateEndpoint
+	= Key<QString>{ OptionId::LlmTranslateEndpoint };
+inline constexpr auto LlmTranslateModel
+	= Key<QString>{ OptionId::LlmTranslateModel };
+inline constexpr auto LlmTranslateContext
+	= Key<bool>{ OptionId::LlmTranslateContext };
+inline constexpr auto LlmTranslateExtraParameters
+	= Key<QString>{ OptionId::LlmTranslateExtraParameters };
 } // namespace Option
 
 enum class ExtraContextMenuOption : int {

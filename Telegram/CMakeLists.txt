@@ -333,6 +333,8 @@ PRIVATE
     boxes/gift_premium_box.h
     boxes/language_box.cpp
     boxes/language_box.h
+    boxes/llm_translate_config_box.cpp
+    boxes/llm_translate_config_box.h
     boxes/link_preview_rules_box.cpp
     boxes/link_preview_rules_box.h
     boxes/max_invite_box.cpp
@@ -1467,6 +1469,12 @@ PRIVATE
     lang/translate_provider.h
     lang/translate_google_provider.cpp
     lang/translate_google_provider.h
+    lang/translate_llm_settings.cpp
+    lang/translate_llm_settings.h
+    lang/translate_llm_context.cpp
+    lang/translate_llm_context.h
+    lang/translate_llm_provider.cpp
+    lang/translate_llm_provider.h
     lang/translate_url_provider.cpp
     lang/translate_url_provider.h
     layout/layout_document_generic_preview.cpp
