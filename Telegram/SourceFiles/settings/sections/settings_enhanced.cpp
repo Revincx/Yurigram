@@ -983,9 +983,41 @@ struct DecodeEnhancedSettingsResult {
 	}
 
 	void Enhanced::setupOther(not_null<Ui::VerticalLayout*> content) {
-
 		addToggleOption(content, EnhancedSettings::Option::ShowPeerId);
-		
+
+		const auto peerIdTypeWrap = content->add(
+			object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
+				content,
+				object_ptr<Ui::VerticalLayout>(content)));
+		peerIdTypeWrap->toggleOn(EnhancedSettings::Watch(
+			EnhancedSettings::Option::ShowPeerId));
+		const auto peerIdType = EnhancedSettings::Option::PeerIdType;
+		addLabeledActionOption(
+			peerIdTypeWrap->entity(),
+			peerIdType.id,
+			EnhancedSettings::Watch(peerIdType) | rpl::map([](int value) {
+				return value == int(EnhancedSettings::PeerIdType::MTProto)
+					? u"MTProto"_q
+					: u"Bot API"_q;
+			}),
+			[=] {
+				static const auto options = std::vector<QString>{
+					u"Bot API"_q,
+					u"MTProto"_q,
+				};
+				controller()->show(Box([=](not_null<Ui::GenericBox*> box) {
+					SingleChoiceBox(box, {
+						.title = tr::lng_settings_peer_id_type(),
+						.options = options,
+						.initialSelection = EnhancedSettings::Get(peerIdType),
+						.callback = [=](int index) {
+							EnhancedSettings::ApplyOption(
+								controller(), peerIdType, index);
+						},
+					});
+				}));
+			});
+
 		const auto showServerConfig = AddButtonWithIcon(
 			content,
 			tr::lng_settings_show_server_config(),

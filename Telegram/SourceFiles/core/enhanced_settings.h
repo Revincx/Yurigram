@@ -84,6 +84,7 @@ enum class OptionId {
 	AllowScreenshots,
 	HideStarRatings,
 	ShowPeerId,
+	PeerIdType,
 	LlmTranslateEndpoint,
 	LlmTranslateModel,
 	LlmTranslateContext,
@@ -174,6 +175,7 @@ inline constexpr auto AllowScreenshots
 inline constexpr auto HideStarRatings
 	= Key<bool>{ OptionId::HideStarRatings };
 inline constexpr auto ShowPeerId = Key<bool>{ OptionId::ShowPeerId };
+inline constexpr auto PeerIdType = Key<int>{ OptionId::PeerIdType };
 inline constexpr auto LlmTranslateEndpoint
 	= Key<QString>{ OptionId::LlmTranslateEndpoint };
 inline constexpr auto LlmTranslateModel
@@ -202,6 +204,11 @@ enum class Normalization {
 	IntegerConstraint,
 	RadioController,
 	LinkPreviewRules,
+};
+
+enum class PeerIdType : int {
+	BotApi,
+	MTProto,
 };
 
 enum class OptionEffect : uint32 {

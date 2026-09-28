@@ -251,6 +251,10 @@ const DescriptorList &DescriptorData() {
 			"enhanced/hide-star-ratings"),
 		Bool(OptionId::ShowPeerId, "show_peer_id",
 			&tr::lng_settings_show_peer_id, "enhanced/show-peer-id"),
+		Integer(OptionId::PeerIdType, "peer_id_type",
+			&tr::lng_settings_peer_id_type, "enhanced/peer-id-type",
+			{ .minimum = int(PeerIdType::BotApi),
+				.maximum = int(PeerIdType::MTProto) }),
 		Descriptor{
 			.id = OptionId::LlmTranslateEndpoint,
 			.storageKey = "llm_translate_endpoint",

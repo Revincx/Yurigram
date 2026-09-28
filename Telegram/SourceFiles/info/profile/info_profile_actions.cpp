@@ -32,6 +32,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/translate_box.h"
 #include "core/application.h"
 #include "core/click_handler_types.h"
+#include "core/enhanced_settings.h"
 #include "core/ui_integration.h"
 #include "data/business/data_business_common.h"
 #include "data/business/data_business_info.h"
@@ -123,8 +124,23 @@ namespace Profile {
 namespace {
 
 constexpr auto kDay = Data::WorkingInterval::kDay;
-constexpr auto kMaxChannelId = -1000000000000;
 constexpr auto kPeerIdLinkIndex = uint16(1);
+constexpr auto kBotApiChannelIdOffset = int64(1000000000000);
+
+[[nodiscard]] QString ProfilePeerId(not_null<PeerData*> peer) {
+	const auto bare = peer->id.value & PeerId::kChatTypeMask;
+	const auto mtproto = EnhancedSettings::Get(
+		EnhancedSettings::Option::PeerIdType
+	) == int(EnhancedSettings::PeerIdType::MTProto);
+	if (mtproto || peer->isUser()) {
+		return QString::number(bare);
+	} else if (peer->isChat()) {
+		return QString::number(-int64(bare));
+	} else if (peer->isChannel()) {
+		return QString::number(-int64(bare) - kBotApiChannelIdOffset);
+	}
+	return QString::number(bare);
+}
 
 [[nodiscard]] QString PeerIdLabel(not_null<PeerData*> peer) {
 	const auto photoId = peer->userpicPhotoId();
@@ -1937,12 +1953,7 @@ Section DetailsFiller::makeInfo() {
 			idNum = QString::number(_peer->forumTopicFor(topicRootId)->topicRootId().bare);
 		}
 		else {
-			idNum = QString::number(_peer->id.value & PeerId::kChatTypeMask);
-			if (_peer->isChat()) {
-				idNum = idNum.prepend("-");
-			} else if (_peer->isChannel()) {
-				idNum = QString::number(peerToChannel(_peer->id).bare - kMaxChannelId).prepend("-");
-			}
+			idNum = ProfilePeerId(_peer);
 		}
 		auto idText = rpl::single(Ui::Text::Wrapped({ idNum }, EntityType::Code, {}));
 		auto idInfo = addInfoOneLine(

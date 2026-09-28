@@ -8872,6 +8872,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_settings_allow_screenshots" = "Allow screenshots";
 "lng_settings_hide_star_ratings" = "Hide user star ratings";
 "lng_settings_show_peer_id" = "Show Peer ID";
+"lng_settings_peer_id_type" = "Peer ID type";
 
 "lng_settings_skip_message" = "Skip to next unread chat";
 "lng_settings_skip_message_desc" = "Note: Allow ALT+↑/↓ shortcut to skip to next unread chat";
