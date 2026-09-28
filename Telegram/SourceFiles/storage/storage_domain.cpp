@@ -39,6 +39,48 @@ Domain::Domain(not_null<Main::Domain*> owner, const QString &dataName)
 
 Domain::~Domain() = default;
 
+std::optional<QByteArray> Domain::readBotUseData() const {
+	Expects(_localKey != nullptr);
+	const auto name = u"botuse_"_q + _dataName;
+	auto exists = false;
+	for (const auto &suffix : { u"s"_q, u"0"_q, u"1"_q }) {
+		exists |= QFile::exists(BaseGlobalPath() + name + suffix);
+	}
+	if (!exists) {
+		return QByteArray();
+	}
+	auto file = FileReadDescriptor();
+	if (!ReadEncryptedFile(file, name, BaseGlobalPath(), _localKey)) {
+		return std::nullopt;
+	}
+	auto result = QByteArray();
+	file.stream >> result;
+	return (file.stream.status() == QDataStream::Ok && file.stream.atEnd())
+		? std::make_optional(result)
+		: std::nullopt;
+}
+
+bool Domain::writeBotUseData(const QByteArray &data) {
+	Expects(_localKey != nullptr);
+	{
+		auto encrypted = EncryptedDescriptor(data.size() + sizeof(quint32));
+		encrypted.stream << data;
+		auto file = FileWriteDescriptor(
+			u"botuse_"_q + _dataName,
+			BaseGlobalPath(),
+			true);
+		file.writeEncrypted(encrypted, _localKey);
+	}
+	const auto written = readBotUseData();
+	return written && *written == data;
+}
+
+void Domain::clearBotUseData() {
+	for (const auto &suffix : { u"s"_q, u"0"_q, u"1"_q }) {
+		QFile::remove(BaseGlobalPath() + u"botuse_"_q + _dataName + suffix);
+	}
+}
+
 StartResult Domain::start(const QByteArray &passcode) {
 	const auto modern = startModern(passcode);
 	if (modern == StartModernResult::Success) {

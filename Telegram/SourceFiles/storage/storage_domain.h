@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include <optional>
+
 namespace MTP {
 class Config;
 class AuthKey;
@@ -37,6 +39,9 @@ public:
 		std::unique_ptr<MTP::Config> config);
 	void writeAccounts();
 	void startFromScratch();
+	[[nodiscard]] std::optional<QByteArray> readBotUseData() const;
+	[[nodiscard]] bool writeBotUseData(const QByteArray &data);
+	void clearBotUseData();
 
 	[[nodiscard]] bool checkPasscode(const QByteArray &passcode) const;
 	void setPasscode(const QByteArray &passcode);

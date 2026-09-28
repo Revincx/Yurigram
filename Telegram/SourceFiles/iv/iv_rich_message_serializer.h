@@ -17,6 +17,14 @@ class Session;
 
 namespace Iv {
 
+struct RichMessageResources {
+	Fn<std::optional<MTPInputPhoto>(uint64)> photo;
+	Fn<std::optional<MTPInputDocument>(uint64)> document;
+	Fn<std::optional<MTPInputUser>(uint64)> user;
+	Fn<std::optional<uint64>(const QString &)> mentionUser;
+	Fn<bool(uint64)> documentIsAudio;
+};
+
 enum class SerializeInputRichMessageMode : uchar {
 	Draft,
 	FinalSubmit,
@@ -36,6 +44,11 @@ struct SerializeInputRichMessageResult {
 
 [[nodiscard]] SerializeInputRichMessageResult SerializeInputRichMessage(
 	not_null<Main::Session*> session,
+	const RichPage &page,
+	SerializeInputRichMessageMode mode);
+
+[[nodiscard]] SerializeInputRichMessageResult SerializeInputRichMessage(
+	const RichMessageResources &resources,
 	const RichPage &page,
 	SerializeInputRichMessageMode mode);
 

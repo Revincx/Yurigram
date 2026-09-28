@@ -13,7 +13,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_item.h"
 
 namespace Api {
-namespace {
 
 MTPVector<MTPDocumentAttribute> ComposeSendingDocumentAttributes(
 		not_null<DocumentData*> document) {
@@ -83,8 +82,6 @@ MTPVector<MTPDocumentAttribute> ComposeSendingDocumentAttributes(
 	}
 	return MTP_vector<MTPDocumentAttribute>(attributes);
 }
-
-} // namespace
 
 MTPInputMedia PrepareUploadedPhoto(
 		not_null<HistoryItem*> item,

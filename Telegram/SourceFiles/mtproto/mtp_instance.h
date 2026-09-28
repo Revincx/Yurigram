@@ -32,6 +32,11 @@ class Instance : public QObject {
 	Q_OBJECT
 
 public:
+	enum class ClientProfile {
+		Desktop,
+		BotUse,
+	};
+
 	struct Fields {
 		Fields();
 		Fields(Fields &&other);
@@ -48,6 +53,8 @@ public:
 		AuthKeysList keys;
 		QString deviceModel;
 		QString systemVersion;
+		int apiId = 0;
+		ClientProfile clientProfile = ClientProfile::Desktop;
 	};
 
 	enum class Mode {
@@ -69,6 +76,8 @@ public:
 	[[nodiscard]] QString systemLangCode() const;
 	[[nodiscard]] QString cloudLangCode() const;
 	[[nodiscard]] QString langPackName() const;
+	[[nodiscard]] int apiId() const;
+	[[nodiscard]] bool isBotUse() const;
 
 	[[nodiscard]] rpl::producer<> writeKeysRequests() const;
 	[[nodiscard]] rpl::producer<> allKeysDestroyed() const;

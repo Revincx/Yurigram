@@ -1488,6 +1488,16 @@ PRIVATE
     main/main_app_config_values.cpp
     main/main_app_config_values.h
     main/main_domain.cpp
+    bot_use/bot_use_adapter.cpp
+    bot_use/bot_use_adapter.h
+    bot_use/bot_use_client.cpp
+    bot_use/bot_use_client.h
+    bot_use/bot_use_manager.cpp
+    bot_use/bot_use_manager.h
+    bot_use/bot_use_types.cpp
+    bot_use/bot_use_types.h
+    bot_use/bot_use_uploader.cpp
+    bot_use/bot_use_uploader.h
     main/main_domain.h
     main/main_session.cpp
     main/main_session.h
@@ -2044,6 +2054,8 @@ PRIVATE
     test/test_runner.cpp
     test/test_runner.h
     test/test_scenario.cpp
+    test/test_bot_use.cpp
+    test/test_bot_use.h
     test/test_style.cpp
     test/test_style.h
     test/test_text_reads.cpp

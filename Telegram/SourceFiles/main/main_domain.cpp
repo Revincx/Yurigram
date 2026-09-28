@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "main/main_domain.h"
 
+#include "bot_use/bot_use_manager.h"
+
 #include "core/application.h"
 #include "core/core_settings.h"
 #include "core/shortcuts.h"
@@ -59,6 +61,11 @@ Domain::Domain(const QString &dataName)
 
 Domain::~Domain() = default;
 
+BotUse::Manager &Domain::botUse() const {
+	Expects(_botUse != nullptr);
+	return *_botUse;
+}
+
 bool Domain::started() const {
 	return !_accounts.empty();
 }
@@ -68,6 +75,8 @@ Storage::StartResult Domain::start(const QByteArray &passcode) {
 
 	const auto result = _local->start(passcode);
 	if (result == Storage::StartResult::Success) {
+		_botUse = std::make_unique<BotUse::Manager>(_local.get());
+		_botUse->start();
 		activateAfterStarting();
 		crl::on_main(&Core::App(), [=] { suggestExportIfNeeded(); });
 	} else {
@@ -77,6 +86,10 @@ Storage::StartResult Domain::start(const QByteArray &passcode) {
 }
 
 void Domain::finish() {
+	if (_botUse) {
+		_botUse->finish();
+		_botUse.reset();
+	}
 	_accountToActivate = -1;
 	_active.reset(nullptr);
 	base::take(_accounts);
@@ -115,8 +128,15 @@ int Domain::activeForStorage() const {
 }
 
 void Domain::resetWithForgottenPasscode() {
+	if (_botUse) {
+		_botUse->reset();
+	} else {
+		_local->clearBotUseData();
+	}
 	if (_accounts.empty()) {
 		_local->startFromScratch();
+		_botUse = std::make_unique<BotUse::Manager>(_local.get());
+		_botUse->start();
 		activateAfterStarting();
 	} else {
 		for (const auto &[index, account] : _accounts) {
@@ -392,7 +412,8 @@ void Domain::closeAccountWindows(not_null<Main::Account*> account) {
 }
 
 bool Domain::removePasscodeIfEmpty() {
-	if (_accounts.size() != 1 || _active.current()->sessionExists()) {
+	if ((_botUse && _botUse->hasCredentials())
+		|| _accounts.size() != 1 || _active.current()->sessionExists()) {
 		return false;
 	}
 	Local::reset();

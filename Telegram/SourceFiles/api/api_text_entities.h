@@ -30,6 +30,11 @@ enum class ConvertOption {
 	const EntitiesInText &entities,
 	ConvertOption option = ConvertOption::WithLocal);
 
+[[nodiscard]] MTPVector<MTPMessageEntity> EntitiesToMTP(
+	const EntitiesInText &entities,
+	Fn<std::optional<MTPInputUser>(const QString &)> resolveMention,
+	ConvertOption option = ConvertOption::WithLocal);
+
 [[nodiscard]] TextWithEntities ParseTextWithEntities(
 	Main::Session *session,
 	const MTPTextWithEntities &text);

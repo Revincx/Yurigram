@@ -1,4 +1,4 @@
-﻿/*
+/*
 This file is part of Telegram Desktop,
 the official desktop application for the Telegram messaging service.
 
@@ -685,7 +685,8 @@ void SessionPrivate::tryToSend() {
 		const auto systemVersion = (_currentDcType == DcType::Cdn)
 			? "n/a"
 			: _instance->systemVersion();
-		const auto appVersion = ComputeAppVersion();
+		const auto appVersion = ComputeAppVersion()
+			+ (_instance->isBotUse() ? u" BotUse"_q : QString());
 		const auto proxyType = _options->proxy.type;
 		const auto mtprotoProxy = (proxyType == ProxyData::Type::Mtproto)
 			|| (proxyType == ProxyData::Type::Web);
@@ -698,7 +699,7 @@ void SessionPrivate::tryToSend() {
 		initWrapper = MTPInitConnection<SerializedRequest>(
 			MTP_flags(Flag::f_params
 				| (mtprotoProxy ? Flag::f_proxy : Flag(0))),
-			MTP_int(ApiId),
+			MTP_int(_instance->apiId()),
 			MTP_string(deviceModel),
 			MTP_string(systemVersion),
 			MTP_string(appVersion),
@@ -1396,12 +1397,14 @@ void SessionPrivate::handleReceived() {
 		auto from = decryptedInts + kEncryptedHeaderIntsCount;
 		auto end = from + (messageLength / kIntSize);
 		auto sfrom = decryptedInts + 4U; // msg_id + seq_no + length + message
-		MTP_LOG(_shiftedDcId, ("Recv: ")
-			+ DumpToText(sfrom, end)
-			+ QString(" (dc:%1,key:%2,session:%3)"
-			).arg(AbstractConnection::ProtocolDcDebugId(getProtocolDcId())
-			).arg(_encryptionKey->keyId()
-			).arg(_sessionId));
+		if (!_instance->isBotUse()) {
+			MTP_LOG(_shiftedDcId, ("Recv: ")
+				+ DumpToText(sfrom, end)
+				+ QString(" (dc:%1,key:%2,session:%3)"
+				).arg(AbstractConnection::ProtocolDcDebugId(getProtocolDcId())
+				).arg(_encryptionKey->keyId()
+				).arg(_sessionId));
+		}
 
 		const auto registered = _receivedMessageIds.registerMsgId(
 			msgId,
@@ -2729,12 +2732,14 @@ bool SessionPrivate::sendSecureRequest(
 	memcpy(request->data() + 2, &_sessionId, 2 * sizeof(mtpPrime));
 
 	auto from = request->constData() + 4;
-	MTP_LOG(_shiftedDcId, ("Send: ")
-		+ DumpToText(from, from + messageSize)
-		+ QString(" (dc:%1,key:%2,session:%3)"
-		).arg(AbstractConnection::ProtocolDcDebugId(getProtocolDcId())
-		).arg(_encryptionKey->keyId()
-		).arg(_sessionId));
+	if (!_instance->isBotUse()) {
+		MTP_LOG(_shiftedDcId, ("Send: ")
+			+ DumpToText(from, from + messageSize)
+			+ QString(" (dc:%1,key:%2,session:%3)"
+			).arg(AbstractConnection::ProtocolDcDebugId(getProtocolDcId())
+			).arg(_encryptionKey->keyId()
+			).arg(_sessionId));
+	}
 
 	uchar encryptedSHA256[32];
 	MTPint128 &msgKey(*(MTPint128*)(encryptedSHA256 + 8));

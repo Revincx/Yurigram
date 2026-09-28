@@ -15,6 +15,10 @@ class Domain;
 enum class StartResult : uchar;
 } // namespace Storage
 
+namespace BotUse {
+class Manager;
+} // namespace BotUse
+
 namespace MTP {
 enum class Environment : uchar;
 } // namespace MTP
@@ -48,6 +52,7 @@ public:
 	[[nodiscard]] Storage::Domain &local() const {
 		return *_local;
 	}
+	[[nodiscard]] BotUse::Manager &botUse() const;
 
 	[[nodiscard]] auto accounts() const
 		-> const std::vector<AccountWithIndex> &;
@@ -95,6 +100,7 @@ private:
 
 	const QString _dataName;
 	const std::unique_ptr<Storage::Domain> _local;
+	std::unique_ptr<BotUse::Manager> _botUse;
 
 	std::vector<AccountWithIndex> _accounts;
 	rpl::event_stream<> _accountsChanges;
