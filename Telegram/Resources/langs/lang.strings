@@ -8819,7 +8819,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_settings_show_media_metadata" = "Show metadata info in media viewer";
 "lng_media_metadata_average_bitrate" = "{bitrate} kbps";
 "lng_media_metadata_silent" = "Silent";
-"lng_media_metadata_streamable" = "Streamable";
 "lng_chat_enhanced_settings" = "Chat Enhanced Settings";
 "lng_chat_enhanced_settings_desc" = "The options below will override global enhanced settings and apply only to this chat.";
 "lng_chat_enhanced_default" = "Default";

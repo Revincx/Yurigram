@@ -348,9 +348,6 @@ constexpr auto kStorySavePromoDuration = 3 * crl::time(1000);
 	if (document->isSilentVideo()) {
 		flags.push_back(tr::lng_media_metadata_silent(tr::now));
 	}
-	if (document->supportsStreaming()) {
-		flags.push_back(tr::lng_media_metadata_streamable(tr::now));
-	}
 	return flags.join(u" · "_q);
 }
 
