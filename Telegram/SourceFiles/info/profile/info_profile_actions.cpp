@@ -44,6 +44,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_forum.h"
 #include "data/data_forum_topic.h"
 #include "data/data_peer_values.h"
+#include "data/data_photo.h"
 #include "data/data_saved_sublist.h"
 #include "data/data_session.h"
 #include "data/data_user.h"
@@ -124,6 +125,30 @@ namespace {
 constexpr auto kDay = Data::WorkingInterval::kDay;
 constexpr auto kMaxChannelId = -1000000000000;
 constexpr auto kPeerIdLinkIndex = uint16(1);
+
+[[nodiscard]] QString PeerIdLabel(not_null<PeerData*> peer) {
+	const auto photoId = peer->userpicPhotoId();
+	if (!photoId) {
+		return u"ID"_q;
+	}
+
+	auto dc = peer->owner().photo(photoId)->getDC();
+	if (!dc) {
+		const auto location = peer->userpicLocation();
+		if (const auto file = std::get_if<StorageFileLocation>(
+				&location.file().data)) {
+			dc = file->dcId();
+		}
+	}
+	switch (dc) {
+	case 1:
+	case 3: return u"DC%1, Miami FL, USA"_q.arg(dc);
+	case 2:
+	case 4: return u"DC%1, Amsterdam, NL"_q.arg(dc);
+	case 5: return u"DC%1, Singapore, SG"_q.arg(dc);
+	}
+	return u"ID"_q;
+}
 
 class DraggableUrlClickHandler final : public UrlClickHandler {
 public:
@@ -1904,7 +1929,7 @@ Section DetailsFiller::makeInfo() {
 	// https://github.com/AyuGram/AyuGramDesktop/blob/dev/Telegram/SourceFiles/ayu/ui/utils/ayu_profile_values.cpp
 	// https://github.com/AyuGram/AyuGramDesktop/blob/dev/Telegram/SourceFiles/info/profile/info_profile_actions.cpp#L1826
 	if(EnhancedSettings::Get(EnhancedSettings::Option::ShowPeerId)) {
-		const auto idLabel = QString("ID");
+		const auto idLabel = _topic ? u"ID"_q : PeerIdLabel(_peer);
 		auto idNum = QString::number(0);
 
 		if(_topic) {

@@ -812,7 +812,6 @@ struct DecodeEnhancedSettingsResult {
 			EnhancedSettings::Option::ShowEmojiButtonAsText,
 			tr::lng_show_emoji_button_as_text_desc());
 		addToggleOption(content, EnhancedSettings::Option::ShowScheduledButton);
-		addToggleOption(content, EnhancedSettings::Option::ShowPeerId);
 		addToggleOption(content, EnhancedSettings::Option::HideAllChats);
 		addToggleOption(content, EnhancedSettings::Option::HideCounter);
 		addToggleOption(content, EnhancedSettings::Option::HideStories);
@@ -984,6 +983,9 @@ struct DecodeEnhancedSettingsResult {
 	}
 
 	void Enhanced::setupOther(not_null<Ui::VerticalLayout*> content) {
+
+		addToggleOption(content, EnhancedSettings::Option::ShowPeerId);
+		
 		const auto showServerConfig = AddButtonWithIcon(
 			content,
 			tr::lng_settings_show_server_config(),
