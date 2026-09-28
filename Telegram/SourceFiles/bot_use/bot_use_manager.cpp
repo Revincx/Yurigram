@@ -103,6 +103,10 @@ void Manager::start() {
 }
 
 void Manager::finish() {
+	for (const auto &[id, client] : _pending) {
+		client->stop();
+	}
+	_pending.clear();
 	for (const auto &[id, client] : _clients) {
 		client->stop();
 	}
@@ -117,6 +121,7 @@ void Manager::finish() {
 }
 
 void Manager::reset() {
+	_pending.clear();
 	_clients.clear();
 	_retired.clear();
 	_storage->clearBotUseData();
@@ -134,6 +139,9 @@ bool Manager::hasCredentials() const {
 }
 
 bool Manager::busy() const {
+	if (!_pending.empty()) {
+		return true;
+	}
 	for (const auto &[id, client] : _clients) {
 		if (client->busy()) {
 			return true;
@@ -148,6 +156,10 @@ Error Manager::storageError() const {
 
 int Manager::apiId() const {
 	return _credentials.apiId;
+}
+
+ApiCredentials Manager::apiCredentials() const {
+	return _credentials;
 }
 
 Error Manager::setApiCredentials(ApiCredentials credentials) {
@@ -203,6 +215,91 @@ BotId Manager::addBot(QString token, MTP::Environment environment) {
 	return id;
 }
 
+OperationId Manager::addAuthenticatedBot(
+		QString token,
+		Completion done,
+		MTP::Environment environment) {
+	const auto fail = [&](Error error) {
+		auto operation = makeOperation(0, std::move(done));
+		operation->result.state = OperationState::Failed;
+		operation->result.error = std::move(error);
+		crl::on_main(this, [=] {
+			publish(operation->result);
+			if (operation->done) {
+				operation->done(operation->result);
+			}
+		});
+		return operation->result.operation;
+	};
+	if (!_started || _readOnly || _storageError) {
+		return fail(_storageError
+			? _storageError
+			: Error{ u"BOT_STORE_UNAVAILABLE"_q });
+	} else if (const auto error = ValidateCredentials(_credentials)) {
+		return fail(error);
+	}
+	token = token.trimmed();
+	if (token.isEmpty()) {
+		return fail({ u"BOT_TOKEN_INVALID"_q });
+	}
+	for (const auto *clients : { &_clients, &_pending }) {
+		for (const auto &[id, client] : *clients) {
+			const auto &record = client->record();
+			if (record.token == token && record.environment == environment) {
+				return fail({ u"BOT_ALREADY_ADDED"_q });
+			}
+		}
+	}
+	auto record = Record();
+	record.info.id = _nextBot++;
+	record.info.state = State::Disconnected;
+	record.token = std::move(token);
+	record.environment = environment;
+	const auto id = record.info.id;
+	_pending.emplace(id, std::make_unique<Client>(this, std::move(record)));
+	return authenticate(id, [=, done = std::move(done)](const Result &result) {
+		auto final = result;
+		const auto i = _pending.find(id);
+		if (i == _pending.end()) {
+			return;
+		}
+		auto client = std::move(i->second);
+		_pending.erase(i);
+		if (result.state == OperationState::Completed) {
+			const auto duplicate = ranges::any_of(_clients, [&](const auto &entry) {
+				return entry.second->info().userId == client->info().userId
+					&& entry.second->record().environment
+						== client->record().environment;
+			});
+			if (duplicate) {
+				retire(std::move(client));
+				final.state = OperationState::Failed;
+				final.error = { u"BOT_ALREADY_ADDED"_q };
+			} else {
+				_clients.emplace(id, std::move(client));
+			}
+			if (!duplicate && !save()) {
+				client = std::move(_clients.at(id));
+				_clients.erase(id);
+				retire(std::move(client));
+				final.state = OperationState::Failed;
+				final.error = _storageError;
+				const auto restored = save();
+				if (!restored) {
+					_storageError = final.error;
+				}
+			} else if (!duplicate) {
+				changed();
+			}
+		} else {
+			client->stop();
+		}
+		if (done) {
+			done(final);
+		}
+	});
+}
+
 Error Manager::removeBot(BotId bot) {
 	if (_readOnly) {
 		return _storageError;
@@ -247,7 +344,11 @@ std::shared_ptr<const ResourceContext> Manager::resources(BotId bot) {
 
 Client *Manager::client(BotId id) {
 	const auto i = _clients.find(id);
-	return i == _clients.end() ? nullptr : i->second.get();
+	if (i != _clients.end()) {
+		return i->second.get();
+	}
+	const auto pending = _pending.find(id);
+	return pending == _pending.end() ? nullptr : pending->second.get();
 }
 
 OperationId Manager::nextOperation() { return _nextOperation++; }
@@ -449,6 +550,9 @@ void Manager::cancel(OperationId operation) {
 	for (const auto &[id, client] : _clients) {
 		client->cancel(operation);
 	}
+	for (const auto &[id, client] : _pending) {
+		client->cancel(operation);
+	}
 }
 
 bool Manager::save() {
@@ -498,6 +602,12 @@ Error Manager::identify(BotId bot, UserId user) {
 		return { u"BOT_NOT_FOUND"_q };
 	}
 	for (const auto &[id, item] : _clients) {
+		if (id != bot && item->info().userId == user
+			&& item->record().environment == found->record().environment) {
+			return { u"BOT_ALREADY_ADDED"_q };
+		}
+	}
+	for (const auto &[id, item] : _pending) {
 		if (id != bot && item->info().userId == user
 			&& item->record().environment == found->record().environment) {
 			return { u"BOT_ALREADY_ADDED"_q };

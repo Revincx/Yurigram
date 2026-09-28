@@ -25,6 +25,15 @@ settingsButtonRightLabelSpoiler: SettingsButton(settingsButton) {
 settingsButtonNoIcon: SettingsButton(settingsButton) {
 	padding: margins(22px, 10px, 22px, 8px);
 }
+settingsBotUseRow: SettingsButton(settingsButton) {
+	padding: margins(60px, 10px, 22px, 10px);
+	iconLeft: 24px;
+}
+settingsBotUseUserpic: UserpicButton(defaultUserpicButton) {
+	size: size(32px, 32px);
+	photoSize: 32px;
+}
+settingsBotUseAvatarLeft: 20px;
 settingsChatEnhancedTopBarReset: IconButton(infoTopBarMenu) {
 	icon: icon {{ "settings/reload", boxTitleCloseFg }};
 	iconOver: icon {{ "settings/reload", boxTitleCloseFgOver }};

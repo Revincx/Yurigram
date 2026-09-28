@@ -23,7 +23,12 @@ public:
 	[[nodiscard]] bool busy() const;
 	[[nodiscard]] Error storageError() const;
 	[[nodiscard]] Error setApiCredentials(ApiCredentials credentials);
+	[[nodiscard]] ApiCredentials apiCredentials() const;
 	[[nodiscard]] int apiId() const;
+	[[nodiscard]] OperationId addAuthenticatedBot(
+		QString token,
+		Completion done,
+		MTP::Environment environment = MTP::Environment::Production);
 	[[nodiscard]] BotId addBot(
 		QString token,
 		MTP::Environment environment = MTP::Environment::Production);
@@ -107,6 +112,7 @@ private:
 	const not_null<Storage::Domain*> _storage;
 	ApiCredentials _credentials;
 	std::map<BotId, std::unique_ptr<Client>> _clients;
+	std::map<BotId, std::unique_ptr<Client>> _pending;
 	std::vector<std::unique_ptr<Client>> _retired;
 	BotId _nextBot = 1;
 	OperationId _nextOperation = 1;

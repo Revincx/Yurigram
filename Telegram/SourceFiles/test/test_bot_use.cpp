@@ -149,6 +149,14 @@ void Fixture::respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuff
 		Check(qs(apiHash) == u"0123456789abcdef0123456789abcdef"_q,
 			u"Bot authentication uses shared API hash"_q);
 		const auto token = qs(botToken);
+		if (token == u"fixture-invalid"_q) {
+			const auto delivered = DeliverControlledRpcError(
+				instance.data(), id, 400, u"ACCESS_TOKEN_INVALID"_q);
+			Check(delivered.diagnosis.isEmpty(),
+				u"Invalid bot token RPC delivery"_q,
+				delivered.diagnosis);
+			break;
+		}
 		const auto user = token == u"fixture-a"_q ? 11 : token == u"fixture-b"_q ? 22 : 33;
 		users[instance.data()] = user;
 		++auths;
@@ -313,6 +321,37 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		state->operation = state->manager->authenticate(state->b, state->completion());
 	}, [=] { Check(state->result->state == BotUse::OperationState::Completed && state->users.size() == 2,
 		u"Bot B has an independent instance"_q); });
+	add(u"reject unverified bot"_q, [=] {
+		state->operation = state->manager->addAuthenticatedBot(
+			u"fixture-invalid"_q, state->completion());
+		Check(state->manager->bots().size() == 2,
+			u"Pending bot stays out of the visible list"_q);
+	}, [=] { Check(state->result->state == BotUse::OperationState::Failed
+		&& state->result->error.type == u"ACCESS_TOKEN_INVALID"_q
+		&& state->manager->bots().size() == 2,
+		u"Failed bot authentication leaves no stored record"_q); });
+	add(u"commit authenticated bot"_q, [=] {
+		state->operation = state->manager->addAuthenticatedBot(
+			u"fixture-c"_q, state->completion());
+		Check(state->manager->bots().size() == 2,
+			u"Successful bot stays pending until authentication"_q);
+	}, [=] { Check(state->result->state == BotUse::OperationState::Completed
+		&& state->manager->bots().size() == 3,
+		u"Authenticated bot becomes visible after encrypted save"_q); });
+	add(u"reject duplicate token"_q, [=] {
+		state->operation = state->manager->addAuthenticatedBot(
+			u"fixture-c"_q, state->completion());
+	}, [=] { Check(state->result->state == BotUse::OperationState::Failed
+		&& state->result->error.type == u"BOT_ALREADY_ADDED"_q
+		&& state->manager->bots().size() == 3,
+		u"Duplicate token does not add a bot"_q); });
+	add(u"reject duplicate identity"_q, [=] {
+		state->operation = state->manager->addAuthenticatedBot(
+			u"fixture-other"_q, state->completion());
+	}, [=] { Check(state->result->state == BotUse::OperationState::Failed
+		&& state->result->error.type == u"BOT_ALREADY_ADDED"_q
+		&& state->manager->bots().size() == 3,
+		u"Duplicate bot identity does not add a record"_q); });
 	add(u"send with retry"_q, [=] {
 		state->retryNext = true;
 		state->operation = state->manager->sendText(state->a, state->text(), state->completion());
