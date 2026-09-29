@@ -25,9 +25,11 @@ struct MediaSource {
 	QVector<MTPDocumentAttribute> attributes;
 	TextWithEntities caption;
 	FullMsgId origin;
+	std::optional<MTPInputPhoto> uploadedPhoto;
+	std::optional<MTPInputDocument> uploadedDocument;
 };
 
-enum class Kind { Authenticate, ReplaceToken, Text, Media, Album, Rich, Edit, EditRich, Delete };
+enum class Kind { Authenticate, ReplaceToken, Text, Media, Album, Rich, Edit, EditRich, Delete, Upload };
 
 struct Operation {
 	Result result;

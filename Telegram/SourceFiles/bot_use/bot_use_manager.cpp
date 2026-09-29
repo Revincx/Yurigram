@@ -433,6 +433,21 @@ OperationId Manager::sendMedia(
 	return submit(std::move(op));
 }
 
+OperationId Manager::uploadMedia(
+		BotId bot,
+		PeerId peer,
+		const std::shared_ptr<FilePrepareResult> &file,
+		Completion done) {
+	auto op = makeOperation(bot, std::move(done));
+	op->kind = Kind::Upload;
+	op->action.peer = peer;
+	op->media.emplace_back();
+	op->validation = file
+		? SnapshotMedia(*file, op->media.back())
+		: Error{ u"MEDIA_SOURCE_MISSING"_q };
+	return submit(std::move(op));
+}
+
 OperationId Manager::sendAlbum(
 		BotId bot,
 		const Api::SendAction &action,

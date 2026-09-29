@@ -158,7 +158,10 @@ Error SnapshotMedia(const FilePrepareResult &from, MediaSource &to) {
 			to.audio |= attribute.type() == mtpc_documentAttributeAudio;
 		}
 	}
-	if (from.type != SendMediaType::Photo && from.type != SendMediaType::File) {
+	if (from.type != SendMediaType::Photo
+		&& from.type != SendMediaType::File
+		&& from.type != SendMediaType::Audio
+		&& from.type != SendMediaType::Round) {
 		return { u"UNSUPPORTED_MEDIA"_q };
 	}
 	return to.bytes.isEmpty() && to.location.isEmpty()
@@ -186,6 +189,8 @@ Error SnapshotRich(
 		value.id = source.id;
 		value.photo = source.photo;
 		value.origin = source.origin;
+		value.uploadedPhoto = source.uploadedPhoto;
+		value.uploadedDocument = source.uploadedDocument;
 		media.emplace(std::make_pair(source.photo, source.id), std::move(value));
 	}
 	operation.page = std::make_shared<Iv::RichPage>(page);

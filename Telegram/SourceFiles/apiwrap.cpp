@@ -41,6 +41,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_premium.h"
 #include "api/api_user_names.h"
 #include "api/api_websites.h"
+#include "bot_use/bot_use_sending.h"
 #include "data/business/data_shortcut_messages.h"
 #include "data/components/credits.h"
 #include "data/components/ephemeral_messages.h"
@@ -181,6 +182,7 @@ void ShowChannelsLimitBox(not_null<PeerData*> peer) {
 		action.replyTo,
 		action.replaceMediaOf);
 	result.originWindow = action.originWindow;
+	result.botUse = BotUse::Selected(action.history);
 	return result;
 }
 
@@ -4518,6 +4520,11 @@ void ApiWrap::sendSharedContact(
 		UserId userId,
 		const SendAction &action,
 		Fn<void(bool)> done) {
+	if (BotUse::Selected(action.history)) {
+		BotUse::ShowSendError(action.history, { u"UNSUPPORTED_MEDIA"_q });
+		if (done) { done(false); }
+		return;
+	}
 	sendAction(action);
 
 	const auto history = action.history;
@@ -5077,6 +5084,12 @@ void ApiWrap::sendMessage(
 		MessageToSend &&message,
 		std::optional<MsgId> localMessageId) {
 	const auto history = message.action.history;
+	if (const auto bot = BotUse::Selected(history)) {
+		if (!BotUse::SendText(bot, std::move(message), localMessageId)) {
+			return;
+		}
+		return;
+	}
 	const auto peer = history->peer;
 	const auto &textWithTags = message.textWithTags;
 
@@ -5437,6 +5450,11 @@ void ApiWrap::sendInlineResult(
 		SendAction action,
 		std::optional<MsgId> localMessageId,
 		Fn<void(bool)> done) {
+	if (BotUse::Selected(action.history)) {
+		BotUse::ShowSendError(action.history, { u"UNSUPPORTED_MEDIA"_q });
+		if (done) { done(false); }
+		return;
+	}
 	StripEphemeralReply(_session, action.replyTo);
 	sendAction(action);
 

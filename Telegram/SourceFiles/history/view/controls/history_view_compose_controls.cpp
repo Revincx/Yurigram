@@ -130,6 +130,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/chat/choose_send_as.h"
 #include "ui/chat/choose_bot_use.h"
 #include "bot_use/bot_use_chat_state.h"
+#include "bot_use/bot_use_sending.h"
 #include "ui/effects/spoiler_mess.h"
 #include "ui/effects/reaction_fly_animation.h"
 #include "webrtc/webrtc_environment.h"
@@ -4934,6 +4935,7 @@ void ComposeControls::updateSendButtonType() {
 void ComposeControls::updateSendLockBadge() {
 	const auto page = shownRichMessage();
 	_sendLockBadge.fire(page
+		&& (!_history || !BotUse::RichDraftBot(_history, replyingToMessage()))
 		&& !session().premium()
 		&& Iv::RichPageUsesPremiumFormatting(*page));
 }

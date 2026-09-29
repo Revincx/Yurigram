@@ -63,6 +63,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_chat_participants.h"
 #include "api/api_editing.h"
 #include "api/api_sending.h"
+#include "bot_use/bot_use_sending.h"
 #include "apiwrap.h"
 #include "settings.h"
 #include "boxes/premium_preview_box.h"
@@ -2146,7 +2147,7 @@ bool ChatWidget::checkSendPayment(
 void ChatWidget::sendingFilesConfirmed(
 		std::shared_ptr<Ui::PreparedBundle> bundle,
 		Api::SendOptions options) {
-	if (showSendingFilesError(*bundle)) {
+	if (!BotUse::Selected(_history) && showSendingFilesError(*bundle)) {
 		return;
 	}
 	const auto ephemeralReply = session().ephemeralMessages()
@@ -2159,7 +2160,14 @@ void ChatWidget::sendingFilesConfirmed(
 
 	auto action = prepareSendAction(options);
 	action.clearDraft = false;
-	if (!ephemeralReply) {
+	const auto bot = BotUse::Selected(_history);
+	if (bot) {
+		if (const auto error = BotUse::ValidateSend(bot, action)) {
+			BotUse::ShowSendError(_history, error);
+			return;
+		}
+	}
+	if (!ephemeralReply && !bot) {
 		const auto withPaymentApproved = [=](int approved) {
 			auto copy = options;
 			copy.starsApproved = approved;
@@ -2347,7 +2355,8 @@ Api::SendAction ChatWidget::prepareSendAction(
 		}
 	}
 
-	result.options.sendAs = _composeControls->sendAsPeer();
+	result.options.sendAs = BotUse::Selected(_history)
+		? nullptr : _composeControls->sendAsPeer();
 	result.options.suggest = suggestOptions();
 	result.clearDraft = !Iv::Editor::IsComposeBoxOpen(
 		&session(),
@@ -2375,7 +2384,14 @@ void ChatWidget::sendVoice(const ComposeControls::VoiceToSend &data) {
 		sendVoice(copy);
 	};
 	auto action = prepareSendAction(data.options);
-	const auto checked = checkSendPayment(
+	const auto bot = BotUse::Selected(_history);
+	if (bot) {
+		if (const auto error = BotUse::ValidateSend(bot, action)) {
+			BotUse::ShowSendError(_history, error);
+			return;
+		}
+	}
+	const auto checked = bot || checkSendPayment(
 		1 + int(_composeControls->forwardItems().size()),
 		action.options,
 		withPaymentApproved);
@@ -2469,6 +2485,7 @@ void ChatWidget::sendRichDraft(
 	if (!page) {
 		return;
 	}
+	const auto bot = BotUse::RichDraftBot(_history, replyTo());
 	const auto ephemeral = session().ephemeralMessages()
 		.isEphemeralBotReply(replyTo().messageId);
 	if (ephemeral && options.scheduled) {
@@ -2497,6 +2514,18 @@ void ChatWidget::sendRichDraft(
 		return;
 	}
 
+	if (bot) {
+		auto action = prepareSendAction(options);
+		action.options.sendAs = nullptr;
+		if (!BotUse::SendRich(bot, page, action, {},
+				BotUse::RichDraftCompletion(action))) {
+			return;
+		}
+		_composeControls->clear();
+		_composeControls->applyCloudDraft();
+		finishSending();
+		return;
+	}
 	const auto serialized = Iv::SerializeInputRichMessage(
 		&session(),
 		*page,
@@ -2590,6 +2619,12 @@ void ChatWidget::sendTextWithTags(
 
 	auto message = Api::MessageToSend(prepareSendAction(options));
 	message.textWithTags = textWithTags;
+	if (const auto bot = BotUse::Selected(_history)) {
+		if (const auto error = BotUse::ValidateSend(bot, message.action)) {
+			BotUse::ShowSendError(_history, error);
+			return;
+		}
+	}
 	if (useCurrentWebPageDraft) {
 		message.webPage = _composeControls->webPageDraft();
 	}
@@ -3170,10 +3205,11 @@ bool ChatWidget::sendExistingDocument(
 		Data::ShowSendErrorToast(controller(), _peer, error);
 		return false;
 	} else if ((!ephemeralReply && showSlowmodeError())
-		|| ShowSendPremiumError(controller(), document)) {
+		|| (!BotUse::Selected(_history)
+			&& ShowSendPremiumError(controller(), document))) {
 		return false;
 	}
-	if (!ephemeralReply) {
+	if (!ephemeralReply && !BotUse::Selected(_history)) {
 		const auto withPaymentApproved = [=](int approved) {
 			auto copy = messageToSend;
 			copy.action.options.starsApproved = approved;
@@ -3188,10 +3224,17 @@ bool ChatWidget::sendExistingDocument(
 		}
 	}
 
-	Api::SendExistingDocument(
-		std::move(messageToSend),
-		document,
-		localId);
+	if (const auto bot = BotUse::Selected(_history)) {
+		if (!BotUse::SendExisting(bot, std::move(messageToSend),
+				nullptr, document, localId)) {
+			return false;
+		}
+	} else {
+		Api::SendExistingDocument(
+			std::move(messageToSend),
+			document,
+			localId);
+	}
 
 	_composeControls->clearFieldAfterStickerSend();
 	_composeControls->cancelReplyMessage();
@@ -3234,9 +3277,14 @@ bool ChatWidget::sendExistingPhoto(
 		}
 	}
 
-	Api::SendExistingPhoto(
-		Api::MessageToSend(action),
-		photo);
+	if (const auto bot = BotUse::Selected(_history)) {
+		if (!BotUse::SendExisting(bot, Api::MessageToSend(action),
+				photo, nullptr)) {
+			return false;
+		}
+	} else {
+		Api::SendExistingPhoto(Api::MessageToSend(action), photo);
+	}
 
 	_composeControls->cancelReplyMessage();
 	finishSending();

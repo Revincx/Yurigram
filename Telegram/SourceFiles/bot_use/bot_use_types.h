@@ -65,6 +65,7 @@ struct Result {
 	OperationState state = OperationState::Queued;
 	std::vector<FullMsgId> messages;
 	std::vector<MTPMessage> data;
+	std::optional<MTPMessageMedia> media;
 	std::optional<MTPUpdates> updates;
 	Error error;
 	int64 uploaded = 0;
@@ -79,6 +80,8 @@ struct RichMediaSource {
 	bool photo = false;
 	FullMsgId origin;
 	std::shared_ptr<FilePrepareResult> file;
+	std::optional<MTPInputPhoto> uploadedPhoto;
+	std::optional<MTPInputDocument> uploadedDocument;
 };
 
 class Client;

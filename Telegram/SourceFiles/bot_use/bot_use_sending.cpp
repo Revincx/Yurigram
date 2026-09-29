@@ -1,0 +1,641 @@
+#include "bot_use/bot_use_sending.h"
+
+#include "apiwrap.h"
+#include "api/api_media.h"
+#include "bot_use/bot_use_adapter.h"
+#include "bot_use/bot_use_chat_state.h"
+#include "bot_use/bot_use_manager.h"
+#include "chat_helpers/message_field.h"
+#include "data/data_changes.h"
+#include "data/data_document.h"
+#include "data/data_document_media.h"
+#include "data/data_media_types.h"
+#include "data/data_file_origin.h"
+#include "data/data_photo.h"
+#include "data/data_photo_media.h"
+#include "data/data_premium_limits.h"
+#include "data/data_session.h"
+#include "data/data_user.h"
+#include "history/history.h"
+#include "history/history_item.h"
+#include "history/history_item_helpers.h"
+#include "main/main_domain.h"
+#include "main/main_session.h"
+#include "mtproto/mtp_instance.h"
+#include "storage/localimageloader.h"
+#include "base/random.h"
+#include "base/unixtime.h"
+#include "ui/image/image_location_factory.h"
+#include "ui/item_text_options.h"
+#include "ui/text/text_utilities.h"
+#include "window/window_session_controller.h"
+
+namespace BotUse {
+namespace {
+
+[[nodiscard]] BotInfo FindBot(not_null<History*> history, BotId bot) {
+	for (const auto &info : history->session().domain().botUse().bots()) {
+		if (info.id == bot) {
+			return info;
+		}
+	}
+	return {};
+}
+
+[[nodiscard]] MessageFlags LocalFlags(const Api::SendAction &action) {
+	auto flags = NewMessageFlags(action.history->peer);
+	flags &= ~MessageFlag::Outgoing;
+	flags |= MessageFlag::HasFromId;
+	if (action.replyTo) {
+		flags |= MessageFlag::HasReplyInfo;
+	}
+	if (action.options.silent) {
+		flags |= MessageFlag::Silent;
+	}
+	if (action.history->peer->isBroadcast()) {
+		flags |= MessageFlag::Post
+			| MessageFlag::HasViews
+			| MessageFlag::HasPostAuthor;
+	}
+	if (action.options.invertCaption) {
+		flags |= MessageFlag::InvertMedia;
+	}
+	return flags;
+}
+
+[[nodiscard]] HistoryItemCommonFields LocalFields(
+		const Api::SendAction &action,
+		UserId bot,
+		MsgId id,
+		uint64 groupedId = 0) {
+	return {
+		.id = id,
+		.flags = LocalFlags(action),
+		.from = peerFromUser(bot),
+		.replyTo = action.replyTo,
+		.date = NewMessageDate(action.options),
+		.postAuthor = action.history->peer->isBroadcast()
+			? action.history->session().data().user(bot)->name()
+			: QString(),
+		.groupedId = groupedId,
+	};
+}
+
+void NotifySent(not_null<History*> history) {
+	history->session().data().sendHistoryChangeNotifications();
+	history->session().changes().historyUpdated(
+		history, Data::HistoryUpdate::Flag::MessageSent);
+}
+
+void Complete(
+		base::weak_ptr<Main::Session> weak,
+		PeerId peer,
+		std::vector<FullMsgId> locals,
+		const Result &result) {
+	const auto session = weak.get();
+	if (!session) {
+		return;
+	}
+	auto &owner = session->data();
+	if (result.state != OperationState::Completed
+		|| result.messages.size() != locals.size()) {
+		for (const auto &id : locals) {
+			if (const auto item = owner.message(id); item && item->isSending()) {
+				item->sendFailed();
+			}
+			session->botUseChats().finishSend(id);
+		}
+		if (const auto history = owner.historyLoaded(peer)) {
+			ShowSendError(history, result.error
+				? result.error : Error{ u"MESSAGE_RESULT_INCOMPLETE"_q });
+		}
+		return;
+	}
+	for (auto i = size_t(); i != locals.size(); ++i) {
+		const auto real = result.messages[i];
+		if (real.peer != peer || !IsServerMsgId(real.msg)) {
+			session->botUseChats().finishSend(locals[i]);
+			continue;
+		}
+		const auto found = ranges::find_if(result.data, [&](const MTPMessage &message) {
+			return message.type() == mtpc_message
+				&& message.c_message().vid().v == real.msg.bare
+				&& peerFromMTP(message.c_message().vpeer_id()) == peer;
+		});
+		if (found == end(result.data)) {
+			session->botUseChats().finishSend(locals[i]);
+			continue;
+		}
+		if (const auto local = owner.message(locals[i])) {
+			if (const auto media = local->media()) {
+				if (const auto server = found->c_message().vmedia()) {
+					server->match([&](const MTPDmessageMediaPhoto &data) {
+						if (const auto source = media->photo()) {
+							if (const auto photo = data.vphoto()) {
+								owner.processPhoto(*photo)->collectLocalData(source);
+							}
+						}
+					}, [&](const MTPDmessageMediaDocument &data) {
+						if (const auto source = media->document()) {
+							if (const auto document = data.vdocument()) {
+								owner.processDocument(*document)->collectLocalData(source);
+							}
+						}
+					}, [&](const auto &) {});
+				}
+			}
+			if (const auto existing = owner.message(real); existing && existing != local) {
+				existing->destroy();
+			}
+			local->setRealId(real.msg);
+			owner.updateExistingMessage(found->c_message());
+		} else if (!owner.message(real)) {
+			session->botUseChats().finishSend(locals[i], real);
+			owner.addNewMessage(*found, MessageFlags(), NewMessageType::Unread);
+			continue;
+		}
+		session->botUseChats().finishSend(locals[i], real);
+	}
+	owner.sendHistoryChangeNotifications();
+}
+
+[[nodiscard]] Completion CompletionFor(
+		not_null<History*> history,
+		std::vector<FullMsgId> locals,
+		Completion done = {}) {
+	return [weak = base::make_weak(&history->session()),
+			peer = history->peer->id,
+			locals = std::move(locals),
+			done = std::move(done)](const Result &result) {
+		Complete(weak, peer, locals, result);
+		if (done) {
+			done(result);
+		}
+	};
+}
+
+[[nodiscard]] MTPMessageMedia LocalMedia(const FilePrepareResult &file) {
+	if (file.type == SendMediaType::Photo) {
+		using Flag = MTPDmessageMediaPhoto::Flag;
+		return MTP_messageMediaPhoto(
+			MTP_flags(Flag::f_photo | (file.spoiler ? Flag::f_spoiler : Flag())),
+			file.photo, MTPint(), MTPDocument());
+	}
+	using Flag = MTPDmessageMediaDocument::Flag;
+	return MTP_messageMediaDocument(
+		MTP_flags(Flag::f_document | (file.spoiler ? Flag::f_spoiler : Flag())
+			| (file.type == SendMediaType::Audio ? Flag::f_voice : Flag())
+			| (file.type == SendMediaType::Round ? Flag::f_round : Flag())),
+		file.document, MTPVector<MTPDocument>(), MTPPhoto(), MTPint(), MTPint());
+}
+
+} // namespace
+
+BotId Selected(not_null<History*> history) {
+	const auto peer = history->peer;
+	const auto choice = history->session().botUseChats().choice(peer->id);
+	return choice.enabled && (peer->isMegagroup() || peer->isBroadcast())
+		? choice.bot : 0;
+}
+
+BotId RichDraftBot(not_null<History*> history, const FullReplyTo &reply) {
+	return history->session().botUseChats().richDraftBot(
+		history->peer->id,
+		reply.topicRootId,
+		reply.monoforumPeerId).value_or(0);
+}
+
+Completion RichDraftCompletion(
+		const Api::SendAction &action,
+		std::shared_ptr<const Iv::RichPage> expected) {
+	if (!action.clearDraft) {
+		return {};
+	}
+	const auto history = action.history;
+	const auto peer = history->peer->id;
+	const auto topicRootId = action.replyTo.topicRootId;
+	const auto monoforumPeerId = action.replyTo.monoforumPeerId;
+	const auto draft = history->cloudDraft(topicRootId, monoforumPeerId);
+	if (!expected) {
+		expected = draft ? draft->richMessage : nullptr;
+	}
+	if (!expected) {
+		return {};
+	}
+	return [weak = base::make_weak(&history->session()),
+			peer, topicRootId, monoforumPeerId, expected](const Result &result) {
+		if (result.state != OperationState::Completed) {
+			return;
+		}
+		const auto session = weak.get();
+		const auto history = session
+			? session->data().historyLoaded(peer) : nullptr;
+		if (!history) {
+			return;
+		}
+		const auto current = history->cloudDraft(topicRootId, monoforumPeerId);
+		if (current && current->richMessage != expected) {
+			return;
+		}
+		session->botUseChats().clearRichDraft(
+			peer, topicRootId, monoforumPeerId);
+		history->clearCloudDraft(topicRootId, monoforumPeerId);
+		if (const auto thread = history->threadFor(
+				topicRootId, monoforumPeerId)) {
+			const auto cleared = history->createCloudDraft(
+				topicRootId, monoforumPeerId, nullptr);
+			if (cleared) {
+				session->api().saveDraftToCloud(not_null{ thread }, *cleared);
+			}
+		}
+		history->applyCloudDraft(topicRootId, monoforumPeerId);
+	};
+}
+
+Error ValidateSend(BotId bot, const Api::SendAction &action) {
+	const auto history = action.history;
+	if (!bot) {
+		return { u"BOT_NOT_SELECTED"_q };
+	}
+	if (action.replaceMediaOf) {
+		return { u"UNSUPPORTED_SEND_OPTIONS"_q };
+	}
+	if (!history->forwardDraft(action.replyTo.topicRootId,
+			action.replyTo.monoforumPeerId).ids.empty()) {
+		return { u"UNSUPPORTED_FORWARD"_q };
+	}
+	const auto info = FindBot(history, bot);
+	if (!info.userId
+		|| info.environment != history->session().mtp().environment()) {
+		return { u"BOT_NOT_AVAILABLE"_q };
+	}
+	auto snapshot = Action();
+	return SnapshotAction(action, snapshot);
+}
+
+void ShowSendError(not_null<History*> history, const Error &error) {
+	if (error.silent()) {
+		return;
+	}
+	if (const auto window = history->session().tryResolveWindow(history->peer)) {
+		window->showToast(error.type.isEmpty()
+			? u"BotUse send failed"_q
+			: error.type);
+	}
+}
+
+void PrepareLocalMediaPreview(
+		not_null<Main::Session*> session,
+		const std::shared_ptr<FilePrepareResult> &file) {
+	if (!file) {
+		return;
+	}
+	if (file->type == SendMediaType::Photo) {
+		const auto photo = file->photoThumbs.empty()
+			? session->data().processPhoto(file->photo)
+			: session->data().processPhoto(file->photo, file->photoThumbs);
+		auto media = photo->createMediaView();
+		const auto best = [&]() -> const PreparedPhotoThumb* {
+			for (const auto level : { 'y', 'w', 'x', 'm', 'c', 'b', 'a' }) {
+				if (const auto i = file->photoThumbs.find(level);
+					i != end(file->photoThumbs) && !i->second.image.isNull()) {
+					return &i->second;
+				}
+			}
+			return nullptr;
+		}();
+		const auto bytes = best && !best->bytes.isEmpty()
+			? best->bytes
+			: !file->content.isEmpty()
+			? file->content : file->thumbbytes;
+		const auto image = best
+			? best->image
+			: !file->thumb.isNull()
+			? file->thumb : QImage::fromData(bytes);
+		if (!image.isNull()) {
+			for (const auto size : { Data::PhotoSize::Small,
+					Data::PhotoSize::Thumbnail, Data::PhotoSize::Large }) {
+				media->set(size, Data::PhotoSize::Large, image, bytes);
+			}
+		}
+		session->data().keepAlive(std::move(media));
+		return;
+	}
+	const auto thumbnail = file->thumb.isNull()
+		? ImageWithLocation()
+		: Images::FromImageInMemory(
+			file->thumb,
+			"JPG",
+			file->thumbbytes);
+	const auto document = session->data().processDocument(
+		file->document, thumbnail);
+	auto media = document->createMediaView();
+	if (!file->thumb.isNull()) {
+		media->setThumbnail(file->thumb);
+	}
+	if (!file->goodThumbnail.isNull()) {
+		media->setGoodThumbnail(file->goodThumbnail);
+	}
+	if (!file->content.isEmpty()) {
+		media->setBytes(file->content);
+		document->setDataAndCache(file->content);
+	}
+	if (!file->filepath.isEmpty()) {
+		document->setLocation(Core::FileLocation(file->filepath));
+	}
+	session->data().keepAlive(std::move(media));
+}
+
+bool SendText(BotId bot, Api::MessageToSend message, std::optional<MsgId> localId) {
+	const auto history = message.action.history;
+	if (const auto error = ValidateSend(bot, message.action)) {
+		ShowSendError(history, error);
+		return false;
+	}
+	const auto info = FindBot(history, bot);
+	auto left = SnapshotText(message.textWithTags);
+	TextUtilities::PrepareForSending(left,
+		Ui::ItemTextOptions(history, history->session().user()).flags);
+	auto sending = TextWithEntities();
+	auto locals = std::vector<FullMsgId>();
+	const auto limit = Data::PremiumLimits(&history->session()).messageLengthDefault();
+	const auto web = !message.webPage.url.isEmpty();
+	auto first = true;
+	while (TextUtilities::CutPart(sending, left, limit) || (first && web)) {
+		TextUtilities::Trim(sending);
+		const auto id = FullMsgId(history->peer->id,
+			localId ? std::exchange(localId, std::nullopt).value()
+				: history->session().data().nextLocalMessageId());
+		locals.push_back(id);
+		const auto part = TextWithTags{
+			sending.text,
+			TextUtilities::ConvertEntitiesToTextTags(sending.entities),
+		};
+		auto current = message;
+		current.textWithTags = part;
+		if (!left.empty()) {
+			current.webPage = {};
+		}
+		history->addNewLocalMessage(
+			LocalFields(current.action, info.userId, id.msg),
+			sending, MTP_messageMediaEmpty());
+		history->session().botUseChats().beginSend(id, info.userId);
+		history->session().api().sendAction(current.action);
+		const auto completion = CompletionFor(history, { id });
+		const auto operation = history->session().domain().botUse().sendText(
+			bot, current, completion);
+		if (!operation) {
+			return false;
+		}
+		first = false;
+	}
+	if (!locals.empty()) {
+		NotifySent(history);
+	}
+	return true;
+}
+
+bool SendRich(
+		BotId bot,
+		std::shared_ptr<const Iv::RichPage> page,
+		Api::SendAction action,
+		const std::vector<RichMediaSource> &sources,
+		Completion done) {
+	const auto history = action.history;
+	if (const auto error = ValidateSend(bot, action)) {
+		ShowSendError(history, error);
+		return false;
+	}
+	if (!page) {
+		ShowSendError(history, { u"RICH_MESSAGE_EMPTY"_q });
+		return false;
+	}
+	auto probe = Operation();
+	if (const auto error = SnapshotRich(*page, sources, probe)) {
+		ShowSendError(history, error);
+		return false;
+	}
+	const auto id = FullMsgId(history->peer->id,
+		history->session().data().nextLocalMessageId());
+	const auto info = FindBot(history, bot);
+	const auto item = history->addNewLocalMessage(
+		LocalFields(action, info.userId, id.msg),
+		TextWithEntities(), MTP_messageMediaEmpty());
+	item->applyLocalRichPage(page);
+	history->session().botUseChats().beginSend(id, info.userId);
+	history->session().api().sendAction(action);
+	const auto operation = history->session().domain().botUse().sendRichMessage(
+		bot, page, action,
+		CompletionFor(history, { id }, std::move(done)), sources);
+	if (!operation) {
+		return false;
+	}
+	NotifySent(history);
+	return true;
+}
+
+bool SendPrepared(
+		BotId bot,
+		not_null<Main::Session*> session,
+		const std::shared_ptr<FilePrepareResult> &file,
+		std::optional<MsgId> localId) {
+	if (!file) {
+		return false;
+	}
+	const auto history = session->data().history(file->to.peer);
+	auto action = Api::SendAction(history, file->to.options);
+	action.replyTo = file->to.replyTo;
+	action.clearDraft = false;
+	action.originWindow = file->to.originWindow;
+	if (const auto error = ValidateSend(bot, action)) {
+		ShowSendError(history, error);
+		return false;
+	}
+	auto files = std::vector<std::shared_ptr<FilePrepareResult>>();
+	const auto album = file->album.lock();
+	if (album) {
+		const auto item = ranges::find(album->items, file->taskId, &SendingAlbum::Item::taskId);
+		if (item == end(album->items)) {
+			return false;
+		}
+		item->prepared = file;
+		if (!ranges::all_of(album->items, [](const SendingAlbum::Item &item) {
+			return bool(item.prepared);
+		})) {
+			return true;
+		}
+		if (album->sent) {
+			return true;
+		}
+		album->sent = true;
+		for (const auto &entry : album->items) {
+			files.push_back(entry.prepared);
+		}
+	} else {
+		files.push_back(file);
+	}
+	for (const auto &prepared : files) {
+		auto source = MediaSource();
+		if (const auto error = SnapshotMedia(*prepared, source)) {
+			ShowSendError(history, error);
+			return false;
+		}
+		PrepareLocalMediaPreview(session, prepared);
+	}
+	const auto info = FindBot(history, bot);
+	auto locals = std::vector<FullMsgId>();
+	for (const auto &prepared : files) {
+		const auto id = FullMsgId(history->peer->id,
+			localId ? std::exchange(localId, std::nullopt).value()
+				: session->data().nextLocalMessageId());
+		locals.push_back(id);
+		auto caption = SnapshotText(prepared->caption);
+		TextUtilities::Trim(caption);
+		const auto itemAction = Api::SendAction(history, action.options);
+		history->addNewLocalMessage(
+			LocalFields(itemAction, info.userId, id.msg,
+				(files.size() > 1 && album) ? album->groupId : 0),
+			caption, LocalMedia(*prepared));
+		session->botUseChats().beginSend(id, info.userId);
+	}
+	session->api().sendAction(action);
+	const auto completion = CompletionFor(history, locals);
+	auto operation = OperationId();
+	if (files.size() > 1) {
+		operation = session->domain().botUse().sendAlbum(
+			bot, action, files, completion);
+	} else {
+		auto message = Api::MessageToSend(action);
+		message.textWithTags = files.front()->caption;
+		operation = session->domain().botUse().sendMedia(
+			bot, message, files.front(), completion);
+	}
+	if (!operation) {
+		return false;
+	}
+	NotifySent(history);
+	return true;
+}
+
+bool SendExisting(
+		BotId bot,
+		Api::MessageToSend message,
+		PhotoData *photo,
+		DocumentData *document,
+		std::optional<MsgId> localId) {
+	const auto history = message.action.history;
+	if (const auto error = ValidateSend(bot, message.action)) {
+		ShowSendError(history, error);
+		return false;
+	}
+	if (!photo && !document) {
+		return false;
+	}
+	const auto available = photo
+		? (!photo->createMediaView()->imageBytes(Data::PhotoSize::Large).isEmpty()
+			|| !photo->location(true).isEmpty())
+		: (!document->createMediaView()->bytes().isEmpty()
+			|| !document->location(true).isEmpty());
+	if (!available) {
+		const auto lifetime = std::make_shared<rpl::lifetime>();
+		const auto weak = base::make_weak(&history->session());
+		const auto resume = [=] {
+			if (!weak.get()) {
+				lifetime->destroy();
+				return;
+			}
+			const auto ready = photo
+				? (!photo->createMediaView()->imageBytes(Data::PhotoSize::Large).isEmpty()
+					|| !photo->location(true).isEmpty())
+				: (!document->createMediaView()->bytes().isEmpty()
+					|| !document->location(true).isEmpty());
+			if (ready) {
+				lifetime->destroy();
+				if (!SendExisting(bot, message, photo, document, localId)) {
+					ShowSendError(history, { u"MEDIA_SOURCE_MISSING"_q });
+				}
+			} else if (photo ? photo->failed(Data::PhotoSize::Large)
+				: !document->loading()) {
+				lifetime->destroy();
+				ShowSendError(history, { u"MEDIA_SOURCE_MISSING"_q });
+			}
+		};
+		if (photo) {
+			history->session().data().photoLoadProgress(
+			) | rpl::filter([=](not_null<PhotoData*> value) {
+				return value == photo;
+			}) | rpl::on_next(resume, *lifetime);
+			photo->load(Data::PhotoSize::Large, Data::FileOrigin());
+		} else {
+			history->session().data().documentLoadProgress(
+			) | rpl::filter([=](not_null<DocumentData*> value) {
+				return value == document;
+			}) | rpl::on_next(resume, *lifetime);
+			document->save(Data::FileOrigin(), QString(),
+				LoadFromCloudOrLocal, true);
+		}
+		return true;
+	}
+	const auto id = base::RandomValue<uint64>();
+	auto descriptor = FilePrepareDescriptor{
+		.id = id,
+		.type = photo ? SendMediaType::Photo : SendMediaType::File,
+		.to = FileLoadTo(history->peer->id, message.action.options,
+			message.action.replyTo, MsgId()),
+		.caption = message.textWithTags,
+	};
+	descriptor.to.botUse = bot;
+	auto prepared = std::make_shared<FilePrepareResult>(std::move(descriptor));
+	if (photo) {
+		prepared->content = photo->createMediaView()->imageBytes(Data::PhotoSize::Large);
+		prepared->filepath = photo->location(true).name();
+		prepared->photo = MTP_photoEmpty(MTP_long(id));
+		prepared->filename = u"photo.jpg"_q;
+		prepared->filemime = u"image/jpeg"_q;
+	} else {
+		prepared->content = document->createMediaView()->bytes();
+		prepared->filepath = document->location(true).name();
+		prepared->type = document->isVoiceMessage()
+			? SendMediaType::Audio
+			: document->isVideoMessage()
+			? SendMediaType::Round
+			: SendMediaType::File;
+		prepared->document = MTP_document(
+			MTP_flags(0), MTP_long(id), MTP_long(0), MTP_bytes(),
+			MTP_int(base::unixtime::now()), MTP_string(document->mimeString()),
+			MTP_long(document->size), MTPVector<MTPPhotoSize>(),
+			MTPVector<MTPVideoSize>(), MTP_int(0),
+			Api::ComposeSendingDocumentAttributes(document));
+		prepared->filename = document->filename();
+		prepared->filemime = document->mimeString();
+		prepared->forceFile = document->isVideoFile();
+	}
+	if (prepared->content.isEmpty() && prepared->filepath.isEmpty()) {
+		ShowSendError(history, { u"MEDIA_SOURCE_MISSING"_q });
+		return false;
+	}
+	const auto fullId = FullMsgId(history->peer->id,
+		localId ? *localId : history->session().data().nextLocalMessageId());
+	const auto info = FindBot(history, bot);
+	auto caption = SnapshotText(message.textWithTags);
+	TextUtilities::Trim(caption);
+	const auto fields = LocalFields(message.action, info.userId, fullId.msg);
+	if (photo) {
+		history->addNewLocalMessage(HistoryItemCommonFields(fields),
+			not_null{ photo }, caption);
+	} else {
+		history->addNewLocalMessage(HistoryItemCommonFields(fields),
+			not_null{ document }, caption);
+	}
+	history->session().botUseChats().beginSend(fullId, info.userId);
+	history->session().api().sendAction(message.action);
+	const auto operation = history->session().domain().botUse().sendMedia(
+		bot, message, prepared, CompletionFor(history, { fullId }));
+	if (!operation) {
+		return false;
+	}
+	NotifySent(history);
+	return true;
+}
+
+} // namespace BotUse

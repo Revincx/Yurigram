@@ -52,6 +52,11 @@ public:
 		const Api::MessageToSend &message,
 		const std::shared_ptr<FilePrepareResult> &file,
 		Completion done = {});
+	[[nodiscard]] OperationId uploadMedia(
+		BotId bot,
+		PeerId peer,
+		const std::shared_ptr<FilePrepareResult> &file,
+		Completion done = {});
 	[[nodiscard]] OperationId sendAlbum(
 		BotId bot,
 		const Api::SendAction &action,

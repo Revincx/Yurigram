@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_sending.h"
 
 #include "api/api_text_entities.h"
+#include "bot_use/bot_use_sending.h"
 #include "base/random.h"
 #include "base/unixtime.h"
 #include "data/business/data_shortcut_messages.h"
@@ -702,6 +703,13 @@ void SendExistingDocument(
 		MessageToSend &&message,
 		not_null<DocumentData*> document,
 		std::optional<MsgId> localMessageId) {
+	if (const auto bot = BotUse::Selected(message.action.history)) {
+		if (!BotUse::SendExisting(bot, std::move(message),
+				nullptr, document, localMessageId)) {
+			return;
+		}
+		return;
+	}
 	const auto inputMedia = [=] {
 		return MTP_inputMediaDocument(
 			MTP_flags(message.action.options.mediaSpoiler
@@ -729,6 +737,15 @@ void SendMusicSelection(
 		MessageToSend &&message,
 		std::vector<MusicSelectionItem> items) {
 	if (items.empty()) {
+		return;
+	}
+	if (const auto bot = BotUse::Selected(message.action.history)) {
+		for (const auto &item : items) {
+			if (!BotUse::SendExisting(bot, message, nullptr, item.document, std::nullopt)) {
+				return;
+			}
+			message.textWithTags = {};
+		}
 		return;
 	}
 
@@ -784,6 +801,13 @@ void SendExistingPhoto(
 		MessageToSend &&message,
 		not_null<PhotoData*> photo,
 		std::optional<MsgId> localMessageId) {
+	if (const auto bot = BotUse::Selected(message.action.history)) {
+		if (!BotUse::SendExisting(bot, std::move(message),
+				photo, nullptr, localMessageId)) {
+			return;
+		}
+		return;
+	}
 	const auto inputMedia = [=] {
 		return MTP_inputMediaPhoto(
 			MTP_flags(0),
@@ -948,6 +972,10 @@ bool SendDice(MessageToSend &message) {
 }
 
 void SendLocation(SendAction action, float64 lat, float64 lon) {
+	if (BotUse::Selected(action.history)) {
+		BotUse::ShowSendError(action.history, { u"UNSUPPORTED_MEDIA"_q });
+		return;
+	}
 	SendSimpleMedia(
 		action,
 		MTP_inputMediaGeoPoint(
@@ -959,6 +987,10 @@ void SendLocation(SendAction action, float64 lat, float64 lon) {
 }
 
 void SendVenue(SendAction action, Data::InputVenue venue) {
+	if (BotUse::Selected(action.history)) {
+		BotUse::ShowSendError(action.history, { u"UNSUPPORTED_MEDIA"_q });
+		return;
+	}
 	SendSimpleMedia(
 		action,
 		MTP_inputMediaVenue(
@@ -1296,6 +1328,12 @@ void AddConfirmedLocalPlaceholder(const ConfirmedLocalFile &local) {
 void SendConfirmedFile(
 		not_null<Main::Session*> session,
 		const std::shared_ptr<FilePrepareResult> &file) {
+	if (file->to.botUse) {
+		if (!BotUse::SendPrepared(file->to.botUse, session, file)) {
+			return;
+		}
+		return;
+	}
 	const auto welcomeTemplate = file->to.options.welcomeTemplate;
 	if (welcomeTemplate && file->to.replaceMediaOf) {
 		return;

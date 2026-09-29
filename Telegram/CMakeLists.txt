@@ -1496,6 +1496,8 @@ PRIVATE
     bot_use/bot_use_client.h
     bot_use/bot_use_manager.cpp
     bot_use/bot_use_manager.h
+	bot_use/bot_use_sending.cpp
+	bot_use/bot_use_sending.h
     bot_use/bot_use_types.cpp
     bot_use/bot_use_types.h
     bot_use/bot_use_uploader.cpp

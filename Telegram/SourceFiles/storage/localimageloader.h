@@ -173,6 +173,7 @@ struct FileLoadTo {
 	FullReplyTo replyTo;
 	MsgId replaceMediaOf;
 	Window::SeparateId originWindow = nullptr;
+	uint64 botUse = 0;
 };
 
 using UploadFileParts = std::vector<QByteArray>;

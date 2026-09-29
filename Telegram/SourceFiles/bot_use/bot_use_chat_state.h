@@ -7,6 +7,7 @@
 #include <rpl/event_stream.h>
 #include <rpl/lifetime.h>
 #include <set>
+#include <tuple>
 
 namespace Main {
 class Session;
@@ -38,11 +39,35 @@ public:
 		PeerId peer) const;
 	void cacheMembers(PeerId peer, std::set<UserId> users);
 	void invalidateMembers(PeerId peer);
+	void beginSend(FullMsgId local, UserId bot);
+	[[nodiscard]] bool deferIncoming(const MTPMessage &message);
+	void finishSend(FullMsgId local, FullMsgId remote = {});
+	void bindRichDraft(
+		PeerId peer,
+		MsgId topicRootId,
+		PeerId monoforumPeerId,
+		BotId bot);
+	[[nodiscard]] std::optional<BotId> richDraftBot(
+		PeerId peer,
+		MsgId topicRootId,
+		PeerId monoforumPeerId) const;
+	void clearRichDraft(
+		PeerId peer,
+		MsgId topicRootId,
+		PeerId monoforumPeerId);
 
 private:
 	struct MembersCache {
 		std::set<UserId> users;
 		crl::time expiresAt = 0;
+	};
+	struct PendingSend {
+		FullMsgId local;
+		UserId bot;
+	};
+	struct PendingChat {
+		std::vector<PendingSend> sends;
+		std::vector<MTPMessage> deferred;
 	};
 
 	void prune();
@@ -51,6 +76,8 @@ private:
 	Manager *_manager = nullptr;
 	std::map<PeerId, ChatChoice> _choices;
 	std::map<PeerId, MembersCache> _members;
+	std::map<PeerId, PendingChat> _pending;
+	std::map<std::tuple<PeerId, MsgId, PeerId>, BotId> _richDraftBots;
 	rpl::event_stream<PeerId> _changes;
 	rpl::lifetime _lifetime;
 

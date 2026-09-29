@@ -64,6 +64,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/controls/send_as_button.h"
 #include "ui/controls/choose_bot_use_button.h"
 #include "bot_use/bot_use_chat_state.h"
+#include "bot_use/bot_use_sending.h"
 #include "ui/controls/silent_toggle.h"
 #include "ui/screen_reader_mode.h"
 #include "ui/ui_utility.h"
@@ -5823,7 +5824,9 @@ Api::SendAction HistoryWidget::prepareSendAction(
 	}
 
 	result.options.suggest = suggestOptions();
-	result.options.sendAs = _sendAs
+	result.options.sendAs = BotUse::Selected(_history)
+		? nullptr
+		: _sendAs
 		? _history->session().sendAsPeers().resolveChosen(
 			_history->peer).get()
 		: nullptr;
@@ -5843,7 +5846,14 @@ void HistoryWidget::sendVoice(const VoiceToSend &data) {
 		sendVoice(copy);
 	};
 	auto action = prepareSendAction(data.options);
-	const auto checked = checkSendPayment(
+	const auto bot = BotUse::Selected(_history);
+	if (bot) {
+		if (const auto error = BotUse::ValidateSend(bot, action)) {
+			BotUse::ShowSendError(_history, error);
+			return;
+		}
+	}
+	const auto checked = bot || checkSendPayment(
 		1 + int(_forwardPanel->items().size()),
 		action.options,
 		withPaymentApproved);
@@ -5898,6 +5908,7 @@ void HistoryWidget::sendRichDraft(
 	if (!page) {
 		return;
 	}
+	const auto bot = BotUse::RichDraftBot(_history, replyTo());
 	const auto ephemeral = session().ephemeralMessages()
 		.isEphemeralBotReply(replyTo().messageId);
 	if (ephemeral && options.scheduled) {
@@ -5910,7 +5921,8 @@ void HistoryWidget::sendRichDraft(
 			return;
 		}
 	}
-	if (!session().premium()
+	if (!bot
+		&& !session().premium()
 		&& Iv::RichPageUsesPremiumFormatting(*page)) {
 		if (Iv::RichPageIsFlattenSafe(*page)) {
 			const auto weak = base::make_weak(this);
@@ -5949,23 +5961,31 @@ void HistoryWidget::sendRichDraft(
 		return;
 	}
 
-	const auto serialized = Iv::SerializeInputRichMessage(
-		&session(),
-		*page,
-		Iv::SerializeInputRichMessageMode::FinalSubmit);
-	if (serialized.status == Iv::SerializeInputRichMessageStatus::EmptyContent) {
-		controller()->showToast(tr::lng_article_submit_empty(tr::now));
-		return;
-	} else if (serialized.status != Iv::SerializeInputRichMessageStatus::Success
-		|| !serialized.value) {
-		controller()->showToast(tr::lng_attach_failed(tr::now));
-		return;
-	}
+	if (bot) {
+		action.options.sendAs = nullptr;
+		if (!BotUse::SendRich(bot, page, action, {},
+				BotUse::RichDraftCompletion(action))) {
+			return;
+		}
+	} else {
+		const auto serialized = Iv::SerializeInputRichMessage(
+			&session(),
+			*page,
+			Iv::SerializeInputRichMessageMode::FinalSubmit);
+		if (serialized.status == Iv::SerializeInputRichMessageStatus::EmptyContent) {
+			controller()->showToast(tr::lng_article_submit_empty(tr::now));
+			return;
+		} else if (serialized.status != Iv::SerializeInputRichMessageStatus::Success
+			|| !serialized.value) {
+			controller()->showToast(tr::lng_attach_failed(tr::now));
+			return;
+		}
 
-	session().api().sendRichMessage(
-		page,
-		*serialized.value,
-		action);
+		session().api().sendRichMessage(
+			page,
+			*serialized.value,
+			action);
+	}
 
 	clearFieldText();
 	if (_preview) {
@@ -6021,6 +6041,12 @@ void HistoryWidget::sendTextWithTags(
 
 	auto message = Api::MessageToSend(prepareSendAction(options));
 	message.textWithTags = textWithTags;
+	if (const auto bot = BotUse::Selected(_history)) {
+		if (const auto error = BotUse::ValidateSend(bot, message.action)) {
+			BotUse::ShowSendError(_history, error);
+			return;
+		}
+	}
 	if (useWebPageDraft && _preview) {
 		message.webPage = _preview->draftForSending();
 	}
@@ -7044,6 +7070,7 @@ void HistoryWidget::updateSendButtonType() {
 	const auto richPage = shownRichMessage();
 	const auto richMessage = (richPage != nullptr);
 	_sendLockBadge.fire(richMessage
+		&& !BotUse::RichDraftBot(_history, replyTo())
 		&& !session().premium()
 		&& Iv::RichPageUsesPremiumFormatting(*richPage));
 	const auto messages = !_peer
@@ -8172,7 +8199,7 @@ bool HistoryWidget::confirmSendingFiles(
 void HistoryWidget::sendingFilesConfirmed(
 		std::shared_ptr<Ui::PreparedBundle> bundle,
 		Api::SendOptions options) {
-	if (!_peer || showSendingFilesError(*bundle)) {
+	if (!_peer || (!BotUse::Selected(_history) && showSendingFilesError(*bundle))) {
 		return;
 	}
 	const auto ephemeralReply = session().ephemeralMessages()
@@ -8187,8 +8214,15 @@ void HistoryWidget::sendingFilesConfirmed(
 	const auto type = compress ? SendMediaType::Photo : SendMediaType::File;
 	auto action = prepareSendAction(options);
 	action.clearDraft = false;
+	const auto bot = BotUse::Selected(_history);
+	if (bot) {
+		if (const auto error = BotUse::ValidateSend(bot, action)) {
+			BotUse::ShowSendError(_history, error);
+			return;
+		}
+	}
 
-	if (!ephemeralReply) {
+	if (!ephemeralReply && !bot) {
 		const auto withPaymentApproved = [=](int approved) {
 			auto copy = options;
 			copy.starsApproved = approved;
@@ -10421,10 +10455,11 @@ bool HistoryWidget::sendExistingDocument(
 	} else if (!_peer
 		|| !_canSendMessages
 		|| (!ephemeralReply && showSlowmodeError())
-		|| ShowSendPremiumError(controller(), document)) {
+		|| (!BotUse::Selected(_history)
+			&& ShowSendPremiumError(controller(), document))) {
 		return false;
 	}
-	if (!ephemeralReply) {
+	if (!ephemeralReply && !BotUse::Selected(_history)) {
 		const auto withPaymentApproved = [=](int approved) {
 			auto copy = messageToSend;
 			copy.action.options.starsApproved = approved;
@@ -10439,10 +10474,17 @@ bool HistoryWidget::sendExistingDocument(
 		}
 	}
 
-	Api::SendExistingDocument(
-		std::move(messageToSend),
-		document,
-		localId);
+	if (const auto bot = BotUse::Selected(_history)) {
+		if (!BotUse::SendExisting(bot, std::move(messageToSend),
+				nullptr, document, localId)) {
+			return false;
+		}
+	} else {
+		Api::SendExistingDocument(
+			std::move(messageToSend),
+			document,
+			localId);
+	}
 
 	if (_autocomplete && _autocomplete->stickersShown()) {
 		clearFieldText();
@@ -10491,7 +10533,14 @@ bool HistoryWidget::sendExistingPhoto(
 		}
 	}
 
-	Api::SendExistingPhoto(Api::MessageToSend(action), photo);
+	if (const auto bot = BotUse::Selected(_history)) {
+		if (!BotUse::SendExisting(bot, Api::MessageToSend(action),
+				photo, nullptr)) {
+			return false;
+		}
+	} else {
+		Api::SendExistingPhoto(Api::MessageToSend(action), photo);
+	}
 
 	hideSelectorControlsAnimated();
 

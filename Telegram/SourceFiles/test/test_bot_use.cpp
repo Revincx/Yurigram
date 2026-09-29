@@ -5,9 +5,14 @@
 #include "bot_use/bot_use_adapter.h"
 #include "bot_use/bot_use_chat_state.h"
 #include "bot_use/bot_use_manager.h"
+#include "bot_use/bot_use_sending.h"
 #include "core/application.h"
 #include "data/data_session.h"
+#include "data/data_document.h"
+#include "data/data_photo_media.h"
+#include "data/data_document_media.h"
 #include "history/history.h"
+#include "history/history_item.h"
 #include "iv/iv_rich_message_serializer.h"
 #include "main/main_account.h"
 #include "main/main_domain.h"
@@ -107,7 +112,15 @@ struct Fixture {
 	int edits = 0;
 	int auths = 0;
 	int parts = 0;
+	int uploads = 0;
+	FullMsgId local;
+	FullMsgId expectedReal;
+	bool delayedBotResult = false;
+	QPointer<MTP::Instance> delayedInstance;
+	mtpRequestId delayedRequest = 0;
+	std::optional<MTPUpdates> delayedUpdates;
 	bool retryNext = false;
+	bool rejectNext = false;
 	bool hold = false;
 	std::vector<mtpBuffer> sent;
 
@@ -175,6 +188,14 @@ void Fixture::respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuff
 	} break;
 	case mtpc_messages_sendMessage: {
 		if (hold) { return; }
+		if (rejectNext) {
+			rejectNext = false;
+			const auto delivered = DeliverControlledRpcError(
+				instance.data(), id, 400, u"CHAT_WRITE_FORBIDDEN"_q);
+			Check(delivered.diagnosis.isEmpty(),
+				u"Rejected bot send returns RPC error"_q, delivered.diagnosis);
+			return;
+		}
 		auto from = body.constData() + 1;
 		const auto end = body.constData() + body.size();
 		const auto flags = Read<MTPint>(from, end).v;
@@ -207,9 +228,17 @@ void Fixture::respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuff
 		auto updates = QVector<MTPUpdate>();
 		updates.push_back(MTP_updateMessageID(MTP_int(i->second), MTP_long(random)));
 		updates.push_back(MTP_updateNewChannelMessage(message, MTP_int(1), MTP_int(1)));
-		Reply<MTPmessages_SendMessage>(instance, id, MTP_updates(
+		auto response = MTP_updates(
 			MTP_vector<MTPUpdate>(updates), MTP_vector<MTPUser>(), MTP_vector<MTPChat>(),
-			MTP_int(1), MTP_int(1)));
+			MTP_int(1), MTP_int(1));
+		if (delayedBotResult) {
+			delayedBotResult = false;
+			delayedInstance = instance;
+			delayedRequest = id;
+			delayedUpdates = response;
+		} else {
+			Reply<MTPmessages_SendMessage>(instance, id, response);
+		}
 	} break;
 	case mtpc_messages_editMessage: {
 		++edits;
@@ -251,6 +280,7 @@ void Fixture::respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuff
 		Reply<MTPupload_SaveBigFilePart>(instance, id, MTP_boolTrue());
 		break;
 	case mtpc_messages_uploadMedia: {
+		++uploads;
 		auto from = body.constData() + 1;
 		const auto end = body.constData() + body.size();
 		Read<MTPint>(from, end);
@@ -405,6 +435,139 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		state->operation = state->manager->sendMedia(state->a, state->text(), file, state->completion());
 	}, [=] { Check(state->result->state == BotUse::OperationState::Completed && state->parts == 2,
 		u"Media uses bot chunk upload and native message result"_q); });
+	runner->add({ .name = u"botuse local media preview"_q, .run = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		auto photo = std::make_shared<FilePrepareResult>(FilePrepareDescriptor{
+			.id = uint64(701234), .type = SendMediaType::Photo });
+		photo->photo = MTP_photo(
+			MTP_flags(0), MTP_long(photo->id), MTP_long(0), MTP_bytes(),
+			MTP_int(1),
+			MTP_vector<MTPPhotoSize>(1, MTP_photoSize(
+				MTP_string("y"), MTP_int(2), MTP_int(2), MTP_int(0))),
+			MTP_vector<MTPVideoSize>(), MTP_int(1));
+		auto image = QImage(2, 2, QImage::Format_RGB32);
+		image.fill(Qt::red);
+		photo->photoThumbs.emplace('y', PreparedPhotoThumb{ .image = image });
+		BotUse::PrepareLocalMediaPreview(session, photo);
+		const auto photoMedia = session->data().photo(PhotoId(photo->id))
+			->createMediaView();
+		Check(photoMedia->image(Data::PhotoSize::Large) != nullptr,
+			u"Bot photo preview is available before upload"_q);
+		auto document = std::make_shared<FilePrepareResult>(FilePrepareDescriptor{
+			.id = uint64(701235), .type = SendMediaType::File });
+		document->document = MTP_document(
+			MTP_flags(0), MTP_long(document->id), MTP_long(0), MTP_bytes(),
+			MTP_int(1), MTP_string("application/octet-stream"), MTP_long(7),
+			MTP_vector<MTPPhotoSize>(), MTP_vector<MTPVideoSize>(), MTP_int(1),
+			MTP_vector<MTPDocumentAttribute>());
+		document->content = "preview";
+		BotUse::PrepareLocalMediaPreview(session, document);
+		const auto documentMedia = session->data().document(DocumentId(document->id))
+			->createMediaView();
+		Check(documentMedia->bytes() == document->content,
+			u"Bot document preview uses local bytes before upload"_q);
+	} });
+	add(u"upload rich editor photo before send"_q, [=] {
+		auto descriptor = FilePrepareDescriptor{
+			.id = uint64(5001), .type = SendMediaType::Photo };
+		auto file = std::make_shared<FilePrepareResult>(std::move(descriptor));
+		file->content = QByteArray(1200, 'x');
+		file->filename = u"rich-fixture.jpg"_q;
+		state->operation = state->manager->uploadMedia(state->a,
+			peerFromChannel(ChannelId(100)), file, state->completion());
+	}, [=] { Check(state->result->state == BotUse::OperationState::Completed
+		&& state->result->media
+		&& state->result->media->type() == mtpc_messageMediaPhoto
+		&& state->uploads >= 2,
+		u"Rich editor media uses Bot upload before send"_q); });
+	for (const auto channel : { uint64(100), uint64(101) }) {
+		runner->add({ .name = channel == 100
+			? u"botuse channel local message"_q
+			: u"botuse supergroup local message"_q, .run = [=] {
+			const auto session = Core::App().domain().active().maybeSession();
+			const auto message = state->text(channel);
+			const auto history = message.action.history;
+			session->botUseChats().choose(history->peer->id, state->a);
+			state->local = FullMsgId(history->peer->id,
+				session->data().nextLocalMessageId());
+			state->expectedReal = FullMsgId(history->peer->id,
+				MsgId(state->nextMessage));
+			const auto sent = BotUse::SendText(state->a, message, state->local.msg);
+			const auto item = session->data().message(state->local);
+			Check(sent && item && item->isSending()
+				&& item->from()->id == peerFromUser(UserId(11))
+				&& !item->out(), u"Bot local message has its own sender"_q);
+		}, .until = [=] {
+			const auto session = Core::App().domain().active().maybeSession();
+			return session && session->data().message(state->expectedReal);
+		}, .then = [=] {
+			const auto session = Core::App().domain().active().maybeSession();
+			const auto item = session->data().message(state->expectedReal);
+			Check(item && !item->isSending() && !item->isLocal()
+				&& item->from()->id == peerFromUser(UserId(11))
+				&& !session->data().message(state->local),
+				u"Bot result confirms the original local item"_q);
+		} });
+	}
+	runner->add({ .name = u"botuse user update wins race"_q, .run = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto message = state->text(101);
+		const auto history = message.action.history;
+		session->botUseChats().choose(history->peer->id, state->a);
+		state->local = FullMsgId(history->peer->id,
+			session->data().nextLocalMessageId());
+		state->expectedReal = FullMsgId(history->peer->id,
+			MsgId(state->nextMessage));
+		state->delayedBotResult = true;
+		Check(BotUse::SendText(state->a, message, state->local.msg),
+			u"Race fixture starts Bot send"_q);
+	}, .until = [=] { return state->delayedUpdates.has_value(); }, .then = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto server = state->messages.at(state->expectedReal.msg.bare);
+		Check(session->botUseChats().deferIncoming(server)
+			&& !session->data().message(state->expectedReal)
+			&& session->data().message(state->local),
+			u"User update waits for the Bot local item"_q);
+		Reply<MTPmessages_SendMessage>(state->delayedInstance,
+			state->delayedRequest, *state->delayedUpdates);
+		state->delayedUpdates.reset();
+	} });
+	runner->add({ .name = u"botuse race reconciled"_q,
+		.until = [=] {
+			const auto session = Core::App().domain().active().maybeSession();
+			return session && session->data().message(state->expectedReal);
+		}, .then = [=] {
+			const auto session = Core::App().domain().active().maybeSession();
+			Check(session->data().message(state->expectedReal)
+				&& !session->data().message(state->local),
+				u"Bot local item is promoted after user update"_q);
+		} });
+	runner->add({ .name = u"botuse local send failure"_q, .run = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto message = state->text();
+		state->local = FullMsgId(message.action.history->peer->id,
+			session->data().nextLocalMessageId());
+		state->rejectNext = true;
+		const auto sent = BotUse::SendText(state->a, message, state->local.msg);
+		Check(sent, u"Failed send starts with a Bot local item"_q);
+	}, .until = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto item = session ? session->data().message(state->local) : nullptr;
+		return item && item->hasFailed();
+	}, .then = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto item = session->data().message(state->local);
+		Check(item && item->from()->id == peerFromUser(UserId(11))
+			&& item->hasFailed(), u"Failure retains the Bot local item"_q);
+	} });
+	runner->add({ .name = u"botuse rejects unsupported options"_q, .run = [=] {
+		auto message = state->text();
+		message.action.options.scheduled = 123;
+		const auto previous = state->nextMessage;
+		Check(!BotUse::SendText(state->a, message)
+			&& state->nextMessage == previous,
+			u"Unsupported Bot options cannot send as the user"_q);
+	} });
 	add(u"cancel and credential boundary"_q, [=] {
 		state->hold = true;
 		state->operation = state->manager->sendText(state->a, state->text(), state->completion());

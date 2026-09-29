@@ -12,6 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_text_entities.h"
 #include "api/api_updates.h"
 #include "apiwrap.h"
+#include "bot_use/bot_use_sending.h"
 #include "base/call_delayed.h"
 #include "base/qt/qt_key_modifiers.h"
 #include "base/random.h"
@@ -223,6 +224,11 @@ void Polls::create(
 		SendAction action,
 		Fn<void()> done,
 		Fn<void(bool fileReferenceExpired)> fail) {
+	if (BotUse::Selected(action.history)) {
+		BotUse::ShowSendError(action.history, { u"UNSUPPORTED_MEDIA"_q });
+		if (fail) { fail(false); }
+		return;
+	}
 	StripEphemeralReply(_session, action.replyTo);
 	_session->api().sendAction(action);
 

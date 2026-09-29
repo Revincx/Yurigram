@@ -16,6 +16,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_premium.h"
 #include "api/api_text_entities.h"
 #include "api/api_user_names.h"
+#include "bot_use/bot_use_chat_state.h"
 #include "chat_helpers/stickers_lottie.h"
 #include "core/application.h"
 #include "core/core_settings.h"
@@ -3609,6 +3610,10 @@ HistoryItem *Session::addNewMessage(
 		NewMessageType type) {
 	const auto peerId = PeerFromMessage(data);
 	if (!peerId || data.type() == mtpc_messageEmpty) {
+		return nullptr;
+	}
+	if (type == NewMessageType::Unread
+		&& session().botUseChats().deferIncoming(data)) {
 		return nullptr;
 	}
 

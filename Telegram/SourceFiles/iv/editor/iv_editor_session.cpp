@@ -19,6 +19,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_sending.h"
 #include "api/api_editing.h"
 #include "apiwrap.h"
+#include "bot_use/bot_use_sending.h"
+#include "bot_use/bot_use_manager.h"
+#include "bot_use/bot_use_chat_state.h"
 #include "base/flat_map.h"
 #include "base/timer.h"
 #include "base/weak_qptr.h"
@@ -609,6 +612,7 @@ public:
 		auto composeThreadKey = std::optional<ComposeThreadKey>();
 		auto page = std::make_shared<RichPage>();
 		auto hasRichDraft = false;
+		auto draftBot = std::optional<BotUse::BotId>();
 		if (options.scope == ComposeBoxOptions::Scope::Thread) {
 			const auto topicRootId = action.replyTo.topicRootId;
 			const auto monoforumPeerId = action.replyTo.monoforumPeerId;
@@ -628,7 +632,13 @@ public:
 				monoforumPeerId);
 			hasRichDraft = cloudDraft && cloudDraft->hasRichMessage();
 			if (hasRichDraft) {
+				draftBot = session->botUseChats().richDraftBot(
+					history->peer->id, topicRootId, monoforumPeerId).value_or(0);
 				page = std::make_shared<RichPage>(*cloudDraft->richMessage);
+			} else {
+				draftBot = BotUse::Selected(history);
+				session->botUseChats().bindRichDraft(
+					history->peer->id, topicRootId, monoforumPeerId, *draftBot);
 			}
 			composeThreadKey = composeKey;
 		}
@@ -659,7 +669,8 @@ public:
 			std::move(options),
 			std::nullopt,
 			std::move(composeThreadKey),
-			std::move(controller)));
+			std::move(controller),
+			draftBot));
 		articleSession->showWindow();
 	}
 
@@ -739,7 +750,9 @@ public:
 		auto attachments = base::take(_attachments);
 		_mediaBatches.clear();
 		for (const auto &attachment : attachments) {
-			if (attachment.state != AttachmentState::Ready) {
+			if (attachment.botUploadId) {
+				_session->domain().botUse().cancel(attachment.botUploadId);
+			} else if (attachment.state != AttachmentState::Ready) {
 				_session->uploader().cancel(attachment.uploadId);
 			}
 			if (attachment.finalizationRequestId) {
@@ -760,6 +773,8 @@ private:
 		PreparedFileType type = PreparedFileType::None;
 		RichPage::BlockKind blockKind = RichPage::BlockKind::Unsupported;
 		uint64 localMediaId = 0;
+		std::shared_ptr<FilePrepareResult> prepared;
+		BotUse::OperationId botUploadId = 0;
 		AttachmentState state = AttachmentState::Uploading;
 		mtpRequestId finalizationRequestId = 0;
 		QString caption;
@@ -843,7 +858,8 @@ private:
 		ComposeBoxOptions composeOptions,
 		std::optional<EditedItemSnapshot> edited,
 		std::optional<ComposeThreadKey> composeThreadKey,
-		base::weak_ptr<Window::SessionController> controller = {})
+		base::weak_ptr<Window::SessionController> controller = {},
+		std::optional<BotUse::BotId> draftBot = std::nullopt)
 	: _session(session)
 	, _peer(peer)
 	, _controller(std::move(controller))
@@ -853,6 +869,8 @@ private:
 		: ShowWindowDescriptor::SubmitType::Save)
 	, _articleId(articleId)
 	, _composeAction(std::move(action))
+	, _botUse((_mode == Mode::Compose && _composeAction)
+		? draftBot.value_or(BotUse::Selected(_composeAction->history)) : 0)
 	, _sendMenuDetails(std::move(sendMenuDetails))
 	, _composeOptions(std::move(composeOptions))
 	, _edited(std::move(edited))
@@ -1102,7 +1120,7 @@ private:
 			}
 			return submitSimpleText(std::move(*simple));
 		}
-		if (!CanUseRichMessages(_session)) {
+		if (!_botUse && !CanUseRichMessages(_session)) {
 			const auto page = _state->richPage();
 			if (!RichPageIsFlattenSafe(page)) {
 				ShowRichMessagesPremiumToast(resolveShow());
@@ -1131,18 +1149,18 @@ private:
 			return false;
 		}
 		_submittedPage = page;
-		if (submittedAttachmentsReady()
+		if (!_botUse && submittedAttachmentsReady()
 			&& serializeSubmittedPage().status
 				== SerializeInputRichMessageStatus::EmptyContent) {
 			_submittedPage = nullptr;
 			showEmptySubmittedPageToast();
 			return false;
 		}
-		if (!submitPaymentChecked(simple, withPaymentApproved)) {
+		if (!_botUse && !submitPaymentChecked(simple, withPaymentApproved)) {
 			_submittedPage = nullptr;
 			return false;
 		}
-		if (!applySubmittedLocalState(page)) {
+		if (!_botUse && !applySubmittedLocalState(page)) {
 			_submittedPage = nullptr;
 			showToast(tr::lng_edit_error(tr::now));
 			return false;
@@ -1150,6 +1168,9 @@ private:
 		_submitDeferred = false;
 		cancelRichDraftAutosave();
 		_backgroundHold = shared_from_this();
+		if (_botUse && _mode == Mode::Compose) {
+			hideBotUseSubmittedDraft();
+		}
 		maybeContinueSubmittedRequest();
 		return true;
 	}
@@ -1190,7 +1211,13 @@ private:
 			};
 			cancelRichDraftAutosave();
 			dropDetachedReturnText();
-			_session->api().sendMessage(std::move(message));
+			if (_botUse) {
+				if (!BotUse::SendText(_botUse, std::move(message))) {
+					return false;
+				}
+			} else {
+				_session->api().sendMessage(std::move(message));
+			}
 			return true;
 		}
 		const auto item = currentSubmittedItem();
@@ -1271,6 +1298,8 @@ private:
 		const auto monoforumPeerId = _composeThreadKey->draftKey.monoforumPeerId();
 		const auto history = _composeAction->history;
 		history->clearCloudDraft(topicRootId, monoforumPeerId);
+		_session->botUseChats().clearRichDraft(
+			history->peer->id, topicRootId, monoforumPeerId);
 		if (const auto thread = history->threadFor(topicRootId, monoforumPeerId)) {
 			const auto cloudDraft = history->createCloudDraft(
 				topicRootId,
@@ -1392,6 +1421,56 @@ private:
 		_backgroundHold = nullptr;
 	}
 
+	void hideBotUseSubmittedDraft() {
+		_botUseSubmitAccepted = true;
+		if (!_composeAction || !_composeThreadKey) {
+			return;
+		}
+		const auto history = _composeAction->history;
+		const auto topicRootId = _composeThreadKey->draftKey.topicRootId();
+		const auto monoforumPeerId
+			= _composeThreadKey->draftKey.monoforumPeerId();
+		if (const auto draft = history->cloudDraft(
+				topicRootId, monoforumPeerId)) {
+			_botUsePendingDraft = std::make_shared<::Data::Draft>(*draft);
+		} else {
+			auto freshDraft = ::Data::Draft(
+				TextWithTags(),
+				_composeAction->replyTo,
+				SuggestOptions(),
+				MessageCursor(),
+				::Data::WebPageDraft());
+			freshDraft.richMessage = _submittedPage;
+			freshDraft.richMessageSummary = FlattenRichPageSummary(*_submittedPage);
+			_botUsePendingDraft
+				= std::make_shared<::Data::Draft>(std::move(freshDraft));
+		}
+		history->clearCloudDraft(topicRootId, monoforumPeerId);
+		history->clearLocalDraft(topicRootId, monoforumPeerId);
+	}
+
+	void restoreBotUseSubmittedDraft() {
+		if (!_botUseSubmitAccepted) {
+			return;
+		}
+		_botUseSubmitAccepted = false;
+		if (!_botUsePendingDraft || !_composeAction || !_composeThreadKey) {
+			return;
+		}
+		const auto history = _composeAction->history;
+		const auto topicRootId = _composeThreadKey->draftKey.topicRootId();
+		const auto monoforumPeerId
+			= _composeThreadKey->draftKey.monoforumPeerId();
+		if (!history->cloudDraft(topicRootId, monoforumPeerId)) {
+			history->createCloudDraft(topicRootId, monoforumPeerId,
+				_botUsePendingDraft.get());
+			_session->botUseChats().bindRichDraft(
+				history->peer->id, topicRootId, monoforumPeerId, _botUse);
+			history->applyCloudDraft(topicRootId, monoforumPeerId);
+		}
+		_botUsePendingDraft = nullptr;
+	}
+
 	void failSubmittedWork(bool showToast) {
 		if (showToast) {
 			showAttachmentFailedToast();
@@ -1401,6 +1480,7 @@ private:
 		} else if (const auto item = currentSubmittedItem()) {
 			item->sendFailed();
 		}
+		restoreBotUseSubmittedDraft();
 		finishSubmittedWork();
 	}
 
@@ -1590,6 +1670,70 @@ private:
 			return;
 		}
 		if (!submittedAttachmentsReady()) {
+			return;
+		}
+		if (_botUse && _mode == Mode::Compose) {
+			auto sources = std::vector<BotUse::RichMediaSource>();
+			for (const auto &attachment : _attachments) {
+				if (attachment.prepared
+					&& attachment.state == AttachmentState::Ready
+					&& submittedPageContainsAttachment(attachment)) {
+					sources.push_back({
+						.id = attachment.serverMediaId,
+						.photo = attachment.blockKind == RichPage::BlockKind::Photo,
+						.uploadedPhoto = attachment.serverPhoto
+							? std::make_optional(attachment.inputPhoto) : std::nullopt,
+						.uploadedDocument = attachment.serverDocument
+							? std::make_optional(attachment.inputDocument) : std::nullopt,
+					});
+				}
+			}
+			auto action = *_composeAction;
+			action.options = _submitOptions;
+			action.options.sendAs = nullptr;
+			action.clearDraft = !detachedCompose();
+			const auto peerId = action.history->peer->id;
+			const auto topicRootId = action.replyTo.topicRootId;
+			const auto monoforumPeerId = action.replyTo.monoforumPeerId;
+			const auto restoreDraft = _botUsePendingDraft;
+			auto clearOnSuccess = BotUse::RichDraftCompletion(
+				action,
+				restoreDraft ? restoreDraft->richMessage : _submittedPage);
+			auto completed = [weak = base::make_weak(_session.get()),
+					peerId, topicRootId, monoforumPeerId, restoreDraft,
+					bot = _botUse,
+					clearOnSuccess = std::move(clearOnSuccess)](
+						const BotUse::Result &result) {
+				if (clearOnSuccess) {
+					clearOnSuccess(result);
+				}
+				if (result.state == BotUse::OperationState::Completed
+					|| !restoreDraft) {
+					return;
+				}
+				const auto session = weak.get();
+				const auto history = session
+					? session->data().historyLoaded(peerId) : nullptr;
+				if (history && !history->cloudDraft(
+					topicRootId, monoforumPeerId)) {
+					history->createCloudDraft(
+						topicRootId, monoforumPeerId, restoreDraft.get());
+					session->botUseChats().bindRichDraft(
+						peerId, topicRootId, monoforumPeerId, bot);
+					history->applyCloudDraft(topicRootId, monoforumPeerId);
+				}
+			};
+			if (!BotUse::SendRich(
+					_botUse,
+					_submittedPage,
+					action,
+					sources,
+					std::move(completed))) {
+				failSubmittedWork(false);
+				return;
+			}
+			dropDetachedReturnText();
+			finishSubmittedWork();
 			return;
 		}
 		const auto richMessage = serializeSubmittedPage();
@@ -1982,6 +2126,14 @@ private:
 		_photoEditSourceLifetime.destroy();
 		if (!_submittedPage && !_submitApiRequested) {
 			_backgroundHold = nullptr;
+			if (_botUseSubmitAccepted) {
+				if (_composeAction && _composeThreadKey) {
+					_composeAction->history->applyCloudDraft(
+						_composeThreadKey->draftKey.topicRootId(),
+						_composeThreadKey->draftKey.monoforumPeerId());
+				}
+				return;
+			}
 			// Sync the local draft and the chat input field with the
 			// cloud draft saved on close, like an incoming server draft
 			// update: simple-text drafts go back into the message field,
@@ -2074,6 +2226,7 @@ private:
 		}
 		const auto sync = _composeAction
 			&& _composeThreadKey
+			&& !_botUseSubmitAccepted
 			&& !_submittedPage
 			&& !_submitApiRequested;
 		if (sync && !hasPendingPreparation()) {
@@ -2895,7 +3048,33 @@ private:
 		}
 
 		_attachments.push_back(std::move(record));
-		_session->uploader().upload(uploadId, prepared);
+		if (_botUse) {
+			BotUse::PrepareLocalMediaPreview(_session, prepared);
+			_attachments.back().prepared = prepared;
+			_attachments.back().botUploadId = _session->domain().botUse().uploadMedia(
+				_botUse,
+				_peer->id,
+				prepared,
+				[weak = base::make_weak(this), uploadId](const BotUse::Result &result) {
+					if (const auto session = weak.get()) {
+						const auto attachment = session->findAttachment(uploadId);
+						if (!attachment) {
+							return;
+						}
+						if (result.state != BotUse::OperationState::Completed
+							|| !result.media) {
+							attachment->botUploadId = 0;
+							session->markAttachmentFailed(uploadId);
+						} else if (attachment->blockKind == RichPage::BlockKind::Photo) {
+							session->applyUploadedPhotoResult(uploadId, *result.media);
+						} else {
+							session->applyUploadedDocumentResult(uploadId, *result.media);
+						}
+					}
+				});
+		} else {
+			_session->uploader().upload(uploadId, prepared);
+		}
 		return uploadId;
 	}
 
@@ -3172,8 +3351,10 @@ private:
 				return;
 			}
 			const auto &fields = photo->c_photo();
+			_session->data().processPhoto(*photo)->collectLocalData(localPhoto);
 			_session->data().photoConvert(localPhoto, *photo);
 			attachment->state = AttachmentState::Ready;
+			attachment->botUploadId = 0;
 			attachment->serverMediaId = fields.vid().v;
 			attachment->serverPhoto = localPhoto.get();
 			attachment->accessHash = fields.vaccess_hash().v;
@@ -3224,11 +3405,14 @@ private:
 		const MTPMessageMedia &result) {
 		const auto attachment = findAttachment(uploadId);
 		if (!attachment
-			|| attachment->state != AttachmentState::Finalizing
-			|| !attachment->finalizationRequestId) {
+			|| (!_botUse && (attachment->state != AttachmentState::Finalizing
+				|| !attachment->finalizationRequestId))) {
 			return;
 		}
-		base::take(attachment->finalizationRequestId);
+		if (!_botUse) {
+			base::take(attachment->finalizationRequestId);
+		}
+		attachment->botUploadId = 0;
 		auto ok = false;
 		auto failed = false;
 		const auto fail = [&] {
@@ -3248,6 +3432,8 @@ private:
 				return;
 			}
 			const auto &fields = document->c_document();
+			_session->data().processDocument(*document)->collectLocalData(
+				localDocument);
 			_session->data().documentConvert(localDocument, *document);
 			attachment->state = AttachmentState::Ready;
 			attachment->serverMediaId = fields.vid().v;
@@ -3304,6 +3490,7 @@ private:
 		}
 		const auto requestId = base::take(
 			attachment->finalizationRequestId);
+		attachment->botUploadId = 0;
 		attachment->state = AttachmentState::Failed;
 		if (requestId) {
 			_session->api().request(requestId).cancel();
@@ -3664,10 +3851,13 @@ private:
 		}
 		const auto erasedUploadId = i->uploadId;
 		const auto state = i->state;
+		const auto botUploadId = i->botUploadId;
 		const auto finalizationRequestId = i->finalizationRequestId;
 		detachMediaBatchUpload(erasedUploadId);
 		_attachments.erase(i);
-		if (state != AttachmentState::Ready) {
+		if (botUploadId) {
+			_session->domain().botUse().cancel(botUploadId);
+		} else if (state != AttachmentState::Ready) {
 			_session->uploader().cancel(erasedUploadId);
 		}
 		if (finalizationRequestId) {
@@ -4277,6 +4467,7 @@ private:
 	const ShowWindowDescriptor::SubmitType _submitType;
 	const FullMsgId _articleId;
 	std::optional<Api::SendAction> _composeAction;
+	const BotUse::BotId _botUse = 0;
 	const SendMenu::Details _sendMenuDetails;
 	ComposeBoxOptions _composeOptions;
 	const std::optional<EditedItemSnapshot> _edited;
@@ -4293,6 +4484,8 @@ private:
 	std::unique_ptr<WindowHost> _windowHost;
 	std::shared_ptr<ArticleSession> _backgroundHold;
 	std::shared_ptr<const RichPage> _submittedPage;
+	bool _botUseSubmitAccepted = false;
+	std::shared_ptr<::Data::Draft> _botUsePendingDraft;
 	std::vector<AttachmentRecord> _attachments;
 	base::flat_map<uint64, QImage> _originalMediaImages;
 	base::flat_map<uint64, PendingPhotoEditSource> _pendingPhotoEditSources;
@@ -4424,6 +4617,8 @@ std::optional<::Data::Draft> ArticleSession::prepareRichDraftForAutosave() const
 	if (_state->articleEmpty()) {
 		draft.richMessage = nullptr;
 		draft.richMessageSummary = {};
+		_session->botUseChats().clearRichDraft(
+			history->peer->id, topicRootId, monoforumPeerId);
 		return draft;
 	}
 	if (auto simple = SerializeAsSimple(_state->richPage(), _session)) {
@@ -4437,6 +4632,8 @@ std::optional<::Data::Draft> ArticleSession::prepareRichDraftForAutosave() const
 			Ui::kQFixedMax);
 		draft.richMessage = nullptr;
 		draft.richMessageSummary = {};
+		_session->botUseChats().clearRichDraft(
+			history->peer->id, topicRootId, monoforumPeerId);
 		return draft;
 	}
 	auto richMessage = std::make_shared<RichPage>(_state->richPage());
@@ -4449,6 +4646,8 @@ std::optional<::Data::Draft> ArticleSession::prepareRichDraftForAutosave() const
 	}
 	draft.richMessage = std::move(richMessage);
 	draft.richMessageSummary = FlattenRichPageSummary(*draft.richMessage);
+	_session->botUseChats().bindRichDraft(
+		history->peer->id, topicRootId, monoforumPeerId, _botUse);
 	return draft;
 }
 

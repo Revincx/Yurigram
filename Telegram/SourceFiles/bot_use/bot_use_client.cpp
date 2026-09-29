@@ -393,6 +393,21 @@ void Client::prepareMedia(const Op &operation, size_t index) {
 
 void Client::resolveMedia(const Op &operation, size_t index, Fn<void()> done) {
 	const auto source = operation->media[index];
+	if (source.uploadedPhoto || source.uploadedDocument) {
+		if (source.uploadedPhoto) {
+			_photos[source.id] = *source.uploadedPhoto;
+		} else {
+			_documents[source.id] = *source.uploadedDocument;
+			if (source.audio) {
+				_audio.emplace(source.id);
+			}
+		}
+		operation->prepared.push_back(source.photo
+			? PhotoMedia(_photos.at(source.id), source.spoiler)
+			: DocumentMedia(_documents.at(source.id), source.spoiler));
+		done();
+		return;
+	}
 	const auto append = [=] {
 		if (source.photo) {
 			const auto i = _photos.find(source.id);
@@ -422,6 +437,9 @@ void Client::resolveMedia(const Op &operation, size_t index, Fn<void()> done) {
 			rpc(operation, MTPmessages_UploadMedia(
 				MTP_flags(0), MTPstring(), peer(operation->action.peer), uploaded),
 				Fn<void(const MTPMessageMedia &)>([=](const MTPMessageMedia &media) {
+					if (operation->kind == Kind::Upload) {
+						operation->result.media = media;
+					}
 					ingest(media);
 					auto valid = false;
 					if (source.photo && media.type() == mtpc_messageMediaPhoto) {
@@ -542,6 +560,10 @@ Error Client::validateNativeRich(const Op &operation) {
 }
 
 void Client::send(const Op &operation) {
+	if (operation->kind == Kind::Upload) {
+		finish(operation);
+		return;
+	}
 	if (operation->kind == Kind::Rich || operation->kind == Kind::EditRich) {
 		if (const auto error = prepareRich(operation)) {
 			finish(operation, OperationState::Failed, error);
@@ -703,7 +725,41 @@ void Client::received(const Op &operation, const MTPUpdates &updates) {
 			return;
 		}
 	}
-	finish(operation);
+	if (Editing(operation->kind) || operation->kind == Kind::Delete) {
+		finish(operation);
+		return;
+	}
+	auto missing = QVector<MTPInputMessage>();
+	for (const auto &id : operation->result.messages) {
+		if (!ranges::contains(operation->result.data, id.msg.bare, [](const MTPMessage &message) {
+			return message.type() == mtpc_message
+				? message.c_message().vid().v : 0;
+		})) {
+			missing.push_back(MTP_inputMessageID(MTP_int(id.msg.bare)));
+		}
+	}
+	if (missing.isEmpty()) {
+		finish(operation);
+		return;
+	}
+	rpc(operation, MTPchannels_GetMessages(
+		channel(operation->action.peer),
+		MTP_vector<MTPInputMessage>(missing)),
+		Fn<void(const MTPmessages_Messages &)>([=](const MTPmessages_Messages &result) {
+			for (const auto &message : messages(result)) {
+				ingest(message);
+				operation->result.data.push_back(message);
+			}
+			const auto complete = ranges::all_of(operation->result.messages, [&](FullMsgId id) {
+				return ranges::contains(operation->result.data, id.msg.bare, [](const MTPMessage &message) {
+					return message.type() == mtpc_message
+						? message.c_message().vid().v : 0;
+				});
+			});
+			finish(operation,
+				complete ? OperationState::Completed : OperationState::Unconfirmed,
+				complete ? Error() : Error{ u"MESSAGE_RESULT_INCOMPLETE"_q });
+		}));
 }
 
 std::vector<MTPMessage> Client::messages(const MTPmessages_Messages &result) const {

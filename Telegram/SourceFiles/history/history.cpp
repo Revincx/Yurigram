@@ -1813,19 +1813,20 @@ void History::newItemAdded(not_null<HistoryItem*> item, NewAddType type) {
 		from->madeAction(item->date());
 	}
 	item->contributeToSlowmode();
+	const auto pendingIncoming = item->isSending() && !item->out();
 	auto notification = Data::ItemNotification{
 		.item = item,
 		.type = Data::ItemNotificationType::Message,
 	};
-	if (item->showNotification()) {
+	if (!pendingIncoming && item->showNotification()) {
 		item->notificationThread()->pushNotification(notification);
 	}
 	owner().notifyNewItemAdded(item);
-	const auto stillShow = item->showNotification(); // Could be read already.
+	const auto stillShow = !pendingIncoming && item->showNotification(); // Could be read already.
 	if (stillShow) {
 		Core::App().notifications().schedule(notification);
 	}
-	if (item->out()) {
+	if (!pendingIncoming && item->out()) {
 		if (item->isFromScheduled() && unreadCountRefreshNeeded(item->id)) {
 			if (unreadCountKnown()) {
 				setUnreadCount(unreadCount() + 1);
@@ -1841,7 +1842,7 @@ void History::newItemAdded(not_null<HistoryItem*> item, NewAddType type) {
 		if (item->changesWallPaper()) {
 			peer->updateFullForced();
 		}
-	} else {
+	} else if (!pendingIncoming) {
 		if (item->unread(this)) {
 			if (unreadCountKnown()) {
 				setUnreadCount(unreadCount() + 1);
