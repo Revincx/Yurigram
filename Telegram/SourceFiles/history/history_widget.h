@@ -83,6 +83,7 @@ struct PreparedList;
 struct PreparedBundle;
 class SendFilesWay;
 class SendAsButton;
+class ChooseBotUseButton;
 class SpoilerAnimation;
 class ChooseThemeController;
 class ElasticScroll;
@@ -797,6 +798,8 @@ private:
 		HistoryView::SuggestMode mode);
 	void setupSendAsToggle();
 	void refreshSendAsToggle();
+	void setupBotUseToggle();
+	void refreshBotUseToggle();
 	void refreshAttachBotsMenu();
 
 	void injectSponsoredMessages() const;
@@ -951,6 +954,8 @@ private:
 	object_ptr<Ui::IconButton> _attachToggle;
 	object_ptr<Ui::IconButton> _replaceMedia = { nullptr };
 	object_ptr<Ui::SendAsButton> _sendAs = { nullptr };
+	object_ptr<Ui::ChooseBotUseButton> _chooseBotUse = { nullptr };
+	uint64 _chooseBotUseId = 0;
 	object_ptr<Ui::EmojiButton> _tabbedSelectorToggle;
 	object_ptr<Ui::IconButton> _botKeyboardShow;
 	object_ptr<Ui::IconButton> _botKeyboardHide;

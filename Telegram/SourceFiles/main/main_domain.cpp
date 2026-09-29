@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_domain.h"
 
 #include "bot_use/bot_use_manager.h"
+#include "bot_use/bot_use_chat_state.h"
 
 #include "core/application.h"
 #include "core/core_settings.h"
@@ -364,6 +365,7 @@ void Domain::watchSession(not_null<Account*> account) {
 	) | rpl::filter([=](Session *session) {
 		return session != nullptr;
 	}) | rpl::on_next([=](Session *session) {
+		session->botUseChats().bind(session, _botUse.get());
 		session->data().unreadBadgeChanges(
 		) | rpl::on_next([=] {
 			scheduleUpdateUnreadBadge();

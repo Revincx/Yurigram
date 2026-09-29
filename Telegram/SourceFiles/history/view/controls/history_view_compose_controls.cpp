@@ -125,8 +125,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/controls/emoji_button.h"
 #include "ui/controls/send_button.h"
 #include "ui/controls/send_as_button.h"
+#include "ui/controls/choose_bot_use_button.h"
 #include "ui/controls/silent_toggle.h"
 #include "ui/chat/choose_send_as.h"
+#include "ui/chat/choose_bot_use.h"
+#include "bot_use/bot_use_chat_state.h"
 #include "ui/effects/spoiler_mess.h"
 #include "ui/effects/reaction_fly_animation.h"
 #include "webrtc/webrtc_environment.h"
@@ -1544,12 +1547,28 @@ void ComposeControls::setHistory(SetHistoryArgs &&args) {
 	updateAttachBotsMenu();
 
 	_sendAs = nullptr;
+	_chooseBotUse = nullptr;
+	_chooseBotUseId = 0;
 	_silent = nullptr;
 	if (!_history) {
 		return;
 	}
 	const auto peer = _history->peer;
+	_botUseVideoStream = bool(args.videoStream);
 	initSendAsButton(peer, args.videoStream);
+	updateBotUseButton();
+	updateControlsVisibility();
+	updateControlsGeometry(_wrap->size());
+	session().botUseChats().changes(
+	) | rpl::filter([=](PeerId changed) {
+		return _history && _history->peer->id == changed;
+	}) | rpl::on_next([=] {
+		if (updateBotUseButton()) {
+			updateControlsVisibility();
+			updateControlsGeometry(_wrap->size());
+			orderControls();
+		}
+	}, _historyLifetime);
 	if (peer->isChat() && peer->asChat()->noParticipantInfo()) {
 		session().api().requestFullPeer(peer);
 	} else if (const auto channel = peer->asMegagroup()) {
@@ -2786,7 +2805,10 @@ void ComposeControls::init() {
 	) | rpl::on_next([=](const auto &id) {
 		unregisterDraftSources();
 		updateSendButtonType();
-		if (_history && updateSendAsButton(nullptr)) {
+		const auto sendAsChanged = _history
+			&& updateSendAsButton(nullptr);
+		const auto botUseChanged = updateBotUseButton();
+		if (sendAsChanged || botUseChanged) {
 			updateControlsVisibility();
 			updateControlsGeometry(_wrap->size());
 			orderControls();
@@ -3171,6 +3193,17 @@ void ComposeControls::initField() {
 		Qt::WidgetShortcut);
 	QObject::connect(linkPreviewShortcut, &QShortcut::activated, [=] {
 		editLinkPreview();
+	});
+	const auto botUseShortcut = new QShortcut(
+		QKeySequence("ctrl+shift+b"),
+		rawTextEdit,
+		nullptr,
+		nullptr,
+		Qt::WidgetShortcut);
+	QObject::connect(botUseShortcut, &QShortcut::activated, [=] {
+		if (_history && !_botUseVideoStream) {
+			Ui::ShowChooseBotUse(_history->peer, _show);
+		}
 	});
 	rpl::merge(
 		_field->scrollTop().changes() | rpl::to_empty,
@@ -4919,16 +4952,19 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 		&& !_commentsShown->isHidden();
 	const auto giftToUser = _giftToUser
 		&& !_giftToUser->isHidden();
+	const auto identityWidth = _chooseBotUse
+		? _chooseBotUse->width()
+		: (_sendAs ? _sendAs->width() : 0);
 	const auto fieldWidth = size.width()
 		- (commentsShown
 			? (_commentsShown->width() + _st.commentsSkip)
 			: 0)
-		- ((_attachToggle || _sendAs) ? _st.padding.left() : _st.fieldLeft)
+		- ((_attachToggle || identityWidth) ? _st.padding.left() : _st.fieldLeft)
 		- (_botMenu.button
 			? (st::historyBotMenuSkip + _botMenu.button->width())
 			: 0)
 		- (_attachToggle ? _attachToggle->width() : 0)
-		- (_sendAs ? _sendAs->width() : 0)
+		- identityWidth
 		- _st.padding.right()
 		- _send->width()
 		- (_editStars ? _editStars->width() : 0)
@@ -4974,7 +5010,7 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 		_commentsShown->moveToLeft(left, buttonsTop);
 		left += _commentsShown->width() + _st.commentsSkip;
 	}
-	left += (_attachToggle || _sendAs) ? _st.padding.left() : _st.fieldLeft;
+	left += (_attachToggle || identityWidth) ? _st.padding.left() : _st.fieldLeft;
 	if (_botMenu.button) {
 		const auto skip = st::historyBotMenuSkip;
 		_botMenu.button->moveToLeft(left + skip, buttonsTop + skip);
@@ -4987,7 +5023,10 @@ void ComposeControls::updateControlsGeometry(QSize size) {
 		_attachToggle->moveToLeft(left, buttonsTop);
 		left += _attachToggle->width();
 	}
-	if (_sendAs) {
+	if (_chooseBotUse) {
+		_chooseBotUse->moveToLeft(left, buttonsTop);
+		left += _chooseBotUse->width();
+	} else if (_sendAs) {
 		_sendAs->moveToLeft(left, buttonsTop);
 		left += _sendAs->width();
 	}
@@ -5105,7 +5144,10 @@ void ComposeControls::updateControlsVisibility() {
 		_ttlInfo->setVisible(!hide);
 	}
 	if (_sendAs) {
-		_sendAs->show();
+		_sendAs->setVisible(!_chooseBotUse);
+	}
+	if (_chooseBotUse) {
+		_chooseBotUse->show();
 	}
 	if (_replaceMedia) {
 		_replaceMedia->show();
@@ -5584,6 +5626,37 @@ bool ComposeControls::updateSendAsButton(
 		Ui::SetupSendAsButton(_sendAs.get(), st, rpl::single(peer), _show);
 		_videoStreamAdmin = false;
 	}
+	return true;
+}
+
+bool ComposeControls::updateBotUseButton() {
+	const auto peer = _history ? _history->peer.get() : nullptr;
+	const auto choice = peer
+		? session().botUseChats().choice(peer->id)
+		: BotUse::ChatChoice();
+	const auto bot = (_features.sendAs
+		&& !_botUseVideoStream
+		&& peer
+		&& !isEditingMessage()
+		&& Ui::CanChooseBotUse(peer)
+		&& choice.enabled)
+		? choice.bot
+		: 0;
+	if (_chooseBotUse && _chooseBotUseId == bot) {
+		return false;
+	}
+	const auto hadButton = (_chooseBotUse != nullptr);
+	_chooseBotUse = nullptr;
+	_chooseBotUseId = bot;
+	if (!bot) {
+		return hadButton;
+	}
+	const auto &st = _st.chooseSendAs;
+	_chooseBotUse = std::make_unique<Ui::ChooseBotUseButton>(
+		_wrap.get(),
+		st.button);
+	_chooseBotUse->setAccessibleName(tr::lng_bot_use_choose(tr::now));
+	Ui::SetupChooseBotUseButton(_chooseBotUse.get(), peer, _show);
 	return true;
 }
 

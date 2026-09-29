@@ -52,6 +52,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/chat/message_bar.h"
 #include "ui/chat/attach/attach_send_files_way.h"
 #include "ui/chat/choose_send_as.h"
+#include "ui/chat/choose_bot_use.h"
 #include "ui/effects/spoiler_mess.h"
 #include "ui/image/image.h"
 #include "ui/painter.h"
@@ -61,6 +62,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/controls/emoji_button.h"
 #include "ui/controls/send_button.h"
 #include "ui/controls/send_as_button.h"
+#include "ui/controls/choose_bot_use_button.h"
+#include "bot_use/bot_use_chat_state.h"
 #include "ui/controls/silent_toggle.h"
 #include "ui/screen_reader_mode.h"
 #include "ui/ui_utility.h"
@@ -558,6 +561,17 @@ HistoryWidget::HistoryWidget(
 		Qt::WidgetShortcut);
 	QObject::connect(linkPreviewShortcut, &QShortcut::activated, [=] {
 		editLinkPreview();
+	});
+	const auto botUseShortcut = new QShortcut(
+		QKeySequence("ctrl+shift+b"),
+		rawTextEdit,
+		nullptr,
+		nullptr,
+		Qt::WidgetShortcut);
+	QObject::connect(botUseShortcut, &QShortcut::activated, [=] {
+		if (_peer) {
+			Ui::ShowChooseBotUse(_peer, controller->uiShow());
+		}
 	});
 	rpl::merge(
 		_field->scrollTop().changes() | rpl::to_empty,
@@ -1246,6 +1260,7 @@ HistoryWidget::HistoryWidget(
 
 	setupScheduledToggle();
 	setupSendAsToggle();
+	setupBotUseToggle();
 	orderWidgets();
 	setupShortcuts();
 
@@ -2188,6 +2203,9 @@ void HistoryWidget::orderWidgets() {
 	_send->raise();
 	_aiButton->raise();
 	_sendAsFile->raise();
+	if (_chooseBotUse) {
+		_chooseBotUse->raise();
+	}
 	_expand->raise();
 	_richDraftPreview->raise();
 	_discardRichDraft->raise();
@@ -3246,6 +3264,7 @@ void HistoryWidget::showHistory(
 		setHistory(nullptr);
 		_list = nullptr;
 		_peer = nullptr;
+		refreshBotUseToggle();
 		_suggestOptions = nullptr;
 		_sendPayment.clear();
 		_topicsRequested.clear();
@@ -3379,6 +3398,7 @@ void HistoryWidget::showHistory(
 		refreshScheduledToggle();
 		refreshSendGiftToggle();
 		refreshSendAsToggle();
+		refreshBotUseToggle();
 
 		if (_showAtMsgId == ShowAtUnreadMsgId) {
 			if (_history->scrollTopItem) {
@@ -3810,6 +3830,9 @@ void HistoryWidget::setEditMsgId(MsgId msgId) {
 	}
 	if (_history) {
 		refreshSendAsToggle();
+		refreshBotUseToggle();
+		updateControlsVisibility();
+		updateControlsGeometry();
 		orderWidgets();
 	}
 	registerDraftSource();
@@ -4106,6 +4129,43 @@ void HistoryWidget::setupSendAsToggle() {
 	}, lifetime());
 }
 
+void HistoryWidget::setupBotUseToggle() {
+	session().botUseChats().changes(
+	) | rpl::filter([=](PeerId peer) {
+		return _peer && _peer->id == peer;
+	}) | rpl::on_next([=] {
+		refreshBotUseToggle();
+		updateControlsVisibility();
+		updateControlsGeometry();
+		orderWidgets();
+	}, lifetime());
+}
+
+void HistoryWidget::refreshBotUseToggle() {
+	const auto choice = _peer
+		? session().botUseChats().choice(_peer->id)
+		: BotUse::ChatChoice();
+	const auto bot = (_peer && _history && !_editMsgId
+		&& Ui::CanChooseBotUse(_peer) && choice.enabled)
+		? choice.bot
+		: 0;
+	if (_chooseBotUse && _chooseBotUseId == bot) {
+		return;
+	}
+	_chooseBotUse.destroy();
+	_chooseBotUseId = bot;
+	if (!bot) {
+		return;
+	}
+	const auto &st = st::defaultComposeControls.chooseSendAs;
+	_chooseBotUse.create(this, st.button);
+	_chooseBotUse->setAccessibleName(tr::lng_bot_use_choose(tr::now));
+	Ui::SetupChooseBotUseButton(
+		_chooseBotUse.data(),
+		_peer,
+		controller()->uiShow());
+}
+
 void HistoryWidget::refreshSendAsToggle() {
 	Expects(_peer != nullptr);
 
@@ -4301,6 +4361,9 @@ void HistoryWidget::updateControlsVisibility() {
 		if (_sendAs) {
 			_sendAs->hide();
 		}
+		if (_chooseBotUse) {
+			_chooseBotUse->hide();
+		}
 		_kbScroll->hide();
 		_fieldBarCancel->hide();
 		_attachToggle->hide();
@@ -4447,7 +4510,10 @@ void HistoryWidget::updateControlsVisibility() {
 			}
 		}
 		if (_sendAs) {
-			_sendAs->show();
+			_sendAs->setVisible(!_chooseBotUse);
+		}
+		if (_chooseBotUse) {
+			_chooseBotUse->show();
 		}
 		updateFieldPlaceholder();
 
@@ -4497,6 +4563,9 @@ void HistoryWidget::updateControlsVisibility() {
 		}
 		if (_sendAs) {
 			_sendAs->hide();
+		}
+		if (_chooseBotUse) {
+			_chooseBotUse->hide();
 		}
 		if (_botMenu.button) {
 			_botMenu.button->hide();
@@ -7633,7 +7702,10 @@ void HistoryWidget::moveFieldControls() {
 	}
 	_attachToggle->moveToLeft(left, buttonsBottom);
 	left += _attachToggle->width();
-	if (_sendAs) {
+	if (_chooseBotUse) {
+		_chooseBotUse->moveToLeft(left, buttonsBottom);
+		left += _chooseBotUse->width();
+	} else if (_sendAs) {
 		_sendAs->moveToLeft(left, buttonsBottom);
 		left += _sendAs->width();
 	}
@@ -7738,7 +7810,9 @@ void HistoryWidget::updateFieldSize() {
 	if (_botMenu.button) {
 		fieldWidth -= st::historyBotMenuSkip + _botMenu.button->width();
 	}
-	if (_sendAs) {
+	if (_chooseBotUse) {
+		fieldWidth -= _chooseBotUse->width();
+	} else if (_sendAs) {
 		fieldWidth -= _sendAs->width();
 	}
 	if (kbShowShown) {

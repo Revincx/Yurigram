@@ -6,6 +6,7 @@ For license and copyright information please follow this link:
 https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "ui/chat/choose_send_as.h"
+#include "ui/chat/choose_bot_use.h"
 
 #include "boxes/peer_list_box.h"
 #include "data/data_group_call.h"
@@ -221,6 +222,10 @@ void SetupSendAsButton(
 	button->setClickedCallback([=, &st] {
 		const auto peer = current->current();
 		if (!peer) {
+			return;
+		}
+		if (button->clickModifiers() & Qt::AltModifier) {
+			ShowChooseBotUse(peer, show);
 			return;
 		}
 		const auto key = Main::SendAsKey{ peer, Main::SendAsType::Message };

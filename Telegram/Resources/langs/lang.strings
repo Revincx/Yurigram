@@ -8838,6 +8838,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_bot_use_busy" = "BotUse is busy. Try again after the current operation finishes.";
 "lng_bot_use_store_error" = "BotUse could not save its encrypted data.";
 "lng_bot_use_error" = "BotUse error: {error}";
+"lng_bot_use_choose" = "Send as Bot in this chat";
+"lng_bot_use_choose_about" = "Choose a BotUse identity:";
+"lng_bot_use_loading" = "Loading available Bots...";
+"lng_bot_use_load_error" = "Could not load chat Bots. Try again.";
+"lng_bot_use_no_chat_bots" = "No added Bots are available in this chat.";
 "lng_settings_enhanced_import" = "Import";
 "lng_settings_enhanced_export_done" = "Enhanced settings code copied to clipboard.";
 "lng_settings_enhanced_import_invalid" = "Clipboard does not contain a valid enhanced settings code.";

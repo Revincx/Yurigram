@@ -81,6 +81,10 @@ namespace InlineBots {
 class AttachWebView;
 } // namespace InlineBots
 
+namespace BotUse {
+class ChatState;
+} // namespace BotUse
+
 namespace Ui {
 struct ColorIndicesCompressed;
 } // namespace Ui
@@ -223,6 +227,9 @@ public:
 	[[nodiscard]] SendAsPeers &sendAsPeers() const {
 		return *_sendAsPeers;
 	}
+	[[nodiscard]] BotUse::ChatState &botUseChats() const {
+		return *_botUseChats;
+	}
 	[[nodiscard]] InlineBots::AttachWebView &attachWebView() const {
 		return *_attachWebView;
 	}
@@ -330,6 +337,7 @@ private:
 	const std::unique_ptr<Stickers::DicePacks> _diceStickersPacks;
 	const std::unique_ptr<Stickers::GiftBoxPack> _giftBoxStickersPacks;
 	const std::unique_ptr<SendAsPeers> _sendAsPeers;
+	const std::unique_ptr<BotUse::ChatState> _botUseChats;
 	const std::unique_ptr<InlineBots::AttachWebView> _attachWebView;
 	const std::unique_ptr<Data::RecentPeers> _recentPeers;
 	const std::unique_ptr<Data::RecentForwardTargets> _recentForwardTargets;

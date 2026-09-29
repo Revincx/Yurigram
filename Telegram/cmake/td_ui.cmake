@@ -515,6 +515,7 @@ PRIVATE
     ui/controls/round_video_recorder.h
     ui/controls/send_as_button.cpp
     ui/controls/send_as_button.h
+    ui/controls/choose_bot_use_button.h
     ui/controls/send_button.cpp
     ui/controls/send_button.h
     ui/controls/stars_rating.cpp

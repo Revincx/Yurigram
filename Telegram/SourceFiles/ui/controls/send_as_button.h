@@ -16,7 +16,7 @@ struct SendAsButton;
 
 namespace Ui {
 
-class SendAsButton final : public AbstractButton {
+class SendAsButton : public AbstractButton {
 public:
 	SendAsButton(QWidget *parent, const style::SendAsButton &st);
 

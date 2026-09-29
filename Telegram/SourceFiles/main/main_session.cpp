@@ -16,6 +16,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session_settings.h"
 #include "main/main_app_config.h"
 #include "main/session/send_as_peers.h"
+#include "bot_use/bot_use_chat_state.h"
 #include "mtproto/mtproto_config.h"
 #include "chat_helpers/stickers_emoji_pack.h"
 #include "chat_helpers/stickers_dice_pack.h"
@@ -117,6 +118,7 @@ Session::Session(
 , _diceStickersPacks(std::make_unique<Stickers::DicePacks>(this))
 , _giftBoxStickersPacks(std::make_unique<Stickers::GiftBoxPack>(this))
 , _sendAsPeers(std::make_unique<SendAsPeers>(this))
+, _botUseChats(std::make_unique<BotUse::ChatState>())
 , _attachWebView(std::make_unique<InlineBots::AttachWebView>(this))
 , _recentPeers(std::make_unique<Data::RecentPeers>(this))
 , _recentForwardTargets(std::make_unique<Data::RecentForwardTargets>(this))

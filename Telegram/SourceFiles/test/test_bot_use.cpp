@@ -3,6 +3,7 @@
 #ifdef _DEBUG
 
 #include "bot_use/bot_use_adapter.h"
+#include "bot_use/bot_use_chat_state.h"
 #include "bot_use/bot_use_manager.h"
 #include "core/application.h"
 #include "data/data_session.h"
@@ -423,6 +424,21 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		Check(BotUse::SnapshotRich(partial, {}, operation).type == u"RICH_MESSAGE_INCOMPLETE"_q,
 			u"Partial rich content cannot replace complete content"_q);
 		Check(bool(BotUse::ValidateTarget(peerFromChat(ChatId(1)))), u"Basic groups are rejected"_q);
+		const auto session = Core::App().domain().active().maybeSession();
+		Expects(session != nullptr);
+		auto &choices = session->botUseChats();
+		const auto first = peerFromChannel(ChannelId(101));
+		const auto second = peerFromChannel(ChannelId(102));
+		choices.choose(first, state->a);
+		choices.choose(second, state->b);
+		Check(choices.choice(first) == BotUse::ChatChoice{ true, state->a }
+			&& choices.choice(second) == BotUse::ChatChoice{ true, state->b },
+			u"Bot identities stay separate by chat"_q);
+		choices.clear(first);
+		Check(!choices.choice(first).enabled
+			&& choices.choice(first).bot == 0
+			&& choices.choice(second).bot == state->b,
+			u"Using the personal account clears only its chat"_q);
 	} });
 }
 

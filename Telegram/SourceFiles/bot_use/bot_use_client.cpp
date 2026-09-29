@@ -38,6 +38,7 @@ Client::Client(not_null<Manager*> manager, Record record)
 , _record(std::move(record))
 , _resourceGeneration(base::RandomValue<uint64>())
 , _idleTimer([=] { idle(); }) {
+	_record.info.environment = _record.environment;
 }
 
 Client::~Client() {

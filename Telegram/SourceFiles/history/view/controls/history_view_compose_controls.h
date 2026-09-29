@@ -70,6 +70,7 @@ class IconButton;
 class RoundButton;
 class EmojiButton;
 class SendAsButton;
+class ChooseBotUseButton;
 class SilentToggle;
 class DropdownMenu;
 struct PreparedBundle;
@@ -375,6 +376,7 @@ private:
 	void updateSendLockBadge();
 	void updateMessagesTTLShown();
 	bool updateSendAsButton(std::shared_ptr<Data::GroupCall> videoStream);
+	bool updateBotUseButton();
 	void updateAttachBotsMenu();
 	void updateHeight();
 	void updateWrappingVisibility();
@@ -585,6 +587,9 @@ private:
 		bool small = false;
 	} _botMenu;
 	std::unique_ptr<Ui::SendAsButton> _sendAs;
+	std::unique_ptr<Ui::ChooseBotUseButton> _chooseBotUse;
+	uint64 _chooseBotUseId = 0;
+	bool _botUseVideoStream = false;
 	rpl::variable<bool> _videoStreamAdmin;
 	std::unique_ptr<Ui::SilentToggle> _silent;
 	std::unique_ptr<Controls::TTLButton> _ttlInfo;

@@ -1490,6 +1490,8 @@ PRIVATE
     main/main_domain.cpp
     bot_use/bot_use_adapter.cpp
     bot_use/bot_use_adapter.h
+    bot_use/bot_use_chat_state.cpp
+    bot_use/bot_use_chat_state.h
     bot_use/bot_use_client.cpp
     bot_use/bot_use_client.h
     bot_use/bot_use_manager.cpp
@@ -2084,6 +2086,8 @@ PRIVATE
     ui/chat/attach/attach_item_single_media_preview.h
     ui/chat/choose_send_as.cpp
     ui/chat/choose_send_as.h
+    ui/chat/choose_bot_use.cpp
+    ui/chat/choose_bot_use.h
     ui/chat/choose_theme_controller.cpp
     ui/chat/choose_theme_controller.h
     ui/chat/sponsored_message_bar.cpp

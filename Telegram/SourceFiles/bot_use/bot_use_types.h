@@ -51,6 +51,7 @@ enum class OperationState {
 struct BotInfo {
 	BotId id = 0;
 	UserId userId;
+	MTP::Environment environment = MTP::Environment::Production;
 	QString name;
 	QString username;
 	State state = State::Unconfigured;
