@@ -7,6 +7,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "api/api_send_progress.h"
 
+#include "bot_use/bot_use_manager.h"
+#include "bot_use/bot_use_sending.h"
+#include "main/main_domain.h"
 #include "main/main_session.h"
 #include "history/history.h"
 #include "data/data_peer.h"
@@ -22,6 +25,29 @@ constexpr auto kCancelTypingActionTimeout = crl::time(5000);
 constexpr auto kSendMySpeakingInterval = 3 * crl::time(1000);
 constexpr auto kSendMyTypingInterval = 5 * crl::time(1000);
 constexpr auto kSendTypingsToOfflineFor = TimeId(30);
+
+[[nodiscard]] bool BotUseSupports(SendProgressType type) {
+	using Type = SendProgressType;
+	switch (type) {
+	case Type::ChooseLocation:
+	case Type::ChooseContact:
+	case Type::PlayGame:
+	case Type::Speaking:
+		return false;
+	case Type::Typing:
+	case Type::RecordVideo:
+	case Type::UploadVideo:
+	case Type::RecordVoice:
+	case Type::UploadVoice:
+	case Type::RecordRound:
+	case Type::UploadRound:
+	case Type::UploadPhoto:
+	case Type::UploadFile:
+	case Type::ChooseSticker:
+		return true;
+	}
+	Unexpected("SendProgressType value.");
+}
 
 } // namespace
 
@@ -40,10 +66,21 @@ void SendProgressManager::cancel(
 		not_null<History*> history,
 		MsgId topMsgId,
 		SendProgressType type) {
-	const auto i = _requests.find(Key{ history, topMsgId, type });
-	if (i != _requests.end()) {
-		_session->api().request(i->second).cancel();
-		_requests.erase(i);
+	for (auto i = begin(_requests); i != end(_requests);) {
+		const auto &key = i->first;
+		if (key.history != history
+			|| key.topMsgId != topMsgId
+			|| key.type != type) {
+			++i;
+			continue;
+		}
+		const auto request = i->second;
+		i = _requests.erase(i);
+		if (request.botUse) {
+			_session->domain().botUse().cancel(request.operation);
+		} else {
+			_session->api().request(request.user).cancel();
+		}
 	}
 }
 
@@ -73,7 +110,8 @@ void SendProgressManager::update(
 	}
 
 	const auto doing = (progress >= 0);
-	const auto key = Key{ history, topMsgId, type };
+	const auto bot = BotUseSupports(type) ? BotUse::Selected(history) : 0;
+	const auto key = Key{ history, topMsgId, type, bot };
 	if (updated(key, doing)) {
 		cancel(history, topMsgId, type);
 		if (doing) {
@@ -84,8 +122,20 @@ void SendProgressManager::update(
 
 bool SendProgressManager::updated(const Key &key, bool doing) {
 	const auto now = crl::now();
-	const auto i = _updated.find(key);
+	auto i = _updated.find(key);
 	if (doing) {
+		for (auto other = begin(_updated); other != end(_updated);) {
+			const auto &candidate = other->first;
+			if (candidate.history == key.history
+				&& candidate.topMsgId == key.topMsgId
+				&& candidate.type == key.type
+				&& candidate.botUse != key.botUse) {
+				other = _updated.erase(other);
+			} else {
+				++other;
+			}
+		}
+		i = _updated.find(key);
 		const auto sendEach = (key.type == SendProgressType::Speaking)
 			? kSendMySpeakingInterval
 			: kSendMyTypingInterval;
@@ -97,13 +147,19 @@ bool SendProgressManager::updated(const Key &key, bool doing) {
 			i->second = now + 2 * sendEach;
 		}
 	} else {
-		if (i == end(_updated)) {
-			return false;
-		} else if (i->second <= now) {
-			return false;
-		} else {
-			_updated.erase(i);
+		auto active = false;
+		for (auto other = begin(_updated); other != end(_updated);) {
+			const auto &candidate = other->first;
+			if (candidate.history == key.history
+				&& candidate.topMsgId == key.topMsgId
+				&& candidate.type == key.type) {
+				active |= (other->second > now);
+				other = _updated.erase(other);
+			} else {
+				++other;
+			}
 		}
+		return active;
 	}
 	return true;
 }
@@ -133,17 +189,35 @@ void SendProgressManager::send(const Key &key, int progress) {
 		default: return MTP_sendMessageTypingAction();
 		}
 	}();
-	const auto requestId = _session->api().request(MTPmessages_SetTyping(
-		MTP_flags(key.topMsgId
-			? MTPmessages_SetTyping::Flag::f_top_msg_id
-			: MTPmessages_SetTyping::Flag(0)),
-		key.history->peer->input(),
-		MTP_int(key.topMsgId),
-		action
-	)).done([=](const MTPBool &result, mtpRequestId requestId) {
-		done(requestId);
-	}).send();
-	_requests.emplace(key, requestId);
+	if (key.botUse) {
+		const auto weak = base::make_weak(this);
+		const auto operation = _session->domain().botUse().setTyping(
+			key.botUse,
+			key.history->peer->id,
+			key.topMsgId,
+			action,
+			[=](const BotUse::Result &result) {
+				if (const auto strong = weak.get()) {
+					strong->doneBot(result.bot, result.operation);
+				}
+			});
+		_requests.emplace(key, Request{
+			.botUse = key.botUse,
+			.operation = operation,
+		});
+	} else {
+		const auto requestId = _session->api().request(MTPmessages_SetTyping(
+			MTP_flags(key.topMsgId
+				? MTPmessages_SetTyping::Flag::f_top_msg_id
+				: MTPmessages_SetTyping::Flag(0)),
+			key.history->peer->input(),
+			MTP_int(key.topMsgId),
+			action
+		)).done([=](const MTPBool &result, mtpRequestId requestId) {
+			done(requestId);
+		}).send();
+		_requests.emplace(key, Request{ .user = requestId });
+	}
 
 	if (key.type == Type::Typing) {
 		_stopTypingHistory = key.history;
@@ -172,7 +246,16 @@ bool SendProgressManager::skipRequest(const Key &key) const {
 
 void SendProgressManager::done(mtpRequestId requestId) {
 	for (auto i = _requests.begin(), e = _requests.end(); i != e; ++i) {
-		if (i->second == requestId) {
+		if (!i->second.botUse && i->second.user == requestId) {
+			_requests.erase(i);
+			break;
+		}
+	}
+}
+
+void SendProgressManager::doneBot(uint64 bot, uint64 operation) {
+	for (auto i = _requests.begin(), e = _requests.end(); i != e; ++i) {
+		if (i->second.botUse == bot && i->second.operation == operation) {
 			_requests.erase(i);
 			break;
 		}

@@ -29,7 +29,19 @@ struct MediaSource {
 	std::optional<MTPInputDocument> uploadedDocument;
 };
 
-enum class Kind { Authenticate, ReplaceToken, Text, Media, Album, Rich, Edit, EditRich, Delete, Upload };
+enum class Kind {
+	Authenticate,
+	ReplaceToken,
+	Typing,
+	Text,
+	Media,
+	Album,
+	Rich,
+	Edit,
+	EditRich,
+	Delete,
+	Upload,
+};
 
 struct Operation {
 	Result result;
@@ -39,6 +51,8 @@ struct Operation {
 	Error validation;
 	std::optional<TextWithEntities> text;
 	std::optional<Data::WebPageDraft> webPage;
+	MTPsendMessageAction typingAction;
+	MsgId topMsgId;
 	std::vector<MediaSource> media;
 	std::shared_ptr<Iv::RichPage> page;
 	std::optional<MTPInputRichMessage> rich;

@@ -2,6 +2,7 @@
 
 #ifdef _DEBUG
 
+#include "api/api_send_progress.h"
 #include "bot_use/bot_use_adapter.h"
 #include "bot_use/bot_use_chat_state.h"
 #include "bot_use/bot_use_manager.h"
@@ -113,6 +114,12 @@ struct Fixture {
 	int auths = 0;
 	int parts = 0;
 	int uploads = 0;
+	int typings = 0;
+	int typingBefore = 0;
+	uint64 typingUser = 0;
+	uint64 typingPeer = 0;
+	int typingTop = 0;
+	mtpTypeId typingAction = 0;
 	FullMsgId local;
 	FullMsgId expectedReal;
 	bool delayedBotResult = false;
@@ -293,6 +300,24 @@ void Fixture::respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuff
 				MTP_int(1), MTP_vector<MTPPhotoSize>(), MTP_vector<MTPVideoSize>(), MTP_int(2)),
 			MTPint(), MTPDocument()));
 	} break;
+	case mtpc_messages_setTyping: {
+		auto from = body.constData() + 1;
+		const auto end = body.constData() + body.size();
+		const auto flags = Read<MTPint>(from, end).v;
+		const auto peer = Read<MTPInputPeer>(from, end);
+		const auto top = (flags & 1) ? Read<MTPint>(from, end).v : 0;
+		const auto actionType = mtpTypeId(*from++);
+		auto action = MTPsendMessageAction();
+		const auto actionValid = action.read(from, end, actionType);
+		Check(actionValid && from == end,
+			u"Bot typing request decodes completely"_q);
+		++typings;
+		typingUser = users.at(instance.data());
+		typingPeer = peer.c_inputPeerChannel().vchannel_id().v;
+		typingTop = top;
+		typingAction = actionType;
+		Reply<MTPmessages_SetTyping>(instance, id, MTP_boolTrue());
+	} break;
 	case mtpc_messages_sendMedia: {
 		const auto request = Decode<MTPmessages_SendMedia>(body);
 		Reply<MTPmessages_SendMedia>(instance, id, MTP_updateShortSentMessage(
@@ -352,6 +377,66 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		state->operation = state->manager->authenticate(state->b, state->completion());
 	}, [=] { Check(state->result->state == BotUse::OperationState::Completed && state->users.size() == 2,
 		u"Bot B has an independent instance"_q); });
+	add(u"set bot typing"_q, [=] {
+		state->operation = state->manager->setTyping(
+			state->a,
+			peerFromChannel(ChannelId(101)),
+			MsgId(42),
+			MTP_sendMessageRecordAudioAction(),
+			state->completion());
+	}, [=] { Check(state->result->state == BotUse::OperationState::Completed
+		&& state->typings == 1
+		&& state->typingUser == 11
+		&& state->typingPeer == 101
+		&& state->typingTop == 42
+		&& state->typingAction == mtpc_sendMessageRecordAudioAction,
+		u"Bot manager sends native typing actions"_q); });
+	add(u"reject broadcast typing"_q, [=] {
+		state->operation = state->manager->setTyping(
+			state->a,
+			peerFromChannel(ChannelId(100)),
+			MsgId(),
+			MTP_sendMessageTypingAction(),
+			state->completion());
+	}, [=] { Check(state->result->state == BotUse::OperationState::Failed
+		&& state->result->error.type == u"UNSUPPORTED_PEER"_q
+		&& state->typings == 1,
+		u"Bot typing is limited to supergroups"_q); });
+	runner->add({ .name = u"botuse typing follows selected identity"_q, .run = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto history = state->text(101).action.history;
+		session->botUseChats().choose(history->peer->id, state->a);
+		state->typingBefore = state->typings;
+		session->sendProgressManager().update(
+			history,
+			MsgId(43),
+			Api::SendProgressType::Typing);
+	}, .until = [=] { return state->typings > state->typingBefore; }, .then = [=] {
+		Check(state->typingUser == 11
+			&& state->typingTop == 43
+			&& state->typingAction == mtpc_sendMessageTypingAction,
+			u"Selected BotUse identity owns the typing request"_q);
+	} });
+	runner->add({ .name = u"botuse typing switches identity immediately"_q, .run = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto history = state->text(101).action.history;
+		session->botUseChats().choose(history->peer->id, state->b);
+		state->typingBefore = state->typings;
+		session->sendProgressManager().update(
+			history,
+			MsgId(43),
+			Api::SendProgressType::Typing);
+	}, .until = [=] { return state->typings > state->typingBefore; }, .then = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto history = state->text(101).action.history;
+		Check(state->typingUser == 22,
+			u"Changing BotUse identity bypasses the old typing throttle"_q);
+		session->sendProgressManager().update(
+			history,
+			MsgId(43),
+			Api::SendProgressType::Typing,
+			-1);
+	} });
 	add(u"reject unverified bot"_q, [=] {
 		state->operation = state->manager->addAuthenticatedBot(
 			u"fixture-invalid"_q, state->completion());

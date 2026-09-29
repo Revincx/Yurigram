@@ -405,6 +405,20 @@ OperationId Manager::replaceBotToken(BotId bot, QString token, Completion done) 
 	return submit(std::move(op));
 }
 
+OperationId Manager::setTyping(
+		BotId bot,
+		PeerId peer,
+		MsgId topMsgId,
+		MTPsendMessageAction action,
+		Completion done) {
+	auto op = makeOperation(bot, std::move(done));
+	op->kind = Kind::Typing;
+	op->action.peer = peer;
+	op->topMsgId = topMsgId;
+	op->typingAction = std::move(action);
+	return submit(std::move(op));
+}
+
 OperationId Manager::sendText(
 		BotId bot, const Api::MessageToSend &message, Completion done) {
 	auto op = makeOperation(bot, std::move(done));

@@ -50,6 +50,7 @@ private:
 	void prepareMedia(const Op &operation, size_t index = 0);
 	void resolveMedia(const Op &operation, size_t index, Fn<void()> done);
 	void send(const Op &operation);
+	void setTyping(const Op &operation);
 	void sendText(const Op &operation);
 	void sendMedia(const Op &operation);
 	void edit(const Op &operation);

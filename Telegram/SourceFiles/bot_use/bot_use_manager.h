@@ -43,6 +43,12 @@ public:
 	[[nodiscard]] rpl::producer<Result> results() const;
 	[[nodiscard]] std::shared_ptr<const ResourceContext> resources(BotId bot);
 
+	[[nodiscard]] OperationId setTyping(
+		BotId bot,
+		PeerId peer,
+		MsgId topMsgId,
+		MTPsendMessageAction action,
+		Completion done = {});
 	[[nodiscard]] OperationId sendText(
 		BotId bot,
 		const Api::MessageToSend &message,

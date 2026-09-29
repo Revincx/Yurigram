@@ -315,6 +315,8 @@ void Client::checkPeer(const Op &operation) {
 			});
 			if (!found) {
 				finish(operation, OperationState::Failed, { u"CHANNEL_UNAVAILABLE"_q });
+			} else if (operation->kind == Kind::Typing && operation->channel) {
+				finish(operation, OperationState::Failed, { u"UNSUPPORTED_PEER"_q });
 			} else if (operation->kind == Kind::Delete
 				|| (Editing(operation->kind) && !operation->channel)) {
 				checkOwnership(operation, [=] { prepare(operation); });
@@ -369,6 +371,10 @@ MTPInputChannel Client::channel(PeerId id) const {
 }
 
 void Client::prepare(const Op &operation) {
+	if (operation->kind == Kind::Typing) {
+		send(operation);
+		return;
+	}
 	if (operation->randomIds.empty()) {
 		const auto count = operation->kind == Kind::Album ? operation->media.size() : size_t(1);
 		for (auto i = size_t(); i != count; ++i) {
@@ -560,7 +566,10 @@ Error Client::validateNativeRich(const Op &operation) {
 }
 
 void Client::send(const Op &operation) {
-	if (operation->kind == Kind::Upload) {
+	if (operation->kind == Kind::Typing) {
+		setTyping(operation);
+		return;
+	} else if (operation->kind == Kind::Upload) {
 		finish(operation);
 		return;
 	}
@@ -580,6 +589,19 @@ void Client::send(const Op &operation) {
 	} else {
 		sendText(operation);
 	}
+}
+
+void Client::setTyping(const Op &operation) {
+	using Flag = MTPmessages_SetTyping::Flag;
+	const auto topMsgId = operation->topMsgId;
+	rpc(operation, MTPmessages_SetTyping(
+		MTP_flags(topMsgId ? Flag::f_top_msg_id : Flag()),
+		peer(operation->action.peer),
+		MTP_int(topMsgId.bare),
+		operation->typingAction),
+		Fn<void(const MTPBool &)>([=](const MTPBool &) {
+			finish(operation);
+		}));
 }
 
 void Client::sendText(const Op &operation) {

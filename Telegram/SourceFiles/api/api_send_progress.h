@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "api/api_common.h"
 #include "base/timer.h"
+#include "base/weak_ptr.h"
 
 class History;
 
@@ -50,7 +51,7 @@ struct SendProgress {
 
 };
 
-class SendProgressManager final {
+class SendProgressManager final : public base::has_weak_ptr {
 public:
 	SendProgressManager(not_null<Main::Session*> session);
 
@@ -77,25 +78,36 @@ private:
 		not_null<History*> history;
 		MsgId topMsgId = 0;
 		SendProgressType type = SendProgressType();
+		uint64 botUse = 0;
 
 		inline bool operator<(const Key &other) const {
 			return (history < other.history)
 				|| (history == other.history && topMsgId < other.topMsgId)
 				|| (history == other.history
 					&& topMsgId == other.topMsgId
-					&& type < other.type);
+					&& type < other.type)
+				|| (history == other.history
+					&& topMsgId == other.topMsgId
+					&& type == other.type
+					&& botUse < other.botUse);
 		}
+	};
+	struct Request {
+		mtpRequestId user = 0;
+		uint64 botUse = 0;
+		uint64 operation = 0;
 	};
 
 	bool updated(const Key &key, bool doing);
 
 	void send(const Key &key, int progress);
 	void done(mtpRequestId requestId);
+	void doneBot(uint64 bot, uint64 operation);
 
 	[[nodiscard]] bool skipRequest(const Key &key) const;
 
 	const not_null<Main::Session*> _session;
-	base::flat_map<Key, mtpRequestId> _requests;
+	base::flat_map<Key, Request> _requests;
 	base::flat_map<Key, crl::time> _updated;
 	base::Timer _stopTypingTimer;
 	History *_stopTypingHistory = nullptr;
