@@ -611,6 +611,7 @@ void Client::sendText(const Op &operation) {
 	const auto entities = EntitiesToMTP(text.entities, _record.info.userId);
 	const auto flags = (operation->rich ? Flag::f_rich_message : Flag())
 		| (action.options.silent ? Flag::f_silent : Flag())
+		| (action.options.noForwards ? Flag::f_noforwards : Flag())
 		| ((action.reply || action.reply.topicRootId) ? Flag::f_reply_to : Flag())
 		| (!entities.v.isEmpty() ? Flag::f_entities : Flag())
 		| (operation->webPage && operation->webPage->removed ? Flag::f_no_webpage : Flag())
@@ -642,6 +643,7 @@ void Client::sendMedia(const Op &operation) {
 		operation->submitted = true;
 		rpc(operation, MTPmessages_SendMultiMedia(
 			MTP_flags((action.options.silent ? Flag::f_silent : Flag())
+				| (action.options.noForwards ? Flag::f_noforwards : Flag())
 				| (reply ? Flag::f_reply_to : Flag())
 				| (action.options.invertCaption ? Flag::f_invert_media : Flag())),
 			peer(action.peer), ReplyToMTP(action, _record.info.userId),
@@ -657,6 +659,7 @@ void Client::sendMedia(const Op &operation) {
 	operation->submitted = true;
 	rpc(operation, MTPmessages_SendMedia(
 		MTP_flags((action.options.silent ? Flag::f_silent : Flag())
+			| (action.options.noForwards ? Flag::f_noforwards : Flag())
 			| (reply ? Flag::f_reply_to : Flag())
 			| (!entities.v.isEmpty() ? Flag::f_entities : Flag())
 			| ((action.options.invertCaption || (operation->webPage && operation->webPage->invert))

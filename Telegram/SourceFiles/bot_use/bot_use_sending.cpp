@@ -52,6 +52,9 @@ namespace {
 	if (action.options.silent) {
 		flags |= MessageFlag::Silent;
 	}
+	if (action.options.noForwards) {
+		flags |= MessageFlag::NoForwards;
+	}
 	if (action.history->peer->isBroadcast()) {
 		flags |= MessageFlag::Post
 			| MessageFlag::HasViews

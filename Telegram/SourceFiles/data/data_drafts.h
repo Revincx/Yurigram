@@ -78,6 +78,7 @@ struct Draft {
 	std::shared_ptr<const Iv::RichPage> richMessage;
 	TextWithEntities richMessageSummary;
 	mtpRequestId saveRequestId = 0;
+	bool noForwards = false;
 
 	[[nodiscard]] bool hasRichMessage() const {
 		return (richMessage != nullptr);

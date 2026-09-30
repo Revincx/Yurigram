@@ -2191,6 +2191,7 @@ void ChatWidget::sendingFilesConfirmed(
 			: nullptr;
 		api.sendFiles(std::move(group.list), type, album, action);
 	}
+	_composeControls->clearDraftNoForwards();
 	if (_composeControls->replyingToMessage().messageId
 			== action.replyTo.messageId) {
 		_composeControls->cancelReplyMessage();
@@ -2357,6 +2358,8 @@ Api::SendAction ChatWidget::prepareSendAction(
 
 	result.options.sendAs = BotUse::Selected(_history)
 		? nullptr : _composeControls->sendAsPeer();
+	result.options.noForwards = BotUse::Selected(_history)
+		&& _composeControls->draftNoForwards();
 	result.options.suggest = suggestOptions();
 	result.clearDraft = !Iv::Editor::IsComposeBoxOpen(
 		&session(),
@@ -2406,6 +2409,7 @@ void ChatWidget::sendVoice(const ComposeControls::VoiceToSend &data) {
 		data.video,
 		std::move(action));
 
+	_composeControls->clearDraftNoForwards();
 	_composeControls->cancelReplyMessage();
 	_composeControls->clearListenState();
 	finishSending();
@@ -3236,6 +3240,7 @@ bool ChatWidget::sendExistingDocument(
 			localId);
 	}
 
+	_composeControls->clearDraftNoForwards();
 	_composeControls->clearFieldAfterStickerSend();
 	_composeControls->cancelReplyMessage();
 	finishSending();
@@ -3286,6 +3291,7 @@ bool ChatWidget::sendExistingPhoto(
 		Api::SendExistingPhoto(Api::MessageToSend(action), photo);
 	}
 
+	_composeControls->clearDraftNoForwards();
 	_composeControls->cancelReplyMessage();
 	finishSending();
 	return true;
@@ -3354,6 +3360,7 @@ void ChatWidget::sendInlineResult(
 
 SendMenu::Details ChatWidget::sendMenuDetails() const {
 	using Type = SendMenu::Type;
+	const auto weak = base::make_weak(this);
 	const auto ephemeralReply = session().ephemeralMessages()
 		.isEphemeralBotReply(replyTo().messageId);
 	const auto type = ephemeralReply
@@ -3376,6 +3383,20 @@ SendMenu::Details ChatWidget::sendMenuDetails() const {
 			: _history)->peer->id.value,
 		.bareTopicRootId = _topic ? _topic->rootId().bare : 0,
 		.effectAllowed = _peer->isUser(),
+		.disableSharingAllowed = [weak] {
+			const auto strong = weak.get();
+			return strong && BotUse::Selected(strong->_history);
+		},
+		.sharingDisabled = [weak] {
+			const auto strong = weak.get();
+			return strong
+				&& strong->_composeControls->draftNoForwards();
+		},
+		.toggleSharing = [weak] {
+			if (const auto strong = weak.get()) {
+				strong->_composeControls->toggleDraftNoForwards();
+			}
+		},
 	};
 }
 

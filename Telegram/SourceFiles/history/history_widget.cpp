@@ -2411,6 +2411,13 @@ void HistoryWidget::saveFieldToHistoryLocalDraft() {
 
 	const auto topicRootId = MsgId();
 	const auto monoforumPeerId = PeerId();
+	const auto existing = _history->localDraft(
+		topicRootId,
+		monoforumPeerId);
+	const auto noForwards = !_editMsgId
+		&& BotUse::Selected(_history)
+		&& existing
+		&& existing->noForwards;
 	if (_editMsgId) {
 		_history->setLocalEditDraft(std::make_unique<Data::Draft>(
 			_field,
@@ -2427,16 +2434,65 @@ void HistoryWidget::saveFieldToHistoryLocalDraft() {
 		_history->clearLocalEditDraft(topicRootId, monoforumPeerId);
 	} else {
 		const auto suggest = suggestOptions();
-		if (_replyTo || suggest.exists || !_field->empty()) {
-			_history->setLocalDraft(std::make_unique<Data::Draft>(
+		if (_replyTo || suggest.exists || !_field->empty() || noForwards) {
+			auto draft = std::make_unique<Data::Draft>(
 				_field,
 				_replyTo,
 				suggest,
-				_preview->draft()));
+				_preview->draft());
+			draft->noForwards = noForwards;
+			_history->setLocalDraft(std::move(draft));
 		} else {
 			_history->clearLocalDraft(topicRootId, monoforumPeerId);
 		}
 		_history->clearLocalEditDraft(topicRootId, monoforumPeerId);
+	}
+}
+
+bool HistoryWidget::draftNoForwards() const {
+	if (!_history || !BotUse::Selected(_history)) {
+		return false;
+	}
+	const auto draft = shouldShowRichDraftPreview()
+		? cloudDraft()
+		: _history->localDraft(MsgId(), PeerId());
+	return draft && draft->noForwards;
+}
+
+void HistoryWidget::toggleDraftNoForwards() const {
+	if (!_history || !BotUse::Selected(_history)) {
+		return;
+	} else if (shouldShowRichDraftPreview()) {
+		if (const auto draft = cloudDraft()) {
+			draft->noForwards = !draft->noForwards;
+		}
+		return;
+	}
+	const auto before = draftNoForwards();
+	auto draft = std::make_unique<Data::Draft>(
+		_field,
+		_replyTo,
+		suggestOptions(),
+		_preview ? _preview->draft() : Data::WebPageDraft());
+	draft->noForwards = !before;
+	if (!draft->noForwards && Data::DraftIsNull(draft.get())) {
+		_history->clearLocalDraft(MsgId(), PeerId());
+	} else {
+		_history->setLocalDraft(std::move(draft));
+	}
+}
+
+void HistoryWidget::clearDraftNoForwards() {
+	if (!_history) {
+		return;
+	}
+	const auto draft = _history->localDraft(MsgId(), PeerId());
+	if (!draft) {
+		return;
+	}
+	draft->noForwards = false;
+	if (Data::DraftIsNull(draft)) {
+		_history->clearLocalDraft(MsgId(), PeerId());
 	}
 }
 
@@ -5830,6 +5886,8 @@ Api::SendAction HistoryWidget::prepareSendAction(
 		? _history->session().sendAsPeers().resolveChosen(
 			_history->peer).get()
 		: nullptr;
+	result.options.noForwards = BotUse::Selected(_history)
+		&& draftNoForwards();
 	result.clearDraft = !isComposeBoxOpen();
 	result.originWindow = controller()->windowId();
 	return result;
@@ -5867,6 +5925,7 @@ void HistoryWidget::sendVoice(const VoiceToSend &data) {
 		data.duration,
 		data.video,
 		action);
+	clearDraftNoForwards();
 	_voiceRecordBar->clearListenState();
 }
 
@@ -6095,6 +6154,7 @@ void HistoryWidget::sendTextWithTags(
 	session().api().sendMessage(std::move(message), nextLocalMessageId);
 	_justMarkingAsRead = false;
 
+	clearDraftNoForwards();
 	clearFieldText();
 	if (_preview) {
 		_preview->apply({ .removed = true });
@@ -6164,6 +6224,7 @@ void HistoryWidget::sendScheduled(Api::SendOptions initialOptions) {
 }
 
 SendMenu::Details HistoryWidget::sendMenuDetails() const {
+	const auto weak = base::make_weak(this);
 	const auto ephemeralReply = session().ephemeralMessages()
 		.isEphemeralBotReply(replyTo().messageId);
 	const auto type = (!_peer || ephemeralReply)
@@ -6180,6 +6241,21 @@ SendMenu::Details HistoryWidget::sendMenuDetails() const {
 		.type = type,
 		.barePeerId = _peer ? _peer->id.value : 0,
 		.effectAllowed = effectAllowed,
+		.disableSharingAllowed = [weak] {
+			const auto strong = weak.get();
+			return strong
+				&& strong->_history
+				&& BotUse::Selected(strong->_history);
+		},
+		.sharingDisabled = [weak] {
+			const auto strong = weak.get();
+			return strong && strong->draftNoForwards();
+		},
+		.toggleSharing = [weak] {
+			if (const auto strong = weak.get()) {
+				strong->toggleDraftNoForwards();
+			}
+		},
 	};
 }
 
@@ -8244,6 +8320,7 @@ void HistoryWidget::sendingFilesConfirmed(
 			: nullptr;
 		api.sendFiles(std::move(group.list), type, album, action);
 	}
+	clearDraftNoForwards();
 }
 
 bool HistoryWidget::confirmSendingFiles(
@@ -10486,6 +10563,7 @@ bool HistoryWidget::sendExistingDocument(
 			localId);
 	}
 
+	clearDraftNoForwards();
 	if (_autocomplete && _autocomplete->stickersShown()) {
 		clearFieldText();
 		//saveDraftWithTextNow();
@@ -10542,6 +10620,7 @@ bool HistoryWidget::sendExistingPhoto(
 		Api::SendExistingPhoto(Api::MessageToSend(action), photo);
 	}
 
+	clearDraftNoForwards();
 	hideSelectorControlsAnimated();
 
 	setInnerFocus();

@@ -326,6 +326,9 @@ public:
 		FieldHistoryAction fieldHistoryAction = FieldHistoryAction::Clear);
 
 	void saveFieldToHistoryLocalDraft(bool save = true);
+	[[nodiscard]] bool draftNoForwards() const;
+	void toggleDraftNoForwards();
+	void clearDraftNoForwards();
 
 	Fn<void()> restoreTextCallback(const QString &insertTextOnCancel) const;
 

@@ -142,6 +142,7 @@ using UpdateFlag = Data::HistoryUpdate::Flag;
 		from.webpage);
 	result->richMessage = from.richMessage;
 	result->richMessageSummary = from.richMessageSummary;
+	result->noForwards = from.noForwards;
 	return result;
 }
 
@@ -160,6 +161,7 @@ void CopyDraftForThread(
 	to->webpage = from.webpage;
 	to->richMessage = from.richMessage;
 	to->richMessageSummary = from.richMessageSummary;
+	to->noForwards = from.noForwards;
 }
 
 } // namespace
@@ -405,7 +407,7 @@ Data::Draft *History::createCloudDraft(
 		PeerId monoforumPeerId,
 		const Data::Draft *fromDraft) {
 	if (Data::DraftIsNull(fromDraft)) {
-		setCloudDraft(std::make_unique<Data::Draft>(
+		auto draft = std::make_unique<Data::Draft>(
 			TextWithTags(),
 			FullReplyTo{
 				.topicRootId = topicRootId,
@@ -413,7 +415,9 @@ Data::Draft *History::createCloudDraft(
 			},
 			SuggestOptions(),
 			MessageCursor(),
-			Data::WebPageDraft()));
+			Data::WebPageDraft());
+		draft->noForwards = fromDraft && fromDraft->noForwards;
+		setCloudDraft(std::move(draft));
 		cloudDraft(topicRootId, monoforumPeerId)->date = TimeId(0);
 	} else {
 		auto existing = cloudDraft(topicRootId, monoforumPeerId);

@@ -62,6 +62,9 @@ struct Details {
 	std::optional<uint64> commentPriceMin;
 	const style::EmojiPan *effectsPan = nullptr;
 	bool effectAllowed = false;
+	Fn<bool()> disableSharingAllowed;
+	Fn<bool()> sharingDisabled;
+	Fn<void()> toggleSharing;
 };
 
 } // namespace SendMenu

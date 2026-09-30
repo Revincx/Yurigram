@@ -750,6 +750,22 @@ FillMenuResult FillSendMenu(
 			[=] { action({ Api::SendOptions{ .silent = true } }, details); },
 			&icons.menuMute);
 	}
+	if (sending
+		&& details.disableSharingAllowed
+		&& details.disableSharingAllowed()) {
+		const auto disabled = details.sharingDisabled
+			&& details.sharingDisabled();
+		menu->addAction(
+			disabled
+				? tr::lng_enable_sharing(tr::now)
+				: tr::lng_disable_sharing(tr::now),
+			[=] {
+				if (details.toggleSharing) {
+					details.toggleSharing();
+				}
+			},
+			disabled ? &st::menuIconShareOn : &st::menuIconShareOff);
+	}
 	if (sending && type != Type::SilentOnly) {
 		menu->addAction(
 			((type == Type::Reminder)

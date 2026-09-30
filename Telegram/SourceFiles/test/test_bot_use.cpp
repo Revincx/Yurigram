@@ -130,6 +130,8 @@ struct Fixture {
 	bool rejectNext = false;
 	bool hold = false;
 	std::vector<mtpBuffer> sent;
+	std::vector<bool> textNoForwards;
+	std::vector<bool> mediaNoForwards;
 
 	void respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuffer body);
 	BotUse::Completion completion();
@@ -206,6 +208,7 @@ void Fixture::respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuff
 		auto from = body.constData() + 1;
 		const auto end = body.constData() + body.size();
 		const auto flags = Read<MTPint>(from, end).v;
+		textNoForwards.push_back(flags & (1 << 14));
 		const auto peer = Read<MTPInputPeer>(from, end);
 		if (flags & 1) { Read<MTPInputReplyTo>(from, end); }
 		const auto text = Read<MTPstring>(from, end);
@@ -319,6 +322,10 @@ void Fixture::respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuff
 		Reply<MTPmessages_SetTyping>(instance, id, MTP_boolTrue());
 	} break;
 	case mtpc_messages_sendMedia: {
+		auto from = body.constData() + 1;
+		const auto end = body.constData() + body.size();
+		const auto flags = Read<MTPint>(from, end).v;
+		mediaNoForwards.push_back(flags & (1 << 14));
 		const auto request = Decode<MTPmessages_SendMedia>(body);
 		Reply<MTPmessages_SendMedia>(instance, id, MTP_updateShortSentMessage(
 			MTP_flags(0), MTP_int(nextMessage++), MTP_int(1), MTP_int(1), MTP_int(1),
@@ -473,6 +480,16 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		state->operation = state->manager->sendText(state->a, state->text(), state->completion());
 	}, [=] { Check(state->result->state == BotUse::OperationState::Completed
 		&& state->result->messages.size() == 1, u"Text result resolves without update subscription"_q); });
+	add(u"send protected text"_q, [=] {
+		auto message = state->text();
+		message.action.options.noForwards = true;
+		state->operation = state->manager->sendText(
+			state->a,
+			message,
+			state->completion());
+	}, [=] { Check(state->result->state == BotUse::OperationState::Completed
+		&& state->textNoForwards.back(),
+		u"Protected text uses the noforwards request flag"_q); });
 	add(u"foreign bot deletion"_q, [=] {
 		const auto target = state->result->messages;
 		state->operation = state->manager->deleteMessages(state->b, target, state->completion());
@@ -498,10 +515,17 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		block.kind = Iv::RichPage::BlockKind::Paragraph;
 		block.text.text = { u"Rich fixture"_q, { EntityInText(EntityType::Bold, 0, 4) } };
 		page->blocks.push_back(block);
-		state->operation = state->manager->sendRichMessage(state->a, page,
-			state->text().action, state->completion());
+		auto action = state->text().action;
+		action.options.noForwards = true;
+		state->operation = state->manager->sendRichMessage(
+			state->a,
+			page,
+			action,
+			state->completion());
 	}, [=] { Check(state->result->state == BotUse::OperationState::Completed
-		&& !state->result->data.empty() && bool(state->result->data.front().c_message().vrich_message()),
+		&& !state->result->data.empty()
+		&& bool(state->result->data.front().c_message().vrich_message())
+		&& state->textNoForwards.back(),
 		u"RichPage roundtrip preserves the native rich result"_q); });
 	add(u"own deletion"_q, [=] {
 		const auto target = state->result->messages;
@@ -517,9 +541,17 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		auto file = std::make_shared<FilePrepareResult>(std::move(descriptor));
 		file->content = QByteArray(600000, 'x');
 		file->filename = u"fixture.jpg"_q;
-		state->operation = state->manager->sendMedia(state->a, state->text(), file, state->completion());
+		auto message = state->text();
+		message.action.options.noForwards = true;
+		state->operation = state->manager->sendMedia(
+			state->a,
+			message,
+			file,
+			state->completion());
 	}, [=] { Check(state->result->state == BotUse::OperationState::Completed && state->parts == 2,
-		u"Media uses bot chunk upload and native message result"_q); });
+		u"Media uses bot chunk upload and native message result"_q);
+		Check(state->mediaNoForwards.back(),
+			u"Protected media uses the noforwards request flag"_q); });
 	runner->add({ .name = u"botuse local media preview"_q, .run = [=] {
 		const auto session = Core::App().domain().active().maybeSession();
 		auto photo = std::make_shared<FilePrepareResult>(FilePrepareDescriptor{
@@ -570,7 +602,8 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 			? u"botuse channel local message"_q
 			: u"botuse supergroup local message"_q, .run = [=] {
 			const auto session = Core::App().domain().active().maybeSession();
-			const auto message = state->text(channel);
+			auto message = state->text(channel);
+			message.action.options.noForwards = (channel == 100);
 			const auto history = message.action.history;
 			session->botUseChats().choose(history->peer->id, state->a);
 			state->local = FullMsgId(history->peer->id,
@@ -581,7 +614,9 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 			const auto item = session->data().message(state->local);
 			Check(sent && item && item->isSending()
 				&& item->from()->id == peerFromUser(UserId(11))
-				&& !item->out(), u"Bot local message has its own sender"_q);
+				&& !item->out()
+				&& (item->forbidsForward() == (channel == 100)),
+				u"Bot local message has its own sender and sharing state"_q);
 		}, .until = [=] {
 			const auto session = Core::App().domain().active().maybeSession();
 			return session && session->data().message(state->expectedReal);
@@ -682,11 +717,17 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		Check(choices.choice(first) == BotUse::ChatChoice{ true, state->a }
 			&& choices.choice(second) == BotUse::ChatChoice{ true, state->b },
 			u"Bot identities stay separate by chat"_q);
+		const auto firstHistory = session->data().history(first);
+		auto protectedDraft = std::make_unique<Data::Draft>();
+		protectedDraft->noForwards = true;
+		firstHistory->setLocalDraft(std::move(protectedDraft));
 		choices.clear(first);
+		const auto clearedDraft = firstHistory->localDraft(MsgId(), PeerId());
 		Check(!choices.choice(first).enabled
 			&& choices.choice(first).bot == 0
-			&& choices.choice(second).bot == state->b,
-			u"Using the personal account clears only its chat"_q);
+			&& choices.choice(second).bot == state->b
+			&& (!clearedDraft || !clearedDraft->noForwards),
+			u"Using the personal account clears its protected draft"_q);
 	} });
 }
 

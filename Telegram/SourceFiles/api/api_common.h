@@ -34,6 +34,7 @@ struct SendOptions {
 	int64 stakeNanoTon = 0;
 	int starsApproved = 0;
 	bool silent = false;
+	bool noForwards = false;
 	bool handleSupportSwitch = false;
 	bool invertCaption = false;
 	bool hideViaBot = false;

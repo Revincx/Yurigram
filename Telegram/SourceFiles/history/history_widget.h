@@ -441,6 +441,9 @@ private:
 	void showMembersDropdown();
 	void windowIsVisibleChanged();
 	void saveFieldToHistoryLocalDraft();
+	[[nodiscard]] bool draftNoForwards() const;
+	void toggleDraftNoForwards() const;
+	void clearDraftNoForwards();
 	void fileChosen(ChatHelpers::FileChosen &&data);
 	void setupSendMenu(
 		not_null<Ui::RpWidget*> button,

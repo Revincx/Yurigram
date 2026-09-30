@@ -13,6 +13,25 @@ namespace {
 
 constexpr auto kMembersCacheDuration = 5 * crl::time(60 * 1000);
 
+void ClearDraftNoForwards(
+		not_null<Main::Session*> session,
+		PeerId peer) {
+	const auto history = session->data().historyLoaded(peer);
+	if (!history) {
+		return;
+	}
+	auto empty = std::vector<Data::DraftKey>();
+	for (const auto &[key, draft] : history->draftsMap()) {
+		draft->noForwards = false;
+		if (Data::DraftIsNull(draft.get())) {
+			empty.push_back(key);
+		}
+	}
+	for (const auto key : empty) {
+		history->clearDraft(key);
+	}
+}
+
 } // namespace
 
 void ChatState::bind(
@@ -51,6 +70,7 @@ void ChatState::choose(PeerId peer, BotId bot) {
 
 void ChatState::clear(PeerId peer) {
 	if (_choices.erase(peer)) {
+		ClearDraftNoForwards(_session, peer);
 		_changes.fire_copy(peer);
 	}
 }
@@ -185,6 +205,7 @@ void ChatState::prune() {
 		} else {
 			const auto peer = i->first;
 			i = _choices.erase(i);
+			ClearDraftNoForwards(_session, peer);
 			_changes.fire_copy(peer);
 		}
 	}

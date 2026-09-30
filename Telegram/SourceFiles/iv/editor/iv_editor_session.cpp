@@ -892,6 +892,11 @@ private:
 		saveRichDraftNow();
 	}) {
 		subscribeToUploader();
+		if (_submitOptions.noForwards
+			&& botUseActive()
+			&& !draftNoForwards()) {
+			toggleDraftNoForwards();
+		}
 	}
 
 	void setEditorShow(std::shared_ptr<ChatHelpers::Show> show) {
@@ -1440,6 +1445,7 @@ private:
 				SuggestOptions(),
 				MessageCursor(),
 				::Data::WebPageDraft());
+			freshDraft.noForwards = _submitOptions.noForwards;
 			freshDraft.richMessage = _submittedPage;
 			freshDraft.richMessageSummary = FlattenRichPageSummary(*_submittedPage);
 			_botUsePendingDraft
@@ -1832,6 +1838,7 @@ private:
 	}
 
 	void requestSubmit(Api::SendOptions options) {
+		options.noForwards = botUseActive() && draftNoForwards();
 		_submitOptions = std::move(options);
 		if (_composeAction) {
 			_composeAction->options = _submitOptions;
@@ -1865,7 +1872,27 @@ private:
 		SendMenu::SetupMenuAndShortcuts(
 			button,
 			show,
-			[details = _sendMenuDetails] { return details; },
+			[weak] {
+				const auto session = weak.get();
+				if (!session) {
+					return SendMenu::Details();
+				}
+				auto result = session->_sendMenuDetails;
+				result.disableSharingAllowed = [weak] {
+					const auto session = weak.get();
+					return session && session->botUseActive();
+				};
+				result.sharingDisabled = [weak] {
+					const auto session = weak.get();
+					return session && session->draftNoForwards();
+				};
+				result.toggleSharing = [weak] {
+					if (const auto session = weak.get()) {
+						session->toggleDraftNoForwards();
+					}
+				};
+				return result;
+			},
 			SendMenu::DefaultCallback(show, submit));
 	}
 
@@ -3729,6 +3756,9 @@ private:
 	void cancelRichDraftAutosave();
 	void restartRichDraftAutosave();
 	void handleRichDraftAutosave(Widget::AutosaveEvent event);
+	[[nodiscard]] bool botUseActive() const;
+	[[nodiscard]] bool draftNoForwards() const;
+	void toggleDraftNoForwards();
 	[[nodiscard]] std::optional<::Data::Draft> prepareRichDraftForAutosave() const;
 	void saveRichDraftNow();
 	void startCloseWithDraftSave();
@@ -4591,6 +4621,41 @@ void ArticleSession::handleRichDraftAutosave(Widget::AutosaveEvent event) {
 		saveRichDraftNow();
 		return;
 	}
+}
+
+bool ArticleSession::botUseActive() const {
+	return _botUse
+		&& _composeAction
+		&& BotUse::Selected(_composeAction->history);
+}
+
+bool ArticleSession::draftNoForwards() const {
+	if (!_composeAction || !_composeThreadKey) {
+		return false;
+	}
+	const auto draft = _composeAction->history->cloudDraft(
+		_composeThreadKey->draftKey.topicRootId(),
+		_composeThreadKey->draftKey.monoforumPeerId());
+	return draft && draft->noForwards;
+}
+
+void ArticleSession::toggleDraftNoForwards() {
+	if (!botUseActive() || !_composeThreadKey) {
+		return;
+	}
+	const auto prepared = prepareRichDraftForAutosave();
+	if (!prepared) {
+		return;
+	}
+	const auto topicRootId = _composeThreadKey->draftKey.topicRootId();
+	const auto monoforumPeerId
+		= _composeThreadKey->draftKey.monoforumPeerId();
+	auto draft = *prepared;
+	draft.noForwards = !draftNoForwards();
+	_composeAction->history->createCloudDraft(
+		topicRootId,
+		monoforumPeerId,
+		&draft);
 }
 
 std::optional<::Data::Draft> ArticleSession::prepareRichDraftForAutosave() const {

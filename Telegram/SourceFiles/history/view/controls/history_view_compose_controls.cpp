@@ -2491,6 +2491,7 @@ TextWithTags ComposeControls::getTextWithAppliedMarkdown() const {
 void ComposeControls::clear(bool keepReply) {
 	// Otherwise cancelReplyMessage() will save the draft.
 	const auto saveTextDraft = keepReply || !replyingToMessage();
+	clearDraftNoForwards();
 	setFieldText(
 		{},
 		saveTextDraft ? TextUpdateEvent::SaveDraft : TextUpdateEvent());
@@ -2538,21 +2539,84 @@ void ComposeControls::saveFieldToHistoryLocalDraft(bool save) {
 	const auto suggest = _currentSuggest
 		? _currentSuggest()
 		: SuggestOptions();
+	const auto existing = _history->draft(key);
+	const auto noForwards = BotUse::Selected(_history)
+		&& existing
+		&& existing->noForwards;
 	if (shouldShowRichDraftPreview()) {
 		_history->clearDraft(key);
-	} else if (_preview && (id || suggest.exists || !_field->empty())) {
+	} else if (_preview
+		&& (id || suggest.exists || !_field->empty() || noForwards)) {
+		auto draft = std::make_unique<Data::Draft>(
+			_field,
+			id,
+			suggest,
+			_preview->draft());
+		draft->noForwards = noForwards;
 		_history->setDraft(
 			key,
-			std::make_unique<Data::Draft>(
-				_field,
-				id,
-				suggest,
-				_preview->draft()));
+			std::move(draft));
 	} else {
 		_history->clearDraft(key);
 	}
 	if (save) {
 		saveDraftWithTextNow();
+	}
+}
+
+bool ComposeControls::draftNoForwards() const {
+	if (!_history || !BotUse::Selected(_history)) {
+		return false;
+	}
+	const auto draft = shouldShowRichDraftPreview()
+		? cloudDraft()
+		: _history->draft(draftKey(DraftType::Normal));
+	return draft && draft->noForwards;
+}
+
+void ComposeControls::toggleDraftNoForwards() {
+	if (!_history || !BotUse::Selected(_history)) {
+		return;
+	} else if (shouldShowRichDraftPreview()) {
+		if (const auto draft = cloudDraft()) {
+			draft->noForwards = !draft->noForwards;
+		}
+		return;
+	}
+	const auto key = draftKey(DraftType::Normal);
+	if (!key) {
+		return;
+	}
+	const auto before = draftNoForwards();
+	saveFieldToHistoryLocalDraft(false);
+	if (const auto draft = _history->draft(key)) {
+		draft->noForwards = !before;
+		if (!draft->noForwards && Data::DraftIsNull(draft)) {
+			_history->clearDraft(key);
+		}
+	} else {
+		auto fresh = std::make_unique<Data::Draft>(
+			_field,
+			_header->getDraftReply(),
+			_currentSuggest ? _currentSuggest() : SuggestOptions(),
+			_preview ? _preview->draft() : Data::WebPageDraft());
+		fresh->noForwards = true;
+		_history->setDraft(key, std::move(fresh));
+	}
+}
+
+void ComposeControls::clearDraftNoForwards() {
+	if (!_history) {
+		return;
+	}
+	const auto key = draftKey(DraftType::Normal);
+	const auto draft = _history->draft(key);
+	if (!draft) {
+		return;
+	}
+	draft->noForwards = false;
+	if (Data::DraftIsNull(draft)) {
+		_history->clearDraft(key);
 	}
 }
 
