@@ -14,7 +14,10 @@
 #include "data/data_document_media.h"
 #include "history/history.h"
 #include "history/history_item.h"
+#include "iv/editor/iv_editor_session.h"
+#include "iv/editor/iv_editor_widget.h"
 #include "iv/iv_rich_message_serializer.h"
+#include "lang/lang_keys.h"
 #include "main/main_account.h"
 #include "main/main_domain.h"
 #include "main/main_session.h"
@@ -25,6 +28,11 @@
 #include "test/test_log.h"
 #include "test/test_rpc_fixture.h"
 #include "test/test_runner.h"
+#include "test/test_widgets.h"
+#include "ui/widgets/buttons.h"
+#include "window/window_session_controller.h"
+
+#include <QtWidgets/QApplication>
 
 #include <map>
 
@@ -81,13 +89,14 @@ MTPChat Channel(uint64 id) {
 }
 
 MTPMessage Message(int id, uint64 peer, uint64 author,
-		std::optional<MTPRichMessage> rich = {}) {
+		std::optional<MTPRichMessage> rich = {},
+		QString text = u"fixture message"_q) {
 	auto buffer = mtpBuffer{ mtpPrime(mtpc_message), 256, mtpPrime(rich ? 8192 : 0) };
 	MTP_int(id).write(buffer);
 	MTPPeer(MTP_peerUser(MTP_long(author))).write(buffer);
 	MTPPeer(MTP_peerChannel(MTP_long(peer))).write(buffer);
 	MTP_int(1).write(buffer);
-	MTP_string("fixture message").write(buffer);
+	MTP_string(text).write(buffer);
 	if (rich) { rich->write(buffer); }
 	return Decode<MTPMessage>(buffer);
 }
@@ -96,6 +105,37 @@ MTPmessages_Messages Messages(const std::vector<MTPMessage> &messages) {
 	return MTP_messages_messages(
 		MTP_vector<MTPMessage>(QVector<MTPMessage>(messages.begin(), messages.end())),
 		MTP_vector<MTPForumTopic>(), MTP_vector<MTPChat>(), MTP_vector<MTPUser>());
+}
+
+MTPPhoto RichPhoto(const QByteArray &reference) {
+	return MTP_photo(
+		MTP_flags(0), MTP_long(9200), MTP_long(9201), MTP_bytes(reference),
+		MTP_int(1), MTP_vector<MTPPhotoSize>(1, MTP_photoSize(
+			MTP_string("x"), MTP_int(32), MTP_int(32), MTP_int(512))),
+		MTP_vector<MTPVideoSize>(), MTP_int(2));
+}
+
+Iv::Editor::Widget *FindRichEditor() {
+	for (const auto window : QApplication::topLevelWidgets()) {
+		if (const auto editor = FindFirst<Iv::Editor::Widget>(window)) {
+			if (!editor->isHidden()) {
+				return editor;
+			}
+		}
+	}
+	return nullptr;
+}
+
+void SaveRichEditor(not_null<Iv::Editor::Widget*> editor) {
+	const auto activation = ForceWindowActive(editor->window());
+	Check(activation.refusal.isEmpty(), u"Rich editor window activates"_q);
+	for (const auto button : FindAll<Ui::AbstractButton>(editor->window())) {
+		if (button->accessibleName() == tr::lng_settings_save(tr::now)) {
+			Click(button);
+			return;
+		}
+	}
+	Fail(u"Rich editor Save button is available"_q);
 }
 
 struct Fixture {
@@ -111,6 +151,13 @@ struct Fixture {
 	int nextMessage = 1000;
 	int deletes = 0;
 	int edits = 0;
+	int editBefore = 0;
+	uint64 editUser = 0;
+	bool editRich = false;
+	bool omitEditUpdate = false;
+	uint64 richReadUser = 0;
+	int richReadId = 0;
+	QByteArray richEditReference;
 	int auths = 0;
 	int parts = 0;
 	int uploads = 0;
@@ -122,6 +169,8 @@ struct Fixture {
 	mtpTypeId typingAction = 0;
 	FullMsgId local;
 	FullMsgId expectedReal;
+	FullMsgId editTarget;
+	std::shared_ptr<const Iv::RichPage> editOriginal;
 	bool delayedBotResult = false;
 	QPointer<MTP::Instance> delayedInstance;
 	mtpRequestId delayedRequest = 0;
@@ -252,15 +301,69 @@ void Fixture::respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuff
 	} break;
 	case mtpc_messages_editMessage: {
 		++edits;
+		editUser = users.at(instance.data());
 		auto from = body.constData() + 1;
 		const auto end = body.constData() + body.size();
-		Read<MTPint>(from, end);
+		const auto flags = Read<MTPint>(from, end).v;
 		const auto peer = Read<MTPInputPeer>(from, end);
 		const auto messageId = Read<MTPint>(from, end);
+		const auto text = (flags & (1 << 11))
+			? qs(Read<MTPstring>(from, end)) : u"fixture message"_q;
+		if (flags & (1 << 14)) { Read<MTPInputMedia>(from, end); }
+		if (flags & (1 << 2)) { Read<MTPReplyMarkup>(from, end); }
+		if (flags & (1 << 3)) { Read<MTPVector<MTPMessageEntity>>(from, end); }
+		if (flags & (1 << 15)) { Read<MTPint>(from, end); }
+		if (flags & (1 << 18)) { Read<MTPint>(from, end); }
+		if (flags & (1 << 17)) { Read<MTPint>(from, end); }
+		editRich = flags & (1 << 23);
+		Check(!editRich || !(flags & (1 << 14)),
+			u"Rich edits do not replace the outer message media"_q);
+		auto rich = std::optional<MTPRichMessage>();
+		if (editRich) {
+			const auto input = Read<MTPInputRichMessage>(from, end);
+			const auto &content = input.c_inputRichMessage();
+			if (const auto photos = content.vphotos()) {
+				richEditReference = photos->v.front()
+					.c_inputPhoto().vfile_reference().v;
+			}
+			rich = MTP_richMessage(
+				MTP_flags(0),
+				content.vblocks(),
+				content.vphotos()
+					? MTP_vector<MTPPhoto>(1, RichPhoto("bot-fixture-reference"))
+					: MTP_vector<MTPPhoto>(),
+				MTP_vector<MTPDocument>());
+		}
+		Check(from == end, u"Bot rich edit request decodes completely"_q);
+		if (rejectNext) {
+			rejectNext = false;
+			const auto delivered = DeliverControlledRpcError(
+				instance.data(), id, 400, u"CHAT_ADMIN_REQUIRED"_q);
+			Check(delivered.diagnosis.isEmpty(), u"Bot edit failure is delivered"_q);
+			return;
+		}
 		const auto channel = peer.c_inputPeerChannel().vchannel_id().v;
-		Reply<MTPmessages_EditMessage>(instance, id, MTP_updateShort(
-			MTP_updateEditChannelMessage(Message(messageId.v, channel, users.at(instance.data())),
+		const auto message = Message(messageId.v, channel, editUser, rich, text);
+		messages.insert_or_assign(messageId.v, message);
+		if (base::take(omitEditUpdate)) {
+			Reply<MTPmessages_EditMessage>(instance, id, MTP_updates(
+				MTP_vector<MTPUpdate>(), MTP_vector<MTPUser>(),
+				MTP_vector<MTPChat>(), MTP_int(1), MTP_int(1)));
+		} else {
+			Reply<MTPmessages_EditMessage>(instance, id, MTP_updateShort(
+			MTP_updateEditChannelMessage(message,
 				MTP_int(1), MTP_int(1)), MTP_int(1)));
+		}
+	} break;
+	case mtpc_messages_getRichMessage: {
+		auto from = body.constData() + 1;
+		const auto end = body.constData() + body.size();
+		Read<MTPInputPeer>(from, end);
+		richReadId = Read<MTPint>(from, end).v;
+		richReadUser = users.at(instance.data());
+		Check(from == end, u"Bot retrieves original rich media references"_q);
+		Reply<MTPmessages_GetRichMessage>(instance, id,
+			Messages({ messages.at(richReadId) }));
 	} break;
 	case mtpc_channels_getMessages: {
 		auto from = body.constData() + 1;
@@ -370,6 +473,7 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		account->createSession(User(999000, false));
 	} });
 	runner->onFinish([=] {
+		Iv::Editor::CloseAllWindows();
 		Responder = nullptr;
 		state->manager->reset();
 	});
@@ -596,7 +700,122 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		&& state->result->media
 		&& state->result->media->type() == mtpc_messageMediaPhoto
 		&& state->uploads >= 2,
-		u"Rich editor media uses Bot upload before send"_q); });
+	u"Rich editor media uses Bot upload before send"_q); });
+	for (const auto mode : { 0, 1, 2, 3 }) {
+		runner->add({ .name = u"open channel rich editor %1"_q.arg(mode), .run = [=] {
+			const auto session = Core::App().domain().active().maybeSession();
+			const auto history = state->text().action.history;
+			auto blocks = QVector<MTPPageBlock>{ MTP_pageBlockHeader(
+				MTP_textPlain(MTP_string("Original heading"))) };
+			if (mode == 0) {
+				blocks.push_back(MTP_pageBlockPhoto(
+					MTP_flags(0), MTP_long(9200),
+					MTP_pageCaption(MTP_textEmpty(), MTP_textEmpty()),
+					MTPstring(), MTPlong()));
+			}
+			const auto rich = MTP_richMessage(
+				MTP_flags(0),
+				MTP_vector<MTPPageBlock>(blocks),
+				mode == 0
+					? MTP_vector<MTPPhoto>(1, RichPhoto("user-fixture-reference"))
+					: MTP_vector<MTPPhoto>(),
+				MTP_vector<MTPDocument>());
+			const auto item = session->data().addNewMessage(
+				Message(9500 + mode, 100, 77, rich),
+				MessageFlags(), NewMessageType::Existing);
+			Expects(item != nullptr);
+			state->editTarget = item->fullId();
+			state->editOriginal = item->richPage();
+			state->editBefore = state->edits;
+			if (mode == 0) {
+				state->messages.insert_or_assign(9500, Message(9500, 100, 77,
+					MTP_richMessage(
+						MTP_flags(0), MTP_vector<MTPPageBlock>(blocks),
+						MTP_vector<MTPPhoto>(1, RichPhoto("bot-fixture-reference")),
+						MTP_vector<MTPDocument>())));
+			}
+			session->botUseChats().clear(history->peer->id);
+			Check(!BotUse::RichEditBot(item),
+				u"Personal identity does not enable Bot rich editing"_q);
+			session->botUseChats().choose(history->peer->id, state->a);
+			Check(BotUse::RichEditBot(item) == state->a && !session->premium(),
+				u"Selected Bot permits channel rich editing without Premium"_q);
+			const auto controller = session->tryResolveWindow(history->peer);
+			Expects(controller != nullptr);
+			Iv::Editor::ShowEditBox(controller, item);
+		}, .until = [=] { return FindRichEditor() != nullptr; }, .then = [=] {
+			const auto session = Core::App().domain().active().maybeSession();
+			const auto editor = FindRichEditor();
+			Expects(editor != nullptr);
+			editor->applyExternalRichPageMutation([=](Iv::RichPage &page) {
+				page.blocks.front().text.text.text = u"Bot editor saved"_q;
+				if (mode == 1) {
+					page.blocks.front().kind = Iv::RichPage::BlockKind::Paragraph;
+				}
+				return true;
+			});
+			if (mode == 0) {
+				session->botUseChats().choose(state->editTarget.peer, state->b);
+				state->omitEditUpdate = true;
+			} else if (mode == 1) {
+				session->botUseChats().clear(state->editTarget.peer);
+			} else if (mode == 2) {
+				state->rejectNext = true;
+			}
+			SaveRichEditor(editor);
+		} });
+		runner->add({ .name = u"save channel rich editor %1"_q.arg(mode), .until = [=] {
+			const auto session = Core::App().domain().active().maybeSession();
+			const auto item = session->data().message(state->editTarget);
+			if (state->edits <= state->editBefore
+				|| state->manager->busy()
+				|| Iv::Editor::HasEditWindowFor(session, state->editTarget)) {
+				return false;
+			}
+			return mode == 2
+				|| (mode == 1 && !item->richPage()
+					&& item->originalText().text == u"Bot editor saved"_q)
+				|| ((mode == 0 || mode == 3) && item->richPage()
+					&& item->richPage()->blocks.front().text.text.text
+						== u"Bot editor saved"_q);
+		}, .then = [=] {
+			const auto session = Core::App().domain().active().maybeSession();
+			const auto item = session->data().message(state->editTarget);
+			Check(state->editUser == 11 && state->edits == state->editBefore + 1
+				&& state->editRich == (mode != 1),
+				u"Rich editor saves through its original Bot identity"_q);
+			if (mode == 0) {
+				Check(state->richReadUser == 11 && state->richReadId == 9500
+					&& state->richEditReference == "bot-fixture-reference"
+					&& item->richPage()->blocks.size() == 2
+					&& item->richPage()->blocks.back().kind
+						== Iv::RichPage::BlockKind::Photo
+					&& item->richPage()->blocks.back().photoId == 9200,
+					u"Retained rich media uses Bot references instead of user credentials"_q);
+			}
+			if (mode == 2) {
+				Check(item->richPage() == state->editOriginal,
+					u"Rejected Bot edit preserves the original channel content"_q);
+			}
+		} });
+	}
+	runner->add({ .name = u"personal rich editor keeps user path"_q, .run = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto item = session->data().message(state->editTarget);
+		session->botUseChats().clear(item->history()->peer->id);
+		state->editBefore = state->edits;
+		Iv::Editor::ShowEditBox(session->tryResolveWindow(item->history()->peer), item);
+	}, .until = [=] { return FindRichEditor() != nullptr; }, .then = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto editor = FindRichEditor();
+		Expects(editor != nullptr);
+		session->botUseChats().choose(state->editTarget.peer, state->a);
+		SaveRichEditor(editor);
+		Check(state->edits == state->editBefore
+			&& Iv::Editor::HasEditWindowFor(session, state->editTarget),
+			u"Personal editor retains the Premium check after BotUse is enabled"_q);
+		Iv::Editor::CloseAllWindows();
+	} });
 	for (const auto channel : { uint64(100), uint64(101) }) {
 		runner->add({ .name = channel == 100
 			? u"botuse channel local message"_q

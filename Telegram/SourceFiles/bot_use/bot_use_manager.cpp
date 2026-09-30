@@ -546,6 +546,11 @@ OperationId Manager::editRichMessage(
 	op->validation = page
 		? SnapshotRich(*page, sources, *op)
 		: Error{ u"RICH_MESSAGE_EMPTY"_q };
+	for (auto &source : op->media) {
+		if (!source.origin) {
+			source.origin = message;
+		}
+	}
 	return submit(std::move(op));
 }
 

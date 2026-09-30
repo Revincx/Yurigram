@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_inner_widget.h"
 
 #include "api/api_polls.h"
+#include "bot_use/bot_use_sending.h"
 #include "chat_helpers/stickers_emoji_pack.h"
 #include "core/application.h"
 #include "core/enhanced_settings.h"
@@ -3150,7 +3151,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 		const auto t = base::unixtime::now();
 		const auto editItem = (albumPartItem && albumPartItem->allowsEdit(t))
 			? albumPartItem
-			: item->allowsEdit(t)
+			: (item->allowsEdit(t) || BotUse::RichEditBot(item))
 			? item
 			: nullptr;
 		if (editItem) {

@@ -22,6 +22,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_toggling_media.h" // Api::ToggleFavedSticker
 #include "base/qt/qt_key_modifiers.h"
 #include "base/unixtime.h"
+#include "bot_use/bot_use_sending.h"
 #include "history/view/history_view_list_widget.h"
 #include "history/view/controls/history_view_suggest_options.h"
 #include "history/view/history_view_cursor_state.h"
@@ -325,7 +326,9 @@ bool HasEditMessageAction(
 	}
 	const auto peer = item->history()->peer;
 	if (const auto channel = peer->asChannel()) {
-		if (!channel->isMegagroup() && !channel->canEditMessages()) {
+		if (!channel->isMegagroup()
+			&& !channel->canEditMessages()
+			&& !BotUse::RichEditBot(item)) {
 			return false;
 		}
 	}
@@ -1228,7 +1231,8 @@ bool AddEditMessageAction(
 		}
 		return base;
 	}();
-	if (!item->allowsEdit(base::unixtime::now())) {
+	if (!item->allowsEdit(base::unixtime::now())
+		&& !BotUse::RichEditBot(item)) {
 		return false;
 	}
 	const auto owner = &item->history()->owner();

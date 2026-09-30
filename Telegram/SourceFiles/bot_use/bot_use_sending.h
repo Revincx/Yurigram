@@ -3,6 +3,7 @@
 #include "bot_use/bot_use_types.h"
 
 class History;
+class HistoryItem;
 class DocumentData;
 class PhotoData;
 namespace Main { class Session; }
@@ -10,6 +11,7 @@ namespace Main { class Session; }
 namespace BotUse {
 
 [[nodiscard]] BotId Selected(not_null<History*> history);
+[[nodiscard]] BotId RichEditBot(not_null<HistoryItem*> item);
 [[nodiscard]] BotId RichDraftBot(
 	not_null<History*> history,
 	const FullReplyTo &reply);

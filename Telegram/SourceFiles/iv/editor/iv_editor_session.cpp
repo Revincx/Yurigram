@@ -677,6 +677,7 @@ public:
 	static void ShowEdit(
 		not_null<HistoryItem*> item,
 		std::shared_ptr<const RichPage> richPage,
+		BotUse::BotId bot,
 		base::weak_ptr<Window::SessionController> controller) {
 		if (ActivateEditWindow(&item->history()->session(), item->fullId())) {
 			return;
@@ -704,7 +705,8 @@ public:
 				.fullPage = item->fullRichPage(),
 			},
 			std::nullopt,
-			std::move(controller)));
+			std::move(controller),
+			bot));
 		articleSession->showWindow();
 	}
 
@@ -859,7 +861,7 @@ private:
 		std::optional<EditedItemSnapshot> edited,
 		std::optional<ComposeThreadKey> composeThreadKey,
 		base::weak_ptr<Window::SessionController> controller = {},
-		std::optional<BotUse::BotId> draftBot = std::nullopt)
+		std::optional<BotUse::BotId> bot = std::nullopt)
 	: _session(session)
 	, _peer(peer)
 	, _controller(std::move(controller))
@@ -869,8 +871,8 @@ private:
 		: ShowWindowDescriptor::SubmitType::Save)
 	, _articleId(articleId)
 	, _composeAction(std::move(action))
-	, _botUse((_mode == Mode::Compose && _composeAction)
-		? draftBot.value_or(BotUse::Selected(_composeAction->history)) : 0)
+	, _botUse(bot.value_or((_mode == Mode::Compose && _composeAction)
+		? BotUse::Selected(_composeAction->history) : 0))
 	, _sendMenuDetails(std::move(sendMenuDetails))
 	, _composeOptions(std::move(composeOptions))
 	, _edited(std::move(edited))
@@ -1120,7 +1122,7 @@ private:
 			}
 		};
 		if (simple) {
-			if (!submitPaymentChecked(simple, withPaymentApproved)) {
+			if (!_botUse && !submitPaymentChecked(simple, withPaymentApproved)) {
 				return false;
 			}
 			return submitSimpleText(std::move(*simple));
@@ -1229,6 +1231,24 @@ private:
 		if (!item) {
 			showToast(tr::lng_edit_error(tr::now));
 			return false;
+		}
+		if (_botUse) {
+			_submitApiRequested = true;
+			_backgroundHold = shared_from_this();
+			const auto operation = _session->domain().botUse().editMessage(
+				_botUse,
+				BotUse::Edit{
+					.message = item->fullId(),
+					.text = std::move(text),
+					.webPage = ::Data::WebPageDraft{ .removed = true },
+					.options = editMessageOptions(not_null{ item }),
+				},
+				botUseEditCompletion());
+			if (!operation) {
+				finishSubmittedWork();
+				return false;
+			}
+			return true;
 		}
 		Api::EditTextMessage(
 			not_null{ item },
@@ -1667,6 +1687,11 @@ private:
 			: SerializeInputRichMessageResult();
 	}
 
+	[[nodiscard]] auto submittedBotUseMediaSources() const
+		-> std::vector<BotUse::RichMediaSource>;
+	[[nodiscard]] BotUse::Completion botUseEditCompletion();
+	void finishBotUseEdit(const BotUse::Result &result);
+
 	void maybeContinueSubmittedRequest() {
 		if (!_submittedPage || _submitApiRequested) {
 			return;
@@ -1678,22 +1703,27 @@ private:
 		if (!submittedAttachmentsReady()) {
 			return;
 		}
-		if (_botUse && _mode == Mode::Compose) {
-			auto sources = std::vector<BotUse::RichMediaSource>();
-			for (const auto &attachment : _attachments) {
-				if (attachment.prepared
-					&& attachment.state == AttachmentState::Ready
-					&& submittedPageContainsAttachment(attachment)) {
-					sources.push_back({
-						.id = attachment.serverMediaId,
-						.photo = attachment.blockKind == RichPage::BlockKind::Photo,
-						.uploadedPhoto = attachment.serverPhoto
-							? std::make_optional(attachment.inputPhoto) : std::nullopt,
-						.uploadedDocument = attachment.serverDocument
-							? std::make_optional(attachment.inputDocument) : std::nullopt,
-					});
-				}
+		if (_botUse && _mode == Mode::Edit) {
+			const auto item = currentSubmittedItem();
+			if (!item) {
+				finishSubmittedWork();
+				return;
 			}
+			_submitApiRequested = true;
+			const auto operation = _session->domain().botUse().editRichMessage(
+				_botUse,
+				item->fullId(),
+				_submittedPage,
+				editMessageOptions(not_null{ item }),
+				botUseEditCompletion(),
+				submittedBotUseMediaSources());
+			if (!operation) {
+				finishSubmittedWork();
+			}
+			return;
+		}
+		if (_botUse && _mode == Mode::Compose) {
+			const auto sources = submittedBotUseMediaSources();
 			auto action = *_composeAction;
 			action.options = _submitOptions;
 			action.options.sendAs = nullptr;
@@ -4551,6 +4581,52 @@ private:
 
 };
 
+auto ArticleSession::submittedBotUseMediaSources() const
+-> std::vector<BotUse::RichMediaSource> {
+	auto sources = std::vector<BotUse::RichMediaSource>();
+	for (const auto &attachment : _attachments) {
+		if (attachment.prepared
+			&& attachment.state == AttachmentState::Ready
+			&& submittedPageContainsAttachment(attachment)) {
+			sources.push_back({
+				.id = attachment.serverMediaId,
+				.photo = attachment.blockKind == RichPage::BlockKind::Photo,
+				.uploadedPhoto = attachment.serverPhoto
+					? std::make_optional(attachment.inputPhoto) : std::nullopt,
+				.uploadedDocument = attachment.serverDocument
+					? std::make_optional(attachment.inputDocument) : std::nullopt,
+			});
+		}
+	}
+	return sources;
+}
+
+BotUse::Completion ArticleSession::botUseEditCompletion() {
+	return [weak = base::make_weak(this)](const BotUse::Result &result) {
+		if (const auto session = weak.get()) {
+			session->finishBotUseEdit(result);
+		}
+	};
+}
+
+void ArticleSession::finishBotUseEdit(const BotUse::Result &result) {
+	const auto keepAlive = shared_from_this();
+	if (result.state == BotUse::OperationState::Completed) {
+		for (const auto &message : result.data) {
+			if (message.type() == mtpc_message
+				&& message.c_message().vid().v == _articleId.msg.bare
+				&& peerFromMTP(message.c_message().vpeer_id()) == _articleId.peer) {
+				_session->data().updateEditedMessage(message);
+			}
+		}
+		_session->data().sendHistoryChangeNotifications();
+	} else if (!result.error.silent()) {
+		showToast(result.error.type.isEmpty()
+			? tr::lng_edit_error(tr::now) : result.error.type);
+	}
+	finishSubmittedWork();
+}
+
 void ArticleSession::editorCreated(not_null<Widget*> editor) {
 	_editor = editor;
 	applyInitialPaste();
@@ -5315,7 +5391,8 @@ void ShowComposeBox(
 void ShowEditBox(
 		not_null<Window::SessionController*> controller,
 		not_null<HistoryItem*> item) {
-	if (!CanAuthorRichMessages(&controller->session())) {
+	const auto bot = BotUse::RichEditBot(item);
+	if (!bot && !CanAuthorRichMessages(&controller->session())) {
 		return;
 	}
 	const auto weak = base::make_weak(controller);
@@ -5336,6 +5413,7 @@ void ShowEditBox(
 		ArticleSession::ShowEdit(
 			not_null{ current },
 			std::move(page),
+			bot,
 			base::make_weak(strong));
 	});
 }

@@ -201,6 +201,20 @@ BotId Selected(not_null<History*> history) {
 		? choice.bot : 0;
 }
 
+BotId RichEditBot(not_null<HistoryItem*> item) {
+	return item->history()->peer->isBroadcast()
+		&& item->richPage()
+		&& item->isRegular()
+		&& IsServerMsgId(item->id)
+		&& !item->isScheduled()
+		&& !item->isSending()
+		&& !item->hasFailed()
+		&& !item->isEditingMedia()
+		&& !IsAnchoredEphemeral(item)
+		&& item->paidType() == PaidPostType::None
+		? Selected(item->history()) : 0;
+}
+
 BotId RichDraftBot(not_null<History*> history, const FullReplyTo &reply) {
 	return history->session().botUseChats().richDraftBot(
 		history->peer->id,

@@ -676,7 +676,8 @@ void Client::edit(const Op &operation) {
 	const auto text = operation->text.value_or(TextWithEntities());
 	const auto entities = EntitiesToMTP(text.entities, _record.info.userId);
 	const auto web = operation->webPage && !operation->webPage->removed && !operation->webPage->url.isEmpty();
-	const auto media = !operation->prepared.empty() || web;
+	const auto media = operation->kind == Kind::Edit
+		&& (!operation->prepared.empty() || web);
 	operation->submitted = true;
 	rpc(operation, MTPmessages_EditMessage(
 		MTP_flags((operation->text ? Flag::f_message | Flag::f_entities : Flag())
@@ -750,7 +751,7 @@ void Client::received(const Op &operation, const MTPUpdates &updates) {
 			return;
 		}
 	}
-	if (Editing(operation->kind) || operation->kind == Kind::Delete) {
+	if (operation->kind == Kind::Delete) {
 		finish(operation);
 		return;
 	}
