@@ -1275,6 +1275,9 @@ void FileLoadTask::finish() {
 	}
 	const auto premium = session->user()->isPremium();
 	if (!_result || !_result->filesize || _result->filesize < 0) {
+		if (_to.botUseEditDone) {
+			(*_to.botUseEditDone)(false, u"MEDIA_SOURCE_MISSING"_q);
+		}
 		Ui::show(
 			Ui::MakeInformBox((_result && _result->archive)
 				? tr::lng_folder_archive_failed(tr::now)
@@ -1283,6 +1286,9 @@ void FileLoadTask::finish() {
 		removeFromAlbum();
 	} else if (_result->filesize > kFileSizePremiumLimit
 		|| (_result->filesize > kFileSizeLimit && !premium)) {
+		if (_to.botUseEditDone) {
+			(*_to.botUseEditDone)(false, u"FILE_TOO_BIG"_q);
+		}
 		Ui::show(
 			Box(FileSizeLimitBox, session, _result->filesize, nullptr),
 			Ui::LayerOption::KeepOther);

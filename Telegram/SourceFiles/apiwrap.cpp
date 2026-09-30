@@ -4601,11 +4601,15 @@ void ApiWrap::editMedia(
 		Ui::PreparedList &&list,
 		SendMediaType type,
 		TextWithTags &&caption,
-		const SendAction &action) {
+		const SendAction &action,
+		uint64 botUse,
+		std::shared_ptr<Fn<void(bool, QString)>> botUseEditDone) {
 	if (list.files.empty()) return;
 
 	auto &file = list.files.front();
 	auto to = FileLoadTaskOptions(action);
+	to.botUse = botUse;
+	to.botUseEditDone = std::move(botUseEditDone);
 	const auto existing = to.replaceMediaOf
 		? session().data().message(action.history->peer, to.replaceMediaOf)
 		: nullptr;

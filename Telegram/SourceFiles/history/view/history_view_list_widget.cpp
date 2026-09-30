@@ -6020,12 +6020,14 @@ QPoint ListWidget::mapPointToItem(
 		- QPoint(SelectionViewOffset(this, view), itemTop(view));
 }
 
-rpl::producer<FullMsgId> ListWidget::editMessageRequested() const {
+rpl::producer<ListWidget::EditMessageRequest> ListWidget::editMessageRequested() const {
 	return _requestedToEditMessage.events();
 }
 
-void ListWidget::editMessageRequestNotify(FullMsgId item) const {
-	_requestedToEditMessage.fire(std::move(item));
+void ListWidget::editMessageRequestNotify(
+		FullMsgId item,
+		std::optional<uint64> bot) const {
+	_requestedToEditMessage.fire({ item, bot });
 }
 
 bool ListWidget::lastMessageEditRequestNotify() const {

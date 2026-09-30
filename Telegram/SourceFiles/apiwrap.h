@@ -388,7 +388,9 @@ public:
 		Ui::PreparedList &&list,
 		SendMediaType type,
 		TextWithTags &&caption,
-		const SendAction &action);
+		const SendAction &action,
+		uint64 botUse = 0,
+		std::shared_ptr<Fn<void(bool, QString)>> botUseEditDone = {});
 
 	void sendUploadedPhoto(
 		FullMsgId localId,

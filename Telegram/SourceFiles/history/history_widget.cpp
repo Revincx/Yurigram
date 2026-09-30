@@ -64,6 +64,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/controls/send_as_button.h"
 #include "ui/controls/choose_bot_use_button.h"
 #include "bot_use/bot_use_chat_state.h"
+#include "bot_use/bot_use_manager.h"
 #include "bot_use/bot_use_sending.h"
 #include "ui/controls/silent_toggle.h"
 #include "ui/screen_reader_mode.h"
@@ -195,6 +196,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/item_text_options.h"
 #include "main/main_app_config.h"
 #include "main/main_session.h"
+#include "main/main_domain.h"
 #include "main/main_session_settings.h"
 #include "main/session/send_as_peers.h"
 #include "webrtc/webrtc_environment.h"
@@ -3879,6 +3881,7 @@ void HistoryWidget::setEditMsgId(MsgId msgId) {
 	unregisterDraftSources();
 	_editMsgId = msgId;
 	if (!msgId) {
+		_editBotUse = 0;
 		_mediaEditManager.cancel();
 		_canReplaceMedia = _canAddMedia = false;
 		if (_preview) {
@@ -3962,7 +3965,8 @@ bool HistoryWidget::updateReplaceMediaButton() {
 				suggestOptions(),
 				_mediaEditManager.spoilered(),
 				_mediaEditManager.invertCaption(),
-				crl::guard(_list, [=] { cancelEdit(); }));
+				crl::guard(_list, [=] { cancelEdit(); }),
+				_editBotUse);
 		});
 	});
 	return true;
@@ -5675,7 +5679,7 @@ void HistoryWidget::triggerAiApplyInPlace() {
 void HistoryWidget::saveEditMessage(Api::SendOptions options) {
 	Expects(_history != nullptr);
 
-	if (_saveEditMsgRequestId) {
+	if (_saveEditMsgRequestId || _saveEditBotOperation) {
 		return;
 	} else if (_mediaEditManager.videoCoverUploading()) {
 		return;
@@ -5698,7 +5702,7 @@ void HistoryWidget::saveEditMessage(Api::SendOptions options) {
 			|| !webPageDraft.manual)
 		&& !hasMediaWithCaption) {
 		if (item->computeSuggestionActions() == SuggestionActions::None) {
-			controller()->show(Box<DeleteMessagesBox>(item));
+			controller()->show(Box<DeleteMessagesBox>(item, _editBotUse));
 		}
 		return;
 	} else {
@@ -5779,6 +5783,40 @@ void HistoryWidget::saveEditMessage(Api::SendOptions options) {
 		if (!checked) {
 			return;
 		}
+	}
+
+	if (_editBotUse) {
+		const auto bot = _editBotUse;
+		const auto id = item->fullId();
+		const auto completion = [weak, bot, id](const BotUse::Result &result) {
+			if (const auto strong = weak.get()) {
+				if (strong->_saveEditBotOperation != result.operation) {
+					return;
+				}
+				strong->_saveEditBotOperation = 0;
+				if (result.state == BotUse::OperationState::Completed) {
+					if (strong->_editBotUse == bot && strong->_editMsgId == id.msg) {
+						strong->cancelEdit();
+					}
+				} else if (!result.error.silent()) {
+					strong->controller()->showToast(result.error.type);
+				}
+			}
+		};
+		_saveEditBotOperation = BotUse::SubmitEdit(
+			item,
+			bot,
+			BotUse::Edit{
+				.message = id,
+				.text = sending,
+				.inputMedia = BotUse::ExistingEditMedia(
+					item, _mediaEditManager.spoilered(),
+					_mediaEditManager.videoCover()),
+				.webPage = webPageDraft,
+				.options = options,
+			},
+			completion);
+		return;
 	}
 
 	_saveEditMsgRequestId = Api::EditTextMessage(
@@ -8219,7 +8257,8 @@ bool HistoryWidget::confirmSendingFiles(
 				suggestOptions(),
 				_mediaEditManager.spoilered(),
 				_mediaEditManager.invertCaption(),
-				crl::guard(_list, [=] { cancelEdit(); }));
+				crl::guard(_list, [=] { cancelEdit(); }),
+				_editBotUse);
 			return true;
 		}
 		controller()->showToast(tr::lng_edit_caption_attach(tr::now));
@@ -9404,7 +9443,8 @@ void HistoryWidget::mousePressEvent(QMouseEvent *e) {
 			suggestOptions(),
 			_mediaEditManager.spoilered(),
 			_mediaEditManager.invertCaption(),
-			crl::guard(_list, [=] { cancelEdit(); }));
+			crl::guard(_list, [=] { cancelEdit(); }),
+			_editBotUse);
 	} else if (!_inDetails) {
 		return;
 	} else if (_previewDrawPreview) {
@@ -10964,12 +11004,13 @@ void HistoryWidget::setReplyFieldsFromProcessing() {
 
 void HistoryWidget::editMessage(
 		not_null<HistoryItem*> item,
-		const TextSelection &selection) {
+		const TextSelection &selection,
+		std::optional<uint64> bot) {
 	if (Iv::Editor::ActivateEditWindowFor(&session(), item->fullId())) {
 		return;
 	}
 	if (item->richPage()) {
-		Iv::Editor::ShowEditBox(controller(), item);
+		Iv::Editor::ShowEditBox(controller(), item, bot);
 		return;
 	} else if (_chooseTheme) {
 		toggleChooseChatTheme(_peer);
@@ -10985,6 +11026,7 @@ void HistoryWidget::editMessage(
 	if (_composeSearch) {
 		_composeSearch->hideAnimated();
 	}
+	_editBotUse = bot.value_or(BotUse::EditBot(item));
 
 	if (isRecording()) {
 		// Just fix some strange inconsistency.
@@ -11177,6 +11219,9 @@ int HistoryWidget::countMembersDropdownHeightMax() const {
 void HistoryWidget::cancelEdit() {
 	if (!_editMsgId) {
 		return;
+	}
+	if (_saveEditBotOperation) {
+		session().domain().botUse().cancel(base::take(_saveEditBotOperation));
 	}
 
 	_canReplaceMedia = _canAddMedia = false;
@@ -11430,7 +11475,11 @@ void HistoryWidget::confirmDeleteSelected() {
 		ids.push_back(item->fullId());
 	}
 	const auto items = session().data().idsToItems(ids);
-	if (ephemeral.empty() && CanCreateModerateMessagesBox(items)) {
+	const auto bot = items.empty() ? 0 : BotUse::DeleteBot(items.front());
+	const auto allBot = bot && ranges::all_of(items, [&](auto item) {
+		return BotUse::CanDeleteAs(item, bot);
+	});
+	if (ephemeral.empty() && !allBot && CanCreateModerateMessagesBox(items)) {
 		const auto opt = DefaultModerateMessagesBoxOptions();
 		controller()->show(Box(
 			CreateModerateMessagesBox,
@@ -11438,7 +11487,8 @@ void HistoryWidget::confirmDeleteSelected() {
 			crl::guard(this, [=] { clearSelected(); }),
 			opt));
 	} else {
-		auto box = Box<DeleteMessagesBox>(&session(), std::move(ids));
+		auto box = Box<DeleteMessagesBox>(
+			&session(), std::move(ids), allBot ? bot : 0);
 		box->setDeleteConfirmedCallback(crl::guard(this, [=] {
 			clearSelected();
 		}));

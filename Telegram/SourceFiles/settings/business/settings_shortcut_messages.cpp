@@ -392,12 +392,12 @@ ShortcutMessages::ShortcutMessages(
 	}, lifetime());
 
 	_inner->editMessageRequested(
-	) | rpl::on_next([=](auto fullId) {
-		if (const auto item = _session->data().message(fullId)) {
+	) | rpl::on_next([=](HistoryView::ListWidget::EditMessageRequest request) {
+		if (const auto item = _session->data().message(request.id)) {
 			const auto media = item->media();
 			if (!media || media->webpage() || media->allowsEditCaption()) {
 				_composeControls->editMessage(
-					fullId,
+					request.id,
 					_inner->getSelectedTextRange(item));
 			} else if (media->todolist()) {
 				Window::PeerMenuEditTodoList(_controller, item);

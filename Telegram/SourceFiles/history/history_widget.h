@@ -236,7 +236,8 @@ public:
 		FullReplyTo fields = {});
 	void editMessage(
 		not_null<HistoryItem*> item,
-		const TextSelection &selection);
+		const TextSelection &selection,
+		std::optional<uint64> bot = std::nullopt);
 
 	void fillSenderUserpicMenu(
 		not_null<Ui::PopupMenu*> menu,
@@ -826,6 +827,7 @@ private:
 
 	std::shared_ptr<QMimeData> _pendingRichPaste;
 	MsgId _editMsgId = 0;
+	uint64 _editBotUse = 0;
 	std::shared_ptr<Data::PhotoMedia> _photoEditMedia;
 	bool _canReplaceMedia = false;
 	bool _canAddMedia = false;
@@ -866,6 +868,7 @@ private:
 	bool _sentFromScheduledTip = false;
 
 	mtpRequestId _saveEditMsgRequestId = 0;
+	uint64 _saveEditBotOperation = 0;
 
 	std::unique_ptr<HistoryView::Controls::WebpageProcessor> _preview;
 	Fn<bool(QPainter &p, QRect to)> _previewDrawPreview;

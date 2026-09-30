@@ -48,7 +48,8 @@ public:
 		bool spoilered,
 		bool invertCaption,
 		Ui::PreparedList &&list,
-		Fn<void()> saved);
+		Fn<void()> saved,
+		uint64 botUse);
 	~EditCaptionBox();
 
 	static void StartMediaReplace(
@@ -58,7 +59,8 @@ public:
 		SuggestOptions suggest,
 		bool spoilered,
 		bool invertCaption,
-		Fn<void()> saved);
+		Fn<void()> saved,
+		uint64 botUse = 0);
 	static void StartMediaReplace(
 		not_null<Window::SessionController*> controller,
 		FullMsgId itemId,
@@ -67,7 +69,8 @@ public:
 		SuggestOptions suggest,
 		bool spoilered,
 		bool invertCaption,
-		Fn<void()> saved);
+		Fn<void()> saved,
+		uint64 botUse = 0);
 	static void StartPhotoEdit(
 		not_null<Window::SessionController*> controller,
 		std::shared_ptr<Data::PhotoMedia> media,
@@ -76,7 +79,8 @@ public:
 		SuggestOptions suggest,
 		bool spoilered,
 		bool invertCaption,
-		Fn<void()> saved);
+		Fn<void()> saved,
+		uint64 botUse = 0);
 
 	void showFinished() override;
 
@@ -130,6 +134,7 @@ private:
 	const SuggestOptions _suggest;
 	const bool _isAllowedEditMedia;
 	const Ui::AlbumType _albumType;
+	const uint64 _botUse = 0;
 
 	const base::unique_qptr<Ui::VerticalLayout> _controls;
 	const base::unique_qptr<Ui::ScrollArea> _scroll;
@@ -154,6 +159,7 @@ private:
 	HistoryView::MediaEditManager _mediaEditManager;
 
 	mtpRequestId _saveRequestId = 0;
+	bool _botEditSubmitting = false;
 
 	base::Timer _checkChangedTimer;
 	bool _isPhoto = false;

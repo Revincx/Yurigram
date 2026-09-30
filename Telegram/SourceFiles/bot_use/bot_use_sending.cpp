@@ -18,6 +18,7 @@
 #include "data/data_user.h"
 #include "history/history.h"
 #include "history/history_item.h"
+#include "history/history_item_components.h"
 #include "history/history_item_helpers.h"
 #include "main/main_domain.h"
 #include "main/main_session.h"
@@ -228,7 +229,65 @@ BotId Selected(not_null<History*> history) {
 		? choice.bot : 0;
 }
 
+bool CanEditAs(not_null<HistoryItem*> item, BotId bot) {
+	const auto peer = item->history()->peer;
+	if (!bot || !peer->isMegagroup()) {
+		return false;
+	}
+	const auto info = FindBot(item->history(), bot);
+	return info.userId
+		&& item->from()->id == peerFromUser(info.userId)
+		&& item->isRegular()
+		&& !item->isSponsored()
+		&& !item->isEphemeral()
+		&& !item->isService()
+		&& IsServerMsgId(item->id)
+		&& !item->isScheduled()
+		&& !item->isSending()
+		&& !item->hasFailed()
+		&& !item->isEditingMedia()
+		&& !item->Get<HistoryMessageVia>()
+		&& !item->Get<HistoryMessageForwarded>()
+		&& !IsAnchoredEphemeral(item)
+		&& item->paidType() == PaidPostType::None
+		&& (!item->media() || item->media()->allowsEdit());
+}
+
+bool CanDeleteAs(not_null<HistoryItem*> item, BotId bot) {
+	const auto peer = item->history()->peer;
+	if (!bot || !peer->isMegagroup()) {
+		return false;
+	}
+	const auto info = FindBot(item->history(), bot);
+	return info.userId
+		&& item->from()->id == peerFromUser(info.userId)
+		&& item->isRegular()
+		&& !item->isSponsored()
+		&& !item->isEphemeral()
+		&& !item->isService()
+		&& IsServerMsgId(item->id)
+		&& item->id != MsgId(1)
+		&& item->topicRootId() != item->id
+		&& !item->isScheduled()
+		&& !item->isSending()
+		&& !item->hasFailed()
+		&& !IsAnchoredEphemeral(item);
+}
+
+BotId EditBot(not_null<HistoryItem*> item) {
+	const auto bot = Selected(item->history());
+	return CanEditAs(item, bot) ? bot : 0;
+}
+
+BotId DeleteBot(not_null<HistoryItem*> item) {
+	const auto bot = Selected(item->history());
+	return CanDeleteAs(item, bot) ? bot : 0;
+}
+
 BotId RichEditBot(not_null<HistoryItem*> item) {
+	if (item->history()->peer->isMegagroup()) {
+		return item->richPage() ? EditBot(item) : 0;
+	}
 	return item->history()->peer->isBroadcast()
 		&& item->richPage()
 		&& item->isRegular()
@@ -240,6 +299,179 @@ BotId RichEditBot(not_null<HistoryItem*> item) {
 		&& !IsAnchoredEphemeral(item)
 		&& item->paidType() == PaidPostType::None
 		? Selected(item->history()) : 0;
+}
+
+std::optional<MTPInputMedia> ExistingEditMedia(
+		not_null<HistoryItem*> item,
+		bool spoilered,
+		const Api::VideoCoverEdit &videoCover) {
+	const auto media = item->media();
+	if (!media || (!videoCover && spoilered == media->hasSpoiler())) {
+		return std::nullopt;
+	}
+	if (const auto photo = media->photo()) {
+		using Flag = MTPDinputMediaPhoto::Flag;
+		return MTP_inputMediaPhoto(
+			MTP_flags((spoilered ? Flag::f_spoiler : Flag())
+				| (media->ttlSeconds() ? Flag::f_ttl_seconds : Flag())),
+			photo->mtpInput(), MTP_int(media->ttlSeconds()), MTPInputDocument());
+	} else if (const auto document = media->document()) {
+		using Flag = MTPDinputMediaDocument::Flag;
+		const auto cover = videoCover.photo ? videoCover.photo
+			: videoCover.cleared ? nullptr : media->videoCover();
+		const auto timestamp = media->videoTimestamp();
+		return MTP_inputMediaDocument(
+			MTP_flags((spoilered ? Flag::f_spoiler : Flag())
+				| (media->ttlSeconds() ? Flag::f_ttl_seconds : Flag())
+				| (timestamp ? Flag::f_video_timestamp : Flag())
+				| (cover ? Flag::f_video_cover : Flag())),
+			document->mtpInput(),
+			cover ? cover->mtpInput() : MTPInputPhoto(),
+			MTP_int(media->ttlSeconds()), MTP_int(timestamp), MTPstring());
+	}
+	return std::nullopt;
+}
+
+OperationId SubmitEdit(
+		not_null<HistoryItem*> item,
+		BotId bot,
+		const Edit &edit,
+		Completion done,
+		const std::shared_ptr<FilePrepareResult> &preview) {
+	const auto history = item->history();
+	if (item->fullId() != edit.message || !CanEditAs(item, bot)) {
+		ShowSendError(history, { u"BOT_MESSAGE_NOT_EDITABLE"_q });
+		return 0;
+	}
+	const auto id = item->fullId();
+	const auto weak = base::make_weak(&history->session());
+	const auto progress = preview
+		? LocalUploadProgress(&history->session(), { LocalUploadTarget{
+			.id = preview->id,
+			.photo = preview->type == SendMediaType::Photo,
+			.message = id,
+		} })
+		: UploadCallback();
+	const auto operation = history->session().domain().botUse().editMessage(
+		bot, edit, [weak, id, preview,
+			done = std::move(done)](const Result &result) {
+			if (const auto session = weak.get()) {
+				auto &owner = session->data();
+				const auto item = owner.message(id);
+				if (result.state == OperationState::Completed) {
+					for (const auto &message : result.data) {
+						if (preview && item && message.type() == mtpc_message
+							&& message.c_message().vid().v == id.msg.bare
+							&& peerFromMTP(message.c_message().vpeer_id()) == id.peer) {
+							if (const auto media = item->media()) {
+								if (const auto server = message.c_message().vmedia()) {
+									server->match([&](const MTPDmessageMediaPhoto &data) {
+										if (const auto source = media->photo()) {
+											if (const auto photo = data.vphoto()) {
+												owner.processPhoto(*photo)->collectLocalData(source);
+											}
+										}
+									}, [&](const MTPDmessageMediaDocument &data) {
+										if (const auto source = media->document()) {
+											if (const auto document = data.vdocument()) {
+												owner.processDocument(*document)->collectLocalData(source);
+											}
+										}
+									}, [&](const auto &) {});
+								}
+							}
+						}
+						if (preview && item && item->isEditingMedia()) {
+							item->removeFromSharedMediaIndex();
+							item->clearSavedMedia();
+							item->addToSharedMediaIndex();
+							item->setIsLocalUpdateMedia(true);
+						}
+						owner.updateEditedMessage(message);
+						if (preview && item) {
+							item->setIsLocalUpdateMedia(false);
+						}
+					}
+				} else if (preview) {
+					if (item) {
+						item->returnSavedMedia();
+					}
+					FailLocalMediaUpload(session, preview->id,
+						preview->type == SendMediaType::Photo);
+				}
+				owner.sendHistoryChangeNotifications();
+			}
+			if (done) {
+				done(result);
+			}
+		}, progress);
+	if (operation && preview) {
+		PrepareLocalMediaPreview(&history->session(), preview);
+		const auto media = LocalMedia(*preview);
+		auto edition = HistoryMessageEdition();
+		edition.mtpMedia = &media;
+		edition.textWithEntities = edit.text.value_or(TextWithEntities());
+		edition.invertMedia = edit.options.invertCaption;
+		edition.useSameViews = true;
+		edition.useSameForwards = true;
+		edition.useSameMarkup = true;
+		edition.useSameReplies = true;
+		edition.useSameReactions = true;
+		edition.useSameSuggest = true;
+		edition.savePreviousMedia = true;
+		item->applyEdition(std::move(edition));
+		history->session().data().sendHistoryChangeNotifications();
+	}
+	return operation;
+}
+
+bool EditPrepared(
+		BotId bot,
+		not_null<Main::Session*> session,
+		const std::shared_ptr<FilePrepareResult> &file) {
+	if (!file || !file->to.replaceMediaOf) {
+		return false;
+	}
+	const auto item = session->data().message(
+		file->to.peer, file->to.replaceMediaOf);
+	const auto done = file->to.botUseEditDone;
+	if (!item || !CanEditAs(item, bot)) {
+		if (const auto history = session->data().historyLoaded(file->to.peer)) {
+			ShowSendError(history, { u"BOT_MESSAGE_NOT_EDITABLE"_q });
+		}
+		if (done) {
+			(*done)(false, u"BOT_MESSAGE_NOT_EDITABLE"_q);
+		}
+		return false;
+	}
+	const auto operation = SubmitEdit(
+		item,
+		bot,
+		Edit{
+			.message = item->fullId(),
+			.text = SnapshotText(file->caption),
+			.media = file,
+			.options = file->to.options,
+		},
+		[weak = base::make_weak(session.get()), done](const Result &result) {
+			if (done) {
+				(*done)(result.state == OperationState::Completed,
+					result.error.type);
+			} else if (result.state != OperationState::Completed) {
+				if (const auto session = weak.get()) {
+					if (const auto history = session->data().historyLoaded(result.peer)) {
+						ShowSendError(history, result.error);
+					}
+				}
+			}
+		},
+		file);
+	if (!operation && done) {
+		(*done)(false, u"BOT_EDIT_FAILED"_q);
+	} else if (!operation) {
+		ShowSendError(item->history(), { u"BOT_EDIT_FAILED"_q });
+	}
+	return operation != 0;
 }
 
 BotId RichDraftBot(not_null<History*> history, const FullReplyTo &reply) {

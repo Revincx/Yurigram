@@ -1232,11 +1232,15 @@ bool AddEditMessageAction(
 		return base;
 	}();
 	if (!item->allowsEdit(base::unixtime::now())
+		&& !BotUse::EditBot(item)
 		&& !BotUse::RichEditBot(item)) {
 		return false;
 	}
 	const auto owner = &item->history()->owner();
 	const auto itemId = item->fullId();
+	const auto bot = item->history()->peer->isMegagroup()
+		? std::make_optional(BotUse::EditBot(item))
+		: std::nullopt;
 	menu->addAction(tr::lng_context_edit_msg(tr::now), [=] {
 		const auto item = owner->message(itemId);
 		if (!item) {
@@ -1246,7 +1250,7 @@ bool AddEditMessageAction(
 			|| Iv::Editor::HasEditWindowFor(&owner->session(), itemId)) {
 			Ui::PreventDelayedActivation();
 		}
-		list->editMessageRequestNotify(item->fullId());
+		list->editMessageRequestNotify(item->fullId(), bot);
 	}, &st::menuIconEdit);
 	return true;
 }
@@ -1366,7 +1370,14 @@ bool AddDeleteSelectedAction(
 	if (!request.overSelection || request.selectedItems.empty()) {
 		return false;
 	}
-	if (!ranges::all_of(request.selectedItems, &SelectedItem::canDelete)) {
+	const auto owner = &request.navigation->session().data();
+	const auto first = owner->message(request.selectedItems.front().msgId);
+	const auto bot = first ? BotUse::DeleteBot(first) : 0;
+	const auto allBot = bot && ranges::all_of(request.selectedItems, [&](const auto &selected) {
+		const auto item = owner->message(selected.msgId);
+		return item && BotUse::CanDeleteAs(item, bot);
+	});
+	if (!allBot && !ranges::all_of(request.selectedItems, &SelectedItem::canDelete)) {
 		return false;
 	}
 
@@ -1390,7 +1401,8 @@ bool AddDeleteSelectedAction(
 		auto items = ExtractIdsList(request.selectedItems);
 		auto box = Box<DeleteMessagesBox>(
 			&request.navigation->session(),
-			std::move(items));
+			std::move(items),
+			allBot ? bot : 0);
 		box->setDeleteConfirmedCallback(clear);
 		request.navigation->parentController()->show(std::move(box));
 	}, &st::menuIconDelete);
@@ -1404,17 +1416,24 @@ bool AddDeleteMessageAction(
 	const auto item = request.item;
 	if (!request.selectedItems.empty()) {
 		return false;
-	} else if (!item || !item->canDelete()) {
+	} else if (!item || (!item->canDelete() && !BotUse::DeleteBot(item))) {
 		return false;
 	}
 	const auto owner = &item->history()->owner();
 	const auto asGroup = (request.pointState != PointState::GroupPart);
+	auto bot = BotUse::DeleteBot(item);
 	if (asGroup) {
 		if (const auto group = owner->groups().find(item)) {
-			if (ranges::any_of(group->items, [](auto item) {
-				return item->isLocal() || !item->canDelete();
+			const auto allBot = bot && ranges::all_of(group->items, [&](auto part) {
+				return BotUse::CanDeleteAs(part, bot);
+			});
+			if (!allBot && ranges::any_of(group->items, [](auto part) {
+				return part->isLocal() || !part->canDelete();
 			})) {
 				return false;
+			}
+			if (!allBot) {
+				bot = 0;
 			}
 		}
 	}
@@ -1426,7 +1445,8 @@ bool AddDeleteMessageAction(
 				if (const auto group = owner->groups().find(item)) {
 					controller->show(Box<DeleteMessagesBox>(
 						&owner->session(),
-						owner->itemsToIds(group->items)));
+						owner->itemsToIds(group->items),
+						bot));
 					return;
 				}
 			}
@@ -1435,7 +1455,7 @@ bool AddDeleteMessageAction(
 				return;
 			}
 			const auto list = HistoryItemsList{ item };
-			if (CanCreateModerateMessagesBox(list)) {
+			if (!bot && CanCreateModerateMessagesBox(list)) {
 				const auto opt = DefaultModerateMessagesBoxOptions();
 				controller->show(Box(
 					CreateModerateMessagesBox,
@@ -1443,7 +1463,7 @@ bool AddDeleteMessageAction(
 					nullptr,
 					opt));
 			} else {
-				controller->show(Box<DeleteMessagesBox>(item));
+			controller->show(Box<DeleteMessagesBox>(item, bot));
 			}
 		}
 	});

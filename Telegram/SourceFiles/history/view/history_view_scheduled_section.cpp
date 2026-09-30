@@ -244,12 +244,12 @@ ScheduledWidget::ScheduledWidget(
 	}, lifetime());
 
 	_inner->editMessageRequested(
-	) | rpl::on_next([=](auto fullId) {
-		if (const auto item = session().data().message(fullId)) {
+	) | rpl::on_next([=](ListWidget::EditMessageRequest request) {
+		if (const auto item = session().data().message(request.id)) {
 			const auto media = item->media();
 			if (!media || media->webpage() || media->allowsEditCaption()) {
 				_composeControls->editMessage(
-					fullId,
+					request.id,
 					_inner->getSelectedTextRange(item));
 			} else if (media->todolist()) {
 				Window::PeerMenuEditTodoList(controller, item);

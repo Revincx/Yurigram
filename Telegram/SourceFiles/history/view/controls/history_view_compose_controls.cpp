@@ -2378,7 +2378,8 @@ bool ComposeControls::confirmMediaEdit(Ui::PreparedList &list) {
 			_header->suggestOptions(),
 			queryToEdit.spoilered,
 			queryToEdit.options.invertCaption,
-			crl::guard(_wrap.get(), [=] { cancelEditMessage(); }));
+			crl::guard(_wrap.get(), [=] { cancelEditMessage(); }),
+			_editBotUse);
 	} else {
 		_show->showToast(tr::lng_edit_caption_attach(tr::now));
 	}
@@ -2897,7 +2898,8 @@ void ComposeControls::init() {
 			_header->suggestOptions(),
 			queryToEdit.spoilered,
 			queryToEdit.options.invertCaption,
-			crl::guard(_wrap.get(), [=] { cancelEditMessage(); }));
+			crl::guard(_wrap.get(), [=] { cancelEditMessage(); }),
+			_editBotUse);
 	}, _wrap->lifetime());
 
 	_header->editOptionsRequests(
@@ -5900,14 +5902,15 @@ void ComposeControls::updateHeight() {
 
 void ComposeControls::editMessage(
 		FullMsgId id,
-		const TextSelection &selection) {
+		const TextSelection &selection,
+		std::optional<uint64> bot) {
 	const auto item = session().data().message(id);
 	if (!item) {
 		return;
 	} else if (Iv::Editor::ActivateEditWindowFor(_session, id)) {
 		return;
 	}
-	editMessage(item);
+	editMessage(item, bot);
 	if (_header->editMsgId() != id) {
 		return;
 	}
@@ -5918,7 +5921,9 @@ void ComposeControls::editMessage(
 	focus();
 }
 
-void ComposeControls::editMessage(not_null<HistoryItem*> item) {
+void ComposeControls::editMessage(
+		not_null<HistoryItem*> item,
+		std::optional<uint64> bot) {
 	Expects(_history != nullptr);
 
 	if (draftKey(DraftType::Edit) == Data::DraftKey::None()) {
@@ -5929,7 +5934,7 @@ void ComposeControls::editMessage(not_null<HistoryItem*> item) {
 			_show->showToast(tr::lng_edit_error(tr::now));
 			return;
 		}
-		Iv::Editor::ShowEditBox(_regularWindow, item);
+		Iv::Editor::ShowEditBox(_regularWindow, item, bot);
 		return;
 	} else if (_voiceRecordBar->isActive()) {
 		_show->showToast(tr::lng_edit_caption_voice(tr::now));
@@ -5945,6 +5950,7 @@ void ComposeControls::editMessage(not_null<HistoryItem*> item) {
 	if (!isEditingMessage()) {
 		saveFieldToHistoryLocalDraft();
 	}
+	_editBotUse = bot.value_or(BotUse::EditBot(item));
 	const auto editData = PrepareEditText(item);
 	const auto cursor = MessageCursor{
 		int(editData.text.size()),
@@ -6002,7 +6008,8 @@ bool ComposeControls::updateReplaceMediaButton() {
 				_header->suggestOptions(),
 				queryToEdit.spoilered,
 				queryToEdit.options.invertCaption,
-				crl::guard(_wrap.get(), [=] { cancelEditMessage(); }));
+				crl::guard(_wrap.get(), [=] { cancelEditMessage(); }),
+				_editBotUse);
 		});
 	});
 	return true;
@@ -6013,6 +6020,7 @@ void ComposeControls::cancelEditMessage() {
 	Expects(draftKeyCurrent() != Data::DraftKey::None());
 
 	_canReplaceMedia = _canAddMedia = false;
+	_editBotUse = 0;
 	_photoEditMedia = nullptr;
 	updateReplaceMediaButton();
 	_header->editMessage({}, {});

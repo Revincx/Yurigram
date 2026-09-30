@@ -582,6 +582,7 @@ private:
 	rpl::variable<bool> _botCommandStartExtraGuard = true;
 	rpl::variable<QString> _botKeyboardPlaceholder;
 	std::unique_ptr<ComposeControls> _composeControls;
+	uint64 _saveEditBotOperation = 0;
 	std::unique_ptr<SuggestOptionsBar> _suggestOptions;
 	std::unique_ptr<ComposeSearch> _composeSearch;
 	std::unique_ptr<HistoryView::BottomControls> _bottom;

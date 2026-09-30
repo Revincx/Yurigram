@@ -9,6 +9,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "apiwrap.h"
 #include "base/unixtime.h"
+#include "bot_use/bot_use_manager.h"
+#include "bot_use/bot_use_sending.h"
 #include "core/application.h"
 #include "core/core_settings.h"
 #include "data/data_channel.h"
@@ -20,6 +22,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_item.h"
 #include "lang/lang_keys.h"
 #include "main/main_app_config.h"
+#include "main/main_domain.h"
 #include "main/main_session.h"
 #include "menu/menu_ttl_validator.h"
 #include "settings.h"
@@ -43,17 +46,21 @@ constexpr auto kDeleteMessagesBoxAnimationDuration = crl::time(80);
 
 DeleteMessagesBox::DeleteMessagesBox(
 	QWidget*,
-	not_null<HistoryItem*> item)
+	not_null<HistoryItem*> item,
+	BotUse::BotId botUse)
 : _session(&item->history()->session())
-, _ids(1, item->fullId()) {
+, _ids(1, item->fullId())
+, _botUse(botUse) {
 }
 
 DeleteMessagesBox::DeleteMessagesBox(
 	QWidget*,
 	not_null<Main::Session*> session,
-	MessageIdsList &&selected)
+	MessageIdsList &&selected,
+	BotUse::BotId botUse)
 : _session(session)
-, _ids(std::move(selected)) {
+, _ids(std::move(selected))
+, _botUse(botUse) {
 	Expects(!_ids.empty());
 }
 
@@ -500,6 +507,67 @@ PaidPostType DeleteMessagesBox::paidPostType() const {
 }
 
 void DeleteMessagesBox::deleteAndClear() {
+	if (_deleteSubmitting) {
+		return;
+	}
+	if (_botUse) {
+		for (const auto &id : _ids) {
+			const auto item = _session->data().message(id);
+			if (!item || !BotUse::CanDeleteAs(item, _botUse)) {
+				uiShow()->showToast(tr::lng_edit_deleted(tr::now));
+				return;
+			}
+		}
+		_deleteSubmitting = true;
+		const auto weak = base::make_weak(this);
+		const auto session = base::make_weak(_session.get());
+		const auto ids = _ids;
+		const auto operation = _session->domain().botUse().deleteMessages(
+			_botUse,
+			std::vector<FullMsgId>(ids.begin(), ids.end()),
+			[=](const BotUse::Result &result) {
+				if (result.state == BotUse::OperationState::Completed) {
+					if (const auto strong = session.get()) {
+						auto removed = std::vector<not_null<HistoryItem*>>();
+						for (const auto &id : ids) {
+							if (const auto item = strong->data().message(id)) {
+								removed.push_back(item);
+							}
+						}
+						if (!removed.empty()) {
+							strong->data().notifyItemsAboutToBeDestroyed(removed);
+						}
+						for (const auto &item : removed) {
+							const auto history = item->history();
+							const auto wasLast = history->lastMessage() == item;
+							const auto wasInChats = history->chatListMessage() == item;
+							item->destroy();
+							if (wasLast || wasInChats) {
+								history->requestChatListMessage();
+							}
+						}
+						strong->data().sendHistoryChangeNotifications();
+					}
+				}
+				if (const auto box = weak.get()) {
+					box->_deleteSubmitting = false;
+					if (result.state == BotUse::OperationState::Completed) {
+						if (const auto callback = box->_deleteConfirmedCallback) {
+							callback();
+						}
+						if (weak) {
+							box->closeBox();
+						}
+					} else if (!result.error.silent()) {
+						box->uiShow()->showToast(result.error.type);
+					}
+				}
+			});
+		if (!operation) {
+			_deleteSubmitting = false;
+		}
+		return;
+	}
 	const auto warnPaidType = _confirmedDeletePaidSuggestedPosts
 		? PaidPostType::None
 		: paidPostType();

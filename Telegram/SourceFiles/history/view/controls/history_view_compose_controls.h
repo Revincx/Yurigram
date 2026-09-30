@@ -279,7 +279,12 @@ public:
 	void showFinished();
 	void raisePanels();
 
-	void editMessage(FullMsgId id, const TextSelection &selection);
+	void editMessage(
+		FullMsgId id,
+		const TextSelection &selection,
+		std::optional<uint64> bot = std::nullopt);
+	[[nodiscard]] uint64 editBotUse() const { return _editBotUse; }
+	[[nodiscard]] FullMsgId editingMessageId() const { return _editingId; }
 	void cancelEditMessage();
 	void maybeCancelEditMessage(); // Confirm if changed and cancel.
 
@@ -431,7 +436,9 @@ private:
 	void orderControls();
 	void updateFieldPlaceholder();
 	void updateSilentBroadcast();
-	void editMessage(not_null<HistoryItem*> item);
+	void editMessage(
+		not_null<HistoryItem*> item,
+		std::optional<uint64> bot);
 
 	void escape();
 	void fieldChanged();
@@ -672,6 +679,7 @@ private:
 	Webrtc::RecordAvailability _recordAvailability = {};
 
 	FullMsgId _editingId;
+	uint64 _editBotUse = 0;
 	std::shared_ptr<Data::PhotoMedia> _photoEditMedia;
 	bool _canReplaceMedia = false;
 	bool _canAddMedia = false;

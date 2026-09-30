@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include "bot_use/bot_use_types.h"
 #include "ui/layers/box_content.h"
 
 enum class PaidPostType : uchar;
@@ -27,11 +28,13 @@ class DeleteMessagesBox final : public Ui::BoxContent {
 public:
 	DeleteMessagesBox(
 		QWidget*,
-		not_null<HistoryItem*> item);
+		not_null<HistoryItem*> item,
+		BotUse::BotId botUse = 0);
 	DeleteMessagesBox(
 		QWidget*,
 		not_null<Main::Session*> session,
-		MessageIdsList &&selected);
+		MessageIdsList &&selected,
+		BotUse::BotId botUse = 0);
 	DeleteMessagesBox(
 		QWidget*,
 		not_null<PeerData*> peer,
@@ -71,6 +74,7 @@ private:
 	const QDate _wipeHistoryFirstToDelete;
 	const QDate _wipeHistoryLastToDelete;
 	const MessageIdsList _ids;
+	const BotUse::BotId _botUse = 0;
 
 	bool _revokeForBot = false;
 	bool _revokeJustClearForChannel = false;
@@ -82,6 +86,7 @@ private:
 
 	int _fullHeight = 0;
 	bool _confirmedDeletePaidSuggestedPosts = false;
+	bool _deleteSubmitting = false;
 
 	Fn<void()> _deleteConfirmedCallback;
 

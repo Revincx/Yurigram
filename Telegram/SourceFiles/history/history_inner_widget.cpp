@@ -3149,13 +3149,20 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 			}, &st::menuIconViewReplies);
 		}
 		const auto t = base::unixtime::now();
-		const auto editItem = (albumPartItem && albumPartItem->allowsEdit(t))
+		const auto editItem = (albumPartItem
+			&& (albumPartItem->allowsEdit(t)
+				|| BotUse::EditBot(albumPartItem)))
 			? albumPartItem
-			: (item->allowsEdit(t) || BotUse::RichEditBot(item))
+			: (item->allowsEdit(t)
+				|| BotUse::EditBot(item)
+				|| BotUse::RichEditBot(item))
 			? item
 			: nullptr;
 		if (editItem) {
 			const auto editItemId = editItem->fullId();
+			const auto editBot = editItem->history()->peer->isMegagroup()
+				? std::make_optional(BotUse::EditBot(editItem))
+				: std::nullopt;
 			_menu->addAction(tr::lng_context_edit_msg(tr::now), [=] {
 				if (const auto item = session->data().message(editItemId)) {
 					const auto selection = getSelectedTextRange(item);
@@ -3168,7 +3175,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 							editItemId)) {
 						Ui::PreventDelayedActivation();
 					}
-					_widget->editMessage(item, selection);
+					_widget->editMessage(item, selection, editBot);
 				}
 			}, &st::menuIconEdit);
 		}
@@ -3765,8 +3772,9 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 					&& !item->isEmpty()) {
 					HistoryView::AddHideMessageAction(_menu, item);
 				}
-				if (item->canDelete()) {
-					const auto callback = [=] { deleteItem(itemId); };
+			if (item->canDelete() || BotUse::DeleteBot(item)) {
+				const auto bot = BotUse::DeleteBot(item);
+				const auto callback = [=] { deleteItem(itemId, bot); };
 					if (item->isUploading()) {
 						if (item->media()
 							&& item->media()->allowsEditCaption()) {
@@ -3828,7 +3836,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 			: albumPartItem;
 		const auto itemId = item ? item->fullId() : FullMsgId();
 		const auto canDelete = item
-			&& item->canDelete()
+			&& (item->canDelete() || BotUse::DeleteBot(item))
 			&& (item->isRegular() || !item->isService());
 		const auto canForward = item
 			&& item->allowsForward()
@@ -4229,9 +4237,10 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 					&& !item->isEmpty()) {
 					HistoryView::AddHideMessageAction(_menu, item);
 				}
-				if (canDelete) {
-					const auto callback = [=] {
-						deleteAsGroup(itemId);
+			if (canDelete) {
+				const auto bot = BotUse::DeleteBot(item);
+				const auto callback = [=] {
+					deleteAsGroup(itemId, bot);
 					};
 					if (item->isUploading()) {
 						if (item->media()
@@ -5713,9 +5722,15 @@ void HistoryInner::elementStartEffect(
 auto HistoryInner::getSelectionState() const
 -> HistoryView::TopBarWidget::SelectedState {
 	auto result = HistoryView::TopBarWidget::SelectedState {};
+	const auto bot = _selected.empty()
+		? 0 : BotUse::DeleteBot(*_selected.begin());
+	const auto allBot = bot && ranges::all_of(_selected, [&](const auto item) {
+		return BotUse::CanDeleteAs(item, bot);
+	});
 	for (const auto &item : _selected) {
 		++result.count;
-		if (item->isEphemeral() || item->canDelete()) {
+		if (item->isEphemeral() || item->canDelete()
+			|| allBot) {
 			++result.canDeleteCount;
 		}
 		if (item->allowsForward()) {
@@ -6719,19 +6734,22 @@ void HistoryInner::forwardAsGroupNoQuote(FullMsgId itemId) {
 	}
 }
 
-void HistoryInner::deleteItem(FullMsgId itemId) {
+void HistoryInner::deleteItem(FullMsgId itemId, uint64 bot) {
 	if (const auto item = session().data().message(itemId)) {
-		deleteItem(item);
+		deleteItem(item, bot);
 	}
 }
 
-void HistoryInner::deleteItem(not_null<HistoryItem*> item) {
+void HistoryInner::deleteItem(not_null<HistoryItem*> item, uint64 bot) {
+	if (bot && !BotUse::CanDeleteAs(item, bot)) {
+		return;
+	}
 	if (item->isUploading()) {
 		_controller->cancelUploadLayer(item);
 		return;
 	}
 	const auto list = HistoryItemsList{ item };
-	if (CanCreateModerateMessagesBox(list)) {
+	if (!bot && CanCreateModerateMessagesBox(list)) {
 		const auto opt = DefaultModerateMessagesBoxOptions();
 		_controller->show(Box(
 			CreateModerateMessagesBox,
@@ -6739,7 +6757,7 @@ void HistoryInner::deleteItem(not_null<HistoryItem*> item) {
 			nullptr,
 			opt));
 	} else {
-		_controller->show(Box<DeleteMessagesBox>(item));
+		_controller->show(Box<DeleteMessagesBox>(item, bot));
 	}
 }
 
@@ -6748,12 +6766,16 @@ bool HistoryInner::hasPendingResizedItems() const {
 		|| (_migrated && _migrated->hasPendingResizedItems());
 }
 
-void HistoryInner::deleteAsGroup(FullMsgId itemId) {
+void HistoryInner::deleteAsGroup(FullMsgId itemId, uint64 bot) {
 	if (const auto item = session().data().message(itemId)) {
 		const auto group = session().data().groups().find(item);
 		if (!group) {
-			return deleteItem(item);
-		} else if (CanCreateModerateMessagesBox(group->items)) {
+			return deleteItem(item, bot);
+		} else if (bot && !ranges::all_of(group->items, [&](auto part) {
+			return BotUse::CanDeleteAs(part, bot);
+		})) {
+			return;
+		} else if (!bot && CanCreateModerateMessagesBox(group->items)) {
 			_controller->show(Box(
 				CreateModerateMessagesBox,
 				ModerateMessagesBoxEntry{ .items = group->items },
@@ -6762,7 +6784,8 @@ void HistoryInner::deleteAsGroup(FullMsgId itemId) {
 		} else {
 			_controller->show(Box<DeleteMessagesBox>(
 				&session(),
-				session().data().itemsToIds(group->items)));
+				session().data().itemsToIds(group->items),
+				bot));
 		}
 	}
 }

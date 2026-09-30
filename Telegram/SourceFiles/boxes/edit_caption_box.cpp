@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_text_entities.h"
 #include "apiwrap.h"
 #include "base/event_filter.h"
+#include "bot_use/bot_use_sending.h"
 #include "boxes/premium_limits_box.h"
 #include "boxes/premium_preview_box.h"
 #include "boxes/send_files_box.h"
@@ -246,12 +247,14 @@ EditCaptionBox::EditCaptionBox(
 	bool spoilered,
 	bool invertCaption,
 	Ui::PreparedList &&list,
-	Fn<void()> saved)
+	Fn<void()> saved,
+	uint64 botUse)
 : _controller(controller)
 , _historyItem(item)
 , _suggest(suggest)
 , _isAllowedEditMedia(item->allowsEditMedia())
 , _albumType(ComputeAlbumType(item))
+, _botUse(botUse)
 , _controls(base::make_unique_q<Ui::VerticalLayout>(this))
 , _scroll(base::make_unique_q<Ui::ScrollArea>(this, st::boxScroll))
 , _field(base::make_unique_q<Ui::InputField>(
@@ -288,13 +291,15 @@ void EditCaptionBox::StartMediaReplace(
 		TextWithTags text,
 		SuggestOptions suggest,
 		bool spoilered,
-		bool invertCaption,
-		Fn<void()> saved) {
+	bool invertCaption,
+	Fn<void()> saved,
+	uint64 botUse) {
 	const auto session = &controller->session();
 	const auto item = session->data().message(itemId);
 	if (!item) {
 		return;
 	}
+	botUse = botUse ? botUse : BotUse::EditBot(item);
 	const auto show = [=](Ui::PreparedList &&list) mutable {
 		controller->show(Box<EditCaptionBox>(
 			controller,
@@ -304,7 +309,8 @@ void EditCaptionBox::StartMediaReplace(
 			spoilered,
 			invertCaption,
 			std::move(list),
-			std::move(saved)));
+			std::move(saved),
+			botUse));
 	};
 	ChooseReplacement(
 		controller,
@@ -319,13 +325,15 @@ void EditCaptionBox::StartMediaReplace(
 		TextWithTags text,
 		SuggestOptions suggest,
 		bool spoilered,
-		bool invertCaption,
-		Fn<void()> saved) {
+	bool invertCaption,
+	Fn<void()> saved,
+	uint64 botUse) {
 	const auto session = &controller->session();
 	const auto item = session->data().message(itemId);
 	if (!item) {
 		return;
 	}
+	botUse = botUse ? botUse : BotUse::EditBot(item);
 	const auto type = ComputeAlbumType(item);
 	const auto showError = [=](tr::phrase<> t) {
 		controller->showToast(t(tr::now));
@@ -357,7 +365,8 @@ void EditCaptionBox::StartMediaReplace(
 			spoilered,
 			invertCaption,
 			std::move(list),
-			std::move(saved)));
+			std::move(saved),
+			botUse));
 	}
 }
 
@@ -368,13 +377,15 @@ void EditCaptionBox::StartPhotoEdit(
 		TextWithTags text,
 		SuggestOptions suggest,
 		bool spoilered,
-		bool invertCaption,
-		Fn<void()> saved) {
+	bool invertCaption,
+	Fn<void()> saved,
+	uint64 botUse) {
 	const auto session = &controller->session();
 	const auto item = session->data().message(itemId);
 	if (!item) {
 		return;
 	}
+	botUse = botUse ? botUse : BotUse::EditBot(item);
 	EditPhotoImage(
 		controller,
 		media,
@@ -393,7 +404,8 @@ void EditCaptionBox::StartPhotoEdit(
 				spoilered,
 				invertCaption,
 				std::move(list),
-				std::move(saved)));
+				std::move(saved),
+				botUse));
 		});
 }
 
@@ -1286,7 +1298,7 @@ void EditCaptionBox::applyChanges() {
 }
 
 void EditCaptionBox::save() {
-	if (_saveRequestId) {
+	if (_saveRequestId || _botEditSubmitting) {
 		return;
 	}
 
@@ -1294,6 +1306,11 @@ void EditCaptionBox::save() {
 		_historyItem->fullId());
 	if (!item) {
 		_error = tr::lng_edit_deleted(tr::now);
+		update();
+		return;
+	}
+	if (_botUse && !BotUse::CanEditAs(item, _botUse)) {
+		_error = tr::lng_edit_error(tr::now);
 		update();
 		return;
 	}
@@ -1338,7 +1355,8 @@ void EditCaptionBox::save() {
 			std::move(_preparedList),
 			(compressed ? SendMediaType::Photo : SendMediaType::File),
 			_field->getTextWithAppliedMarkdown(),
-			action);
+			action,
+			_botUse);
 		closeAfterSave();
 		return;
 	}
@@ -1372,6 +1390,33 @@ void EditCaptionBox::save() {
 		}
 	});
 
+	if (_botUse) {
+		_botEditSubmitting = true;
+		const auto submitted = BotUse::SubmitEdit(
+			item,
+			_botUse,
+			BotUse::Edit{
+				.message = item->fullId(),
+				.text = sending,
+				.inputMedia = BotUse::ExistingEditMedia(
+					item, _mediaEditManager.spoilered(),
+					_mediaEditManager.videoCover()),
+				.options = options,
+			},
+			crl::guard(this, [=](const BotUse::Result &result) {
+				_botEditSubmitting = false;
+				if (result.state == BotUse::OperationState::Completed) {
+					closeAfterSave();
+				} else if (!result.error.silent()) {
+					_error = result.error.type;
+					update();
+				}
+			}));
+		if (!submitted) {
+			_botEditSubmitting = false;
+		}
+		return;
+	}
 	_saveRequestId = Api::EditCaption(item, sending, options, done, fail);
 }
 

@@ -1233,6 +1233,11 @@ private:
 			return false;
 		}
 		if (_botUse) {
+			if (item->history()->peer->isMegagroup()
+				&& !BotUse::CanEditAs(item, _botUse)) {
+				showToast(tr::lng_edit_error(tr::now));
+				return false;
+			}
 			_submitApiRequested = true;
 			_backgroundHold = shared_from_this();
 			const auto operation = _session->domain().botUse().editMessage(
@@ -1705,7 +1710,8 @@ private:
 		}
 		if (_botUse && _mode == Mode::Edit) {
 			const auto item = currentSubmittedItem();
-			if (!item) {
+			if (!item || (item->history()->peer->isMegagroup()
+				&& !BotUse::CanEditAs(item, _botUse))) {
 				finishSubmittedWork();
 				return;
 			}
@@ -5409,8 +5415,9 @@ void ShowComposeBox(
 
 void ShowEditBox(
 		not_null<Window::SessionController*> controller,
-		not_null<HistoryItem*> item) {
-	const auto bot = BotUse::RichEditBot(item);
+		not_null<HistoryItem*> item,
+		std::optional<uint64> botOverride) {
+	const auto bot = botOverride.value_or(BotUse::RichEditBot(item));
 	if (!bot && !CanAuthorRichMessages(&controller->session())) {
 		return;
 	}

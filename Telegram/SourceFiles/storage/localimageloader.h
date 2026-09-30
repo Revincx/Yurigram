@@ -174,6 +174,7 @@ struct FileLoadTo {
 	MsgId replaceMediaOf;
 	Window::SeparateId originWindow = nullptr;
 	uint64 botUse = 0;
+	std::shared_ptr<Fn<void(bool, QString)>> botUseEditDone;
 };
 
 using UploadFileParts = std::vector<QByteArray>;

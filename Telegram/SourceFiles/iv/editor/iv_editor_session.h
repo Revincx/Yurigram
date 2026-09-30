@@ -113,7 +113,8 @@ void ShowComposeBox(
 	ComposeBoxOptions options = {});
 void ShowEditBox(
 	not_null<Window::SessionController*> controller,
-	not_null<HistoryItem*> item);
+	not_null<HistoryItem*> item,
+	std::optional<uint64> bot = std::nullopt);
 void ShowEditFromFieldBox(
 	not_null<Window::SessionController*> controller,
 	not_null<HistoryItem*> item,

@@ -1329,7 +1329,10 @@ void SendConfirmedFile(
 		not_null<Main::Session*> session,
 		const std::shared_ptr<FilePrepareResult> &file) {
 	if (file->to.botUse) {
-		if (!BotUse::SendPrepared(file->to.botUse, session, file)) {
+		const auto sent = file->to.replaceMediaOf
+			? BotUse::EditPrepared(file->to.botUse, session, file)
+			: BotUse::SendPrepared(file->to.botUse, session, file);
+		if (!sent) {
 			return;
 		}
 		return;

@@ -539,6 +539,8 @@ OperationId Manager::editMessage(
 	if (edit.media) {
 		op->media.emplace_back();
 		op->validation = SnapshotMedia(*edit.media, op->media.back());
+	} else if (edit.inputMedia) {
+		op->prepared.push_back(*edit.inputMedia);
 	}
 	return submit(std::move(op));
 }

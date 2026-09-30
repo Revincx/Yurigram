@@ -113,6 +113,7 @@ struct Edit {
 	FullMsgId message;
 	std::optional<TextWithEntities> text;
 	std::shared_ptr<FilePrepareResult> media;
+	std::optional<MTPInputMedia> inputMedia;
 	std::optional<Data::WebPageDraft> webPage;
 	Api::SendOptions options;
 };

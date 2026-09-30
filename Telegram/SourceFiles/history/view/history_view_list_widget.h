@@ -467,8 +467,14 @@ public:
 		FullReplyTo to;
 		bool forceAnotherChat = false;
 	};
-	[[nodiscard]] rpl::producer<FullMsgId> editMessageRequested() const;
-	void editMessageRequestNotify(FullMsgId item) const;
+	struct EditMessageRequest {
+		FullMsgId id;
+		std::optional<uint64> bot;
+	};
+	[[nodiscard]] rpl::producer<EditMessageRequest> editMessageRequested() const;
+	void editMessageRequestNotify(
+		FullMsgId item,
+		std::optional<uint64> bot = std::nullopt) const;
 	[[nodiscard]] bool lastMessageEditRequestNotify() const;
 	[[nodiscard]] auto replyToMessageRequested() const
 		-> rpl::producer<ReplyToMessageRequest>;
@@ -1118,7 +1124,7 @@ private:
 	base::Timer _touchScrollTimer;
 	Ui::MiddleClickAutoscroll _middleClickAutoscroll;
 
-	rpl::event_stream<FullMsgId> _requestedToEditMessage;
+	rpl::event_stream<EditMessageRequest> _requestedToEditMessage;
 	rpl::event_stream<ReplyToMessageRequest> _requestedToReplyToMessage;
 	rpl::event_stream<FullMsgId> _requestedToReadMessage;
 	rpl::event_stream<FullMsgId> _requestedToShowMessage;

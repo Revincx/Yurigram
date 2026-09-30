@@ -64,6 +64,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_editing.h"
 #include "api/api_sending.h"
 #include "bot_use/bot_use_sending.h"
+#include "bot_use/bot_use_manager.h"
 #include "apiwrap.h"
 #include "settings.h"
 #include "boxes/premium_preview_box.h"
@@ -87,6 +88,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/click_handler_types.h"
 #include "core/mime_type.h"
 #include "main/main_session.h"
+#include "main/main_domain.h"
 #include "main/main_session_settings.h"
 #include "media/player/media_player_instance.h"
 #include "menu/menu_timecode_action.h"
@@ -666,8 +668,8 @@ ChatWidget::ChatWidget(
 	_inner->editMessageRequested(
 	) | rpl::filter([=] {
 		return !_bottom->isButtonActive();
-	}) | rpl::on_next([=](auto fullId) {
-		if (const auto item = session().data().message(fullId)) {
+	}) | rpl::on_next([=](ListWidget::EditMessageRequest request) {
+		if (const auto item = session().data().message(request.id)) {
 			const auto media = item->media();
 			if (!media || media->webpage() || media->allowsEditCaption()) {
 				if (!item->richPage()) {
@@ -679,8 +681,9 @@ ChatWidget::ChatWidget(
 					}
 				}
 				_composeControls->editMessage(
-					fullId,
-					_inner->getSelectedTextRange(item));
+					request.id,
+					_inner->getSelectedTextRange(item),
+					request.bot);
 			} else if (media->todolist()) {
 				Window::PeerMenuEditTodoList(controller, item);
 			}
@@ -1677,10 +1680,17 @@ void ChatWidget::setupComposeControls() {
 
 	_composeControls->editMsgIdValue(
 	) | rpl::filter([=](FullMsgId value) {
-		return !value && (*saveEditMsgRequestId != 0);
+		return !value
+			&& ((*saveEditMsgRequestId != 0) || _saveEditBotOperation);
 	}) | rpl::on_next([=](FullMsgId) {
-		session().api().request(
-			base::take(*saveEditMsgRequestId)).cancel();
+		if (*saveEditMsgRequestId) {
+			session().api().request(
+				base::take(*saveEditMsgRequestId)).cancel();
+		}
+		if (_saveEditBotOperation) {
+			session().domain().botUse().cancel(
+				base::take(_saveEditBotOperation));
+		}
 	}, lifetime());
 
 	_composeControls->attachRequests(
@@ -2734,7 +2744,7 @@ void ChatWidget::edit(
 		mtpRequestId *const saveEditMsgRequestId,
 		bool spoilered,
 		Api::VideoCoverEdit videoCover) {
-	if (*saveEditMsgRequestId) {
+	if (*saveEditMsgRequestId || _saveEditBotOperation) {
 		return;
 	}
 	const auto webpage = _composeControls->webPageDraft();
@@ -2749,7 +2759,8 @@ void ChatWidget::edit(
 			|| !webpage.manual)
 		&& !hasMediaWithCaption) {
 		if (item->computeSuggestionActions() == SuggestionActions::None) {
-			controller()->show(Box<DeleteMessagesBox>(item));
+			controller()->show(Box<DeleteMessagesBox>(
+				item, _composeControls->editBotUse()));
 		}
 		return;
 	} else {
@@ -2833,6 +2844,42 @@ void ChatWidget::edit(
 
 	// Not guarded by 'this': 'done' and 'fail' check the weak pointer
 	// themselves and still clear the local edit draft if we're already gone.
+	if (const auto bot = _composeControls->editBotUse()) {
+		const auto weak = base::make_weak(this);
+		const auto id = item->fullId();
+		const auto completion = [=](const BotUse::Result &result) {
+			const auto strong = weak.get();
+			if (!strong || strong->_saveEditBotOperation != result.operation) {
+				return;
+			}
+			strong->_saveEditBotOperation = 0;
+			if (result.state == BotUse::OperationState::Completed) {
+				clearEditDraft();
+				if (strong->_composeControls->editBotUse() == bot
+					&& strong->_composeControls->editingMessageId() == id) {
+					strong->_composeControls->cancelEditMessage();
+				}
+			} else if (!result.error.silent()) {
+				strong->controller()->showToast(result.error.type);
+			}
+		};
+		_saveEditBotOperation = BotUse::SubmitEdit(
+			item,
+			bot,
+			BotUse::Edit{
+				.message = id,
+				.text = sending,
+				.inputMedia = BotUse::ExistingEditMedia(
+					item, spoilered, videoCover),
+				.webPage = webpage,
+				.options = options,
+			},
+			completion);
+		_composeControls->hidePanelsAnimated();
+		doSetInnerFocus();
+		return;
+	}
+
 	*saveEditMsgRequestId = Api::EditTextMessage(
 		item,
 		sending,

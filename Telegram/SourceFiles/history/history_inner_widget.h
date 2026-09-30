@@ -537,9 +537,9 @@ private:
 	void forwardAsGroup(FullMsgId itemId);
 	void forwardItemNoQuote(FullMsgId itemId);
 	void forwardAsGroupNoQuote(FullMsgId itemId);
-	void deleteItem(not_null<HistoryItem*> item);
-	void deleteItem(FullMsgId itemId);
-	void deleteAsGroup(FullMsgId itemId);
+	void deleteItem(not_null<HistoryItem*> item, uint64 bot = 0);
+	void deleteItem(FullMsgId itemId, uint64 bot = 0);
+	void deleteAsGroup(FullMsgId itemId, uint64 bot = 0);
 	void reportItem(FullMsgId itemId);
 	void reportAsGroup(FullMsgId itemId);
 	void blockSenderItem(FullMsgId itemId);

@@ -33,6 +33,7 @@
 #include "window/window_session_controller.h"
 
 #include <QtWidgets/QApplication>
+#include <QtCore/QBuffer>
 
 #include <map>
 
@@ -90,13 +91,17 @@ MTPChat Channel(uint64 id) {
 
 MTPMessage Message(int id, uint64 peer, uint64 author,
 		std::optional<MTPRichMessage> rich = {},
-		QString text = u"fixture message"_q) {
-	auto buffer = mtpBuffer{ mtpPrime(mtpc_message), 256, mtpPrime(rich ? 8192 : 0) };
+		QString text = u"fixture message"_q,
+		std::optional<MTPMessageMedia> media = {}) {
+	auto buffer = mtpBuffer{
+		mtpPrime(mtpc_message), mtpPrime(256 | (media ? 512 : 0)),
+		mtpPrime(rich ? 8192 : 0) };
 	MTP_int(id).write(buffer);
 	MTPPeer(MTP_peerUser(MTP_long(author))).write(buffer);
 	MTPPeer(MTP_peerChannel(MTP_long(peer))).write(buffer);
 	MTP_int(1).write(buffer);
 	MTP_string(text).write(buffer);
+	if (media) { media->write(buffer); }
 	if (rich) { rich->write(buffer); }
 	return Decode<MTPMessage>(buffer);
 }
@@ -151,6 +156,8 @@ struct Fixture {
 	int nextMessage = 1000;
 	int deletes = 0;
 	int edits = 0;
+	bool preparedEdited = false;
+	bool preparedDone = false;
 	int editBefore = 0;
 	uint64 editUser = 0;
 	bool editRich = false;
@@ -310,7 +317,15 @@ void Fixture::respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuff
 		const auto messageId = Read<MTPint>(from, end);
 		const auto text = (flags & (1 << 11))
 			? qs(Read<MTPstring>(from, end)) : u"fixture message"_q;
-		if (flags & (1 << 14)) { Read<MTPInputMedia>(from, end); }
+		auto replacement = std::optional<MTPMessageMedia>();
+		if (flags & (1 << 14)) {
+			const auto input = Read<MTPInputMedia>(from, end);
+			if (input.type() == mtpc_inputMediaPhoto) {
+				replacement = MTP_messageMediaPhoto(
+					MTP_flags(MTPDmessageMediaPhoto::Flag::f_photo),
+					RichPhoto("fixture-reference"), MTPint(), MTPDocument());
+			}
+		}
 		if (flags & (1 << 2)) { Read<MTPReplyMarkup>(from, end); }
 		if (flags & (1 << 3)) { Read<MTPVector<MTPMessageEntity>>(from, end); }
 		if (flags & (1 << 15)) { Read<MTPint>(from, end); }
@@ -344,7 +359,8 @@ void Fixture::respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuff
 			return;
 		}
 		const auto channel = peer.c_inputPeerChannel().vchannel_id().v;
-		const auto message = Message(messageId.v, channel, editUser, rich, text);
+		const auto message = Message(
+			messageId.v, channel, editUser, rich, text, replacement);
 		messages.insert_or_assign(messageId.v, message);
 		if (base::take(omitEditUpdate)) {
 			Reply<MTPmessages_EditMessage>(instance, id, MTP_updates(
@@ -488,6 +504,143 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		state->operation = state->manager->authenticate(state->b, state->completion());
 	}, [=] { Check(state->result->state == BotUse::OperationState::Completed && state->users.size() == 2,
 		u"Bot B has an independent instance"_q); });
+	runner->add({ .name = u"supergroup bot message actions"_q, .run = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto history = state->text(101).action.history;
+		session->data().processUser(User(11));
+		session->data().processUser(User(22));
+		const auto own = session->data().addNewMessage(
+			Message(901, 101, 11), MessageFlags(), NewMessageType::Existing);
+		const auto other = session->data().addNewMessage(
+			Message(902, 101, 22), MessageFlags(), NewMessageType::Existing);
+		Expects(own && other);
+		session->botUseChats().clear(history->peer->id);
+		Check(!BotUse::EditBot(own) && !BotUse::DeleteBot(own),
+			u"Inactive BotUse hides bot message actions"_q);
+		session->botUseChats().choose(history->peer->id, state->a);
+		Check(BotUse::EditBot(own) == state->a
+			&& BotUse::DeleteBot(own) == state->a,
+			u"Selected bot owns supergroup actions"_q);
+		Check(!BotUse::EditBot(other) && !BotUse::DeleteBot(other),
+			u"Another bot's message has no bot actions"_q);
+		session->botUseChats().choose(history->peer->id, state->b);
+		Check(!BotUse::EditBot(own) && BotUse::EditBot(other) == state->b,
+			u"Switching bot changes eligible messages"_q);
+		session->botUseChats().choose(history->peer->id, state->a);
+	} });
+	add(u"supergroup bot edit"_q, [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto item = session->data().message(
+			peerFromChannel(ChannelId(101)), MsgId(901));
+		Expects(item != nullptr);
+		state->messages.insert_or_assign(901, Message(901, 101, 11));
+		state->operation = BotUse::SubmitEdit(
+			item, state->a,
+			BotUse::Edit{
+				.message = item->fullId(),
+				.text = TextWithEntities{ u"edited by bot"_q },
+			},
+			state->completion());
+	}, [=] {
+		Check(state->result->state == BotUse::OperationState::Completed
+			&& state->editUser == 11,
+			u"Supergroup edit uses selected bot RPC"_q);
+	});
+	runner->add({ .name = u"supergroup bot media replacement"_q, .run = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		state->preparedEdited = false;
+		state->preparedDone = false;
+		auto descriptor = FilePrepareDescriptor{
+			.id = uint64(701236),
+			.type = SendMediaType::Photo,
+			.to = FileLoadTo(peerFromChannel(ChannelId(101)),
+				Api::SendOptions(), {}, MsgId(901)),
+		};
+		auto file = std::make_shared<FilePrepareResult>(std::move(descriptor));
+		auto image = QImage(16, 16, QImage::Format_ARGB32);
+		image.fill(Qt::red);
+		auto bytes = QByteArray();
+		auto buffer = QBuffer(&bytes);
+		Check(buffer.open(QIODevice::WriteOnly) && image.save(&buffer, "PNG"),
+			u"Replacement fixture has a local image"_q);
+		file->content = bytes;
+		file->photo = MTP_photoEmpty(MTP_long(file->id));
+		file->filename = u"replacement.jpg"_q;
+		file->filemime = u"image/png"_q;
+		file->to.botUse = state->a;
+		file->to.botUseEditDone = std::make_shared<Fn<void(bool, QString)>>(
+			[=](bool success, QString) {
+				state->preparedEdited = success;
+				state->preparedDone = true;
+			});
+		Check(BotUse::EditPrepared(state->a, session, file),
+			u"Prepared replacement enters bot edit route"_q);
+		const auto item = session->data().message(
+			peerFromChannel(ChannelId(101)), MsgId(901));
+		const auto photo = item && item->media()
+			? item->media()->photo() : nullptr;
+		Check(item && item->isEditingMedia()
+			&& photo && photo->id == PhotoId(file->id)
+			&& photo->uploadingData
+			&& photo->createMediaView()->image(Data::PhotoSize::Large) != nullptr,
+			u"Replacement displays bot local upload preview"_q);
+	}, .until = [=] { return state->preparedDone; }, .then = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto item = session->data().message(
+			peerFromChannel(ChannelId(101)), MsgId(901));
+		const auto photo = item && item->media()
+			? item->media()->photo() : nullptr;
+		Check(state->preparedEdited && state->editUser == 11
+			&& item && !item->isEditingMedia()
+			&& photo && photo->id == PhotoId(9200)
+			&& photo->createMediaView()->image(Data::PhotoSize::Large) != nullptr
+			&& session->data().photo(PhotoId(701236))->progress() > 0,
+			u"Bot replacement retains preview and reports upload progress"_q);
+	} });
+	add(u"supergroup bot rich edit"_q, [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto rich = MTP_richMessage(
+			MTP_flags(0),
+			MTP_vector<MTPPageBlock>(1, MTP_pageBlockHeader(
+				MTP_textPlain(MTP_string("Before")))),
+			MTP_vector<MTPPhoto>(), MTP_vector<MTPDocument>());
+		const auto source = Message(904, 101, 11, rich);
+		state->messages.insert_or_assign(904, source);
+		const auto item = session->data().addNewMessage(
+			source, MessageFlags(), NewMessageType::Existing);
+		Expects(item != nullptr);
+		Check(BotUse::RichEditBot(item) == state->a,
+			u"Selected bot can edit supergroup rich message"_q);
+		auto page = std::make_shared<Iv::RichPage>();
+		auto block = Iv::RichPage::Block();
+		block.kind = Iv::RichPage::BlockKind::Paragraph;
+		block.text.text = TextWithEntities{ u"After"_q };
+		page->blocks.push_back(block);
+		state->operation = state->manager->editRichMessage(
+			state->a, item->fullId(), page, {}, state->completion());
+	}, [=] {
+		Check(state->result->state == BotUse::OperationState::Completed
+			&& state->editRich && state->editUser == 11,
+			u"Supergroup rich edit uses selected bot RPC"_q);
+	});
+	add(u"supergroup bot batch delete"_q, [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto first = session->data().message(
+			peerFromChannel(ChannelId(101)), MsgId(901));
+		const auto second = session->data().message(
+			peerFromChannel(ChannelId(101)), MsgId(904));
+		Expects(first && second);
+		Check(BotUse::CanDeleteAs(first, state->a)
+			&& BotUse::CanDeleteAs(second, state->a),
+			u"Same bot owns every batch item"_q);
+		state->operation = state->manager->deleteMessages(
+			state->a, { first->fullId(), second->fullId() },
+			state->completion());
+	}, [=] {
+		Check(state->result->state == BotUse::OperationState::Completed
+			&& state->result->messages.size() == 2,
+			u"Supergroup batch deletion uses bot RPC"_q);
+	});
 	add(u"set bot typing"_q, [=] {
 		state->operation = state->manager->setTyping(
 			state->a,
@@ -600,18 +753,22 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 	}, [=] { Check(state->result->error.type == u"OWNERSHIP_UNKNOWN"_q && state->deletes == 0,
 		u"Another bot cannot delete the message"_q); });
 	add(u"channel edit"_q, [=] {
+		state->editBefore = state->edits;
 		auto edit = BotUse::Edit();
 		edit.message = FullMsgId(peerFromChannel(ChannelId(100)), MsgId(900));
 		edit.text = TextWithEntities{ u"changed"_q };
 		state->operation = state->manager->editMessage(state->a, edit, state->completion());
-	}, [=] { Check(state->result->state == BotUse::OperationState::Completed && state->edits == 1,
+	}, [=] { Check(state->result->state == BotUse::OperationState::Completed
+		&& state->edits == state->editBefore + 1,
 		u"Channel edit uses bot management permissions"_q); });
 	add(u"supergroup edit ownership"_q, [=] {
+		state->editBefore = state->edits;
 		auto edit = BotUse::Edit();
 		edit.message = FullMsgId(peerFromChannel(ChannelId(101)), MsgId(900));
 		edit.text = TextWithEntities{ u"changed"_q };
 		state->operation = state->manager->editMessage(state->a, edit, state->completion());
-	}, [=] { Check(state->result->error.type == u"OWNERSHIP_UNKNOWN"_q && state->edits == 1,
+	}, [=] { Check(state->result->error.type == u"OWNERSHIP_UNKNOWN"_q
+		&& state->edits == state->editBefore,
 		u"Supergroup edit does not reach RPC for another author"_q); });
 	add(u"rich message"_q, [=] {
 		auto page = std::make_shared<Iv::RichPage>();
@@ -634,7 +791,7 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 	add(u"own deletion"_q, [=] {
 		const auto target = state->result->messages;
 		state->operation = state->manager->deleteMessages(state->a, target, state->completion());
-	}, [=] { Check(state->result->state == BotUse::OperationState::Completed && state->deletes == 1,
+	}, [=] { Check(state->result->state == BotUse::OperationState::Completed && state->deletes == 2,
 		u"Own message receipt authorizes deletion"_q); });
 	add(u"token replacement mismatch"_q, [=] {
 		state->operation = state->manager->replaceBotToken(state->a, u"fixture-other"_q, state->completion());
