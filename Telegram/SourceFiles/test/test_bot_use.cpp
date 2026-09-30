@@ -181,6 +181,7 @@ struct Fixture {
 	std::vector<mtpBuffer> sent;
 	std::vector<bool> textNoForwards;
 	std::vector<bool> mediaNoForwards;
+	std::vector<BotUse::UploadProgress> uploadProgress;
 
 	void respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuffer body);
 	BotUse::Completion completion();
@@ -356,14 +357,7 @@ void Fixture::respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuff
 		}
 	} break;
 	case mtpc_messages_getRichMessage: {
-		auto from = body.constData() + 1;
-		const auto end = body.constData() + body.size();
-		Read<MTPInputPeer>(from, end);
-		richReadId = Read<MTPint>(from, end).v;
-		richReadUser = users.at(instance.data());
-		Check(from == end, u"Bot retrieves original rich media references"_q);
-		Reply<MTPmessages_GetRichMessage>(instance, id,
-			Messages({ messages.at(richReadId) }));
+		Fail(u"BotUse avoids user-only rich message fetches"_q);
 	} break;
 	case mtpc_channels_getMessages: {
 		auto from = body.constData() + 1;
@@ -374,6 +368,12 @@ void Fixture::respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuff
 		for (const auto &item : requested.v) {
 			const auto mid = item.c_inputMessageID().vid().v;
 			const auto i = messages.find(mid);
+			if (i != messages.end()
+				&& i->second.type() == mtpc_message
+				&& i->second.c_message().vrich_message()) {
+				richReadId = mid;
+				richReadUser = users.at(instance.data());
+			}
 			result.push_back(i == messages.end()
 				? Message(mid, channel.c_inputChannel().vchannel_id().v, 77)
 				: i->second);
@@ -641,6 +641,7 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 	}, [=] { Check(state->result->error.type == u"BOT_IDENTITY_MISMATCH"_q
 		&& state->manager->bots().front().userId == UserId(11), u"Failed token replacement preserves identity"_q); });
 	add(u"upload photo"_q, [=] {
+		state->uploadProgress.clear();
 		auto descriptor = FilePrepareDescriptor{ .id = uint64(5000), .type = SendMediaType::Photo };
 		auto file = std::make_shared<FilePrepareResult>(std::move(descriptor));
 		file->content = QByteArray(600000, 'x');
@@ -651,9 +652,19 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 			state->a,
 			message,
 			file,
-			state->completion());
+			state->completion(),
+			[=](const BotUse::UploadProgress &progress) {
+				state->uploadProgress.push_back(progress);
+			});
 	}, [=] { Check(state->result->state == BotUse::OperationState::Completed && state->parts == 2,
 		u"Media uses bot chunk upload and native message result"_q);
+		Check(state->uploadProgress.size() == 2
+			&& state->uploadProgress.front().id == 5000
+			&& state->uploadProgress.front().photo
+			&& state->uploadProgress.front().offset == 512 * 1024
+			&& state->uploadProgress.back().offset == 600000
+			&& state->uploadProgress.back().size == 600000,
+			u"Bot media upload reports exact per-file progress"_q);
 		Check(state->mediaNoForwards.back(),
 			u"Protected media uses the noforwards request flag"_q); });
 	runner->add({ .name = u"botuse local media preview"_q, .run = [=] {
@@ -670,10 +681,20 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		image.fill(Qt::red);
 		photo->photoThumbs.emplace('y', PreparedPhotoThumb{ .image = image });
 		BotUse::PrepareLocalMediaPreview(session, photo);
+		Check(session->data().photo(PhotoId(photo->id))->uploading(),
+			u"Bot photo preview starts in uploading state"_q);
+		BotUse::ApplyLocalMediaUploadProgress(session, {
+			.id = photo->id,
+			.photo = true,
+			.offset = 3,
+			.size = 4,
+		});
 		const auto photoMedia = session->data().photo(PhotoId(photo->id))
 			->createMediaView();
 		Check(photoMedia->image(Data::PhotoSize::Large) != nullptr,
 			u"Bot photo preview is available before upload"_q);
+		Check(session->data().photo(PhotoId(photo->id))->progress() == 0.75,
+			u"Bot photo preview exposes upload progress"_q);
 		auto document = std::make_shared<FilePrepareResult>(FilePrepareDescriptor{
 			.id = uint64(701235), .type = SendMediaType::File });
 		document->document = MTP_document(
@@ -683,10 +704,19 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 			MTP_vector<MTPDocumentAttribute>());
 		document->content = "preview";
 		BotUse::PrepareLocalMediaPreview(session, document);
+		Check(session->data().document(DocumentId(document->id))->uploading(),
+			u"Bot document preview starts in uploading state"_q);
+		BotUse::ApplyLocalMediaUploadProgress(session, {
+			.id = document->id,
+			.offset = 5,
+			.size = 10,
+		});
 		const auto documentMedia = session->data().document(DocumentId(document->id))
 			->createMediaView();
 		Check(documentMedia->bytes() == document->content,
 			u"Bot document preview uses local bytes before upload"_q);
+		Check(session->data().document(DocumentId(document->id))->progress() == 0.5,
+			u"Bot document preview exposes upload progress"_q);
 	} });
 	add(u"upload rich editor photo before send"_q, [=] {
 		auto descriptor = FilePrepareDescriptor{

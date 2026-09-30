@@ -61,6 +61,10 @@ private:
 	void ingest(const MTPPhoto &photo);
 	void ingest(const MTPDocument &document);
 	void ingest(const MTPmessages_Messages &messages);
+	void requestMessage(
+		const Op &operation,
+		FullMsgId id,
+		Fn<void(const MTPmessages_Messages &)> done);
 	[[nodiscard]] std::vector<MTPMessage> messages(
 		const MTPmessages_Messages &result) const;
 	[[nodiscard]] MTPInputPeer peer(PeerId id) const;

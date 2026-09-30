@@ -23,6 +23,13 @@ void ShowSendError(not_null<History*> history, const Error &error);
 void PrepareLocalMediaPreview(
 	not_null<Main::Session*> session,
 	const std::shared_ptr<FilePrepareResult> &file);
+void ApplyLocalMediaUploadProgress(
+	not_null<Main::Session*> session,
+	const UploadProgress &progress);
+void FailLocalMediaUpload(
+	not_null<Main::Session*> session,
+	uint64 id,
+	bool photo);
 [[nodiscard]] bool SendText(
 	BotId bot,
 	Api::MessageToSend message,

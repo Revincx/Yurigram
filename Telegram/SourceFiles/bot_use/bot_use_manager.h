@@ -57,23 +57,27 @@ public:
 		BotId bot,
 		const Api::MessageToSend &message,
 		const std::shared_ptr<FilePrepareResult> &file,
-		Completion done = {});
+		Completion done = {},
+		UploadCallback progress = {});
 	[[nodiscard]] OperationId uploadMedia(
 		BotId bot,
 		PeerId peer,
 		const std::shared_ptr<FilePrepareResult> &file,
-		Completion done = {});
+		Completion done = {},
+		UploadCallback progress = {});
 	[[nodiscard]] OperationId sendAlbum(
 		BotId bot,
 		const Api::SendAction &action,
 		const std::vector<std::shared_ptr<FilePrepareResult>> &files,
-		Completion done = {});
+		Completion done = {},
+		UploadCallback progress = {});
 	[[nodiscard]] OperationId sendRichMessage(
 		BotId bot,
 		std::shared_ptr<const Iv::RichPage> page,
 		const Api::SendAction &action,
 		Completion done = {},
-		const std::vector<RichMediaSource> &sources = {});
+		const std::vector<RichMediaSource> &sources = {},
+		UploadCallback progress = {});
 	[[nodiscard]] OperationId sendRichMessage(
 		BotId bot,
 		const MTPInputRichMessage &message,
@@ -83,14 +87,16 @@ public:
 	[[nodiscard]] OperationId editMessage(
 		BotId bot,
 		const Edit &edit,
-		Completion done = {});
+		Completion done = {},
+		UploadCallback progress = {});
 	[[nodiscard]] OperationId editRichMessage(
 		BotId bot,
 		FullMsgId message,
 		std::shared_ptr<const Iv::RichPage> page,
 		Api::SendOptions options = {},
 		Completion done = {},
-		const std::vector<RichMediaSource> &sources = {});
+		const std::vector<RichMediaSource> &sources = {},
+		UploadCallback progress = {});
 	[[nodiscard]] OperationId editRichMessage(
 		BotId bot,
 		FullMsgId message,
@@ -110,7 +116,8 @@ private:
 	[[nodiscard]] OperationId nextOperation();
 	[[nodiscard]] std::shared_ptr<Operation> makeOperation(
 		BotId bot,
-		Completion done);
+		Completion done,
+		UploadCallback progress = {});
 	[[nodiscard]] OperationId submit(std::shared_ptr<Operation> operation);
 	[[nodiscard]] OperationId reject(BotId bot, Error error, Completion done);
 	[[nodiscard]] bool save();

@@ -48,6 +48,7 @@ struct Operation {
 	Kind kind = Kind::Text;
 	Action action;
 	Completion done;
+	UploadCallback progress;
 	Error validation;
 	std::optional<TextWithEntities> text;
 	std::optional<Data::WebPageDraft> webPage;

@@ -75,6 +75,15 @@ struct Result {
 
 using Completion = Fn<void(const Result &)>;
 
+struct UploadProgress {
+	uint64 id = 0;
+	bool photo = false;
+	int64 offset = 0;
+	int64 size = 0;
+};
+
+using UploadCallback = Fn<void(const UploadProgress &)>;
+
 struct RichMediaSource {
 	uint64 id = 0;
 	bool photo = false;

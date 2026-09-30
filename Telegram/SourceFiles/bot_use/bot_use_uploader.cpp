@@ -24,9 +24,12 @@ struct Uploader::File {
 	QCryptographicHash hash{ QCryptographicHash::Md5 };
 	uint64 id = base::RandomValue<uint64>();
 	int64 size = 0;
+	int64 uploaded = 0;
+	uint64 mediaId = 0;
 	int next = 0;
 	int parts = 0;
 	int pending = 0;
+	bool photo = false;
 	bool access = false;
 	bool completed = false;
 	~File();
@@ -46,7 +49,13 @@ void Uploader::upload(
 		std::shared_ptr<Operation> operation,
 		const MediaSource &source,
 		Fn<void(MTPInputMedia)> done) {
-	uploadFile(operation, source.location, source.bytes, source.name,
+	uploadFile(
+		operation,
+		source.location,
+		source.bytes,
+		source.name,
+		source.id,
+		source.photo,
 		[=](MTPInputFile file) {
 			mediaReady(operation, source, std::move(file), done);
 		});
@@ -57,12 +66,16 @@ void Uploader::uploadFile(
 		Core::FileLocation location,
 		QByteArray bytes,
 		QString name,
+		uint64 mediaId,
+		bool photo,
 		Fn<void(MTPInputFile)> done) {
 	auto state = std::make_shared<File>();
 	state->operation = operation;
 	state->location = std::move(location);
 	state->bytes = std::move(bytes);
 	state->name = name.isEmpty() ? u"file"_q : name;
+	state->mediaId = mediaId;
+	state->photo = photo;
 	state->done = std::move(done);
 	if (!state->bytes.isEmpty()) {
 		state->size = state->bytes.size();
@@ -137,7 +150,16 @@ void Uploader::partDone(
 		return;
 	}
 	--file->pending;
+	file->uploaded += size;
 	file->operation->result.uploaded += size;
+	if (file->mediaId && file->operation->progress) {
+		file->operation->progress({
+			.id = file->mediaId,
+			.photo = file->photo,
+			.offset = file->uploaded,
+			.size = file->size,
+		});
+	}
 	_client->notify(file->operation);
 	sendParts(file);
 }
@@ -169,7 +191,7 @@ void Uploader::mediaReady(
 	if (source.thumbnail.isEmpty()) {
 		finish(std::nullopt);
 	} else {
-		uploadFile(operation, {}, source.thumbnail, u"thumb.jpg"_q,
+		uploadFile(operation, {}, source.thumbnail, u"thumb.jpg"_q, 0, false,
 			[=](MTPInputFile thumb) { finish(std::move(thumb)); });
 	}
 }

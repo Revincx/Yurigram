@@ -471,11 +471,13 @@ void Client::resolveMedia(const Op &operation, size_t index, Fn<void()> done) {
 		});
 	};
 	if (source.origin && !ValidateTarget(source.origin.peer)) {
-		rpc(operation, MTPmessages_GetRichMessage(peer(source.origin.peer), MTP_int(source.origin.msg.bare)),
-			Fn<void(const MTPmessages_Messages &)>([=](const MTPmessages_Messages &result) {
+		requestMessage(
+			operation,
+			source.origin,
+			[=](const MTPmessages_Messages &result) {
 				ingest(result);
 				if (append()) { done(); } else { upload(); }
-			}));
+			});
 	} else {
 		upload();
 	}
@@ -857,6 +859,17 @@ void Client::ingest(const MTPDocument &document) {
 	}
 }
 
+void Client::requestMessage(
+		const Op &operation,
+		FullMsgId id,
+		Fn<void(const MTPmessages_Messages &)> done) {
+	rpc(operation, MTPchannels_GetMessages(
+		channel(id.peer),
+		MTP_vector<MTPInputMessage>(
+			1,
+			MTP_inputMessageID(MTP_int(id.msg.bare)))), std::move(done));
+}
+
 void Client::refresh(const Op &operation, Fn<void()> retry) {
 	if (++operation->refreshes > 1) {
 		finish(operation, OperationState::Failed, { u"FILE_REFERENCE_EXPIRED"_q });
@@ -882,11 +895,13 @@ void Client::refresh(const Op &operation, Fn<void()> retry) {
 	}
 	const auto pending = std::make_shared<int>(int(origins.size()));
 	for (const auto &origin : origins) {
-		rpc(operation, MTPmessages_GetRichMessage(peer(origin.peer), MTP_int(origin.msg.bare)),
-			Fn<void(const MTPmessages_Messages &)>([=](const MTPmessages_Messages &result) {
+		requestMessage(
+			operation,
+			origin,
+			[=](const MTPmessages_Messages &result) {
 				ingest(result);
 				if (!--*pending) { prepare(operation); }
-			}));
+			});
 	}
 }
 

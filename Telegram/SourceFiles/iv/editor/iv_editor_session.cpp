@@ -3128,6 +3128,20 @@ private:
 							session->applyUploadedDocumentResult(uploadId, *result.media);
 						}
 					}
+				},
+				[weak = base::make_weak(this), uploadId](
+						const BotUse::UploadProgress &progress) {
+					if (const auto session = weak.get()) {
+						const auto attachment = session->findAttachment(uploadId);
+						if (!attachment
+							|| attachment->localMediaId != progress.id) {
+							return;
+						}
+						BotUse::ApplyLocalMediaUploadProgress(
+							session->_session,
+							progress);
+						session->requestEditorUpdate();
+					}
 				});
 		} else {
 			_session->uploader().upload(uploadId, prepared);
@@ -3549,6 +3563,10 @@ private:
 			attachment->finalizationRequestId);
 		attachment->botUploadId = 0;
 		attachment->state = AttachmentState::Failed;
+		BotUse::FailLocalMediaUpload(
+			_session,
+			attachment->localMediaId,
+			attachment->blockKind == RichPage::BlockKind::Photo);
 		if (requestId) {
 			_session->api().request(requestId).cancel();
 		}

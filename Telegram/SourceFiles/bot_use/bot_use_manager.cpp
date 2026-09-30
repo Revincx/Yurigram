@@ -353,11 +353,15 @@ Client *Manager::client(BotId id) {
 
 OperationId Manager::nextOperation() { return _nextOperation++; }
 
-std::shared_ptr<Operation> Manager::makeOperation(BotId bot, Completion done) {
+std::shared_ptr<Operation> Manager::makeOperation(
+		BotId bot,
+		Completion done,
+		UploadCallback progress) {
 	auto op = std::make_shared<Operation>();
 	op->result.operation = nextOperation();
 	op->result.bot = bot;
 	op->done = std::move(done);
+	op->progress = std::move(progress);
 	return op;
 }
 
@@ -432,8 +436,9 @@ OperationId Manager::sendMedia(
 		BotId bot,
 		const Api::MessageToSend &message,
 		const std::shared_ptr<FilePrepareResult> &file,
-		Completion done) {
-	auto op = makeOperation(bot, std::move(done));
+		Completion done,
+		UploadCallback progress) {
+	auto op = makeOperation(bot, std::move(done), std::move(progress));
 	op->kind = Kind::Media;
 	op->validation = SnapshotAction(message.action, op->action);
 	op->media.emplace_back();
@@ -451,8 +456,9 @@ OperationId Manager::uploadMedia(
 		BotId bot,
 		PeerId peer,
 		const std::shared_ptr<FilePrepareResult> &file,
-		Completion done) {
-	auto op = makeOperation(bot, std::move(done));
+		Completion done,
+		UploadCallback progress) {
+	auto op = makeOperation(bot, std::move(done), std::move(progress));
 	op->kind = Kind::Upload;
 	op->action.peer = peer;
 	op->media.emplace_back();
@@ -466,8 +472,9 @@ OperationId Manager::sendAlbum(
 		BotId bot,
 		const Api::SendAction &action,
 		const std::vector<std::shared_ptr<FilePrepareResult>> &files,
-		Completion done) {
-	auto op = makeOperation(bot, std::move(done));
+		Completion done,
+		UploadCallback progress) {
+	auto op = makeOperation(bot, std::move(done), std::move(progress));
 	op->kind = Kind::Album;
 	op->validation = SnapshotAction(action, op->action);
 	if (files.empty() || files.size() > 10) {
@@ -490,8 +497,9 @@ OperationId Manager::sendRichMessage(
 		std::shared_ptr<const Iv::RichPage> page,
 		const Api::SendAction &action,
 		Completion done,
-		const std::vector<RichMediaSource> &sources) {
-	auto op = makeOperation(bot, std::move(done));
+		const std::vector<RichMediaSource> &sources,
+		UploadCallback progress) {
+	auto op = makeOperation(bot, std::move(done), std::move(progress));
 	op->kind = Kind::Rich;
 	op->validation = SnapshotAction(action, op->action);
 	if (!op->validation) {
@@ -516,8 +524,12 @@ OperationId Manager::sendRichMessage(
 	return submit(std::move(op));
 }
 
-OperationId Manager::editMessage(BotId bot, const Edit &edit, Completion done) {
-	auto op = makeOperation(bot, std::move(done));
+OperationId Manager::editMessage(
+		BotId bot,
+		const Edit &edit,
+		Completion done,
+		UploadCallback progress) {
+	auto op = makeOperation(bot, std::move(done), std::move(progress));
 	op->kind = Kind::Edit;
 	op->action.peer = edit.message.peer;
 	op->action.options = edit.options;
@@ -537,8 +549,9 @@ OperationId Manager::editRichMessage(
 		std::shared_ptr<const Iv::RichPage> page,
 		Api::SendOptions options,
 		Completion done,
-		const std::vector<RichMediaSource> &sources) {
-	auto op = makeOperation(bot, std::move(done));
+		const std::vector<RichMediaSource> &sources,
+		UploadCallback progress) {
+	auto op = makeOperation(bot, std::move(done), std::move(progress));
 	op->kind = Kind::EditRich;
 	op->action.peer = message.peer;
 	op->action.options = options;

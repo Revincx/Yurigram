@@ -22,6 +22,8 @@ private:
 		Core::FileLocation location,
 		QByteArray bytes,
 		QString name,
+		uint64 mediaId,
+		bool photo,
 		Fn<void(MTPInputFile)> done);
 	void sendParts(std::shared_ptr<File> file);
 	void partDone(std::shared_ptr<File> file, int size, const MTPBool &result);

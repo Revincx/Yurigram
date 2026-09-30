@@ -192,6 +192,33 @@ void Complete(
 		file.document, MTPVector<MTPDocument>(), MTPPhoto(), MTPint(), MTPint());
 }
 
+struct LocalUploadTarget {
+	uint64 id = 0;
+	bool photo = false;
+	FullMsgId message;
+};
+
+[[nodiscard]] UploadCallback LocalUploadProgress(
+		not_null<Main::Session*> session,
+		std::vector<LocalUploadTarget> targets) {
+	return [weak = base::make_weak(session),
+			targets = std::move(targets)](const UploadProgress &progress) {
+		const auto session = weak.get();
+		if (!session) {
+			return;
+		}
+		ApplyLocalMediaUploadProgress(session, progress);
+		const auto i = ranges::find_if(targets, [&](const auto &target) {
+			return target.id == progress.id && target.photo == progress.photo;
+		});
+		if (i != end(targets)) {
+			if (const auto item = session->data().message(i->message)) {
+				session->data().requestItemRepaint(item);
+			}
+		}
+	};
+}
+
 } // namespace
 
 BotId Selected(not_null<History*> history) {
@@ -311,6 +338,8 @@ void PrepareLocalMediaPreview(
 		const auto photo = file->photoThumbs.empty()
 			? session->data().processPhoto(file->photo)
 			: session->data().processPhoto(file->photo, file->photoThumbs);
+		photo->uploadingData = std::make_unique<Data::UploadState>(
+			file->partssize > 0 ? file->partssize : file->content.size());
 		auto media = photo->createMediaView();
 		const auto best = [&]() -> const PreparedPhotoThumb* {
 			for (const auto level : { 'y', 'w', 'x', 'm', 'c', 'b', 'a' }) {
@@ -346,6 +375,8 @@ void PrepareLocalMediaPreview(
 			file->thumbbytes);
 	const auto document = session->data().processDocument(
 		file->document, thumbnail);
+	document->uploadingData = std::make_unique<Data::UploadState>(
+		file->filesize > 0 ? file->filesize : file->content.size());
 	auto media = document->createMediaView();
 	if (!file->thumb.isNull()) {
 		media->setThumbnail(file->thumb);
@@ -361,6 +392,41 @@ void PrepareLocalMediaPreview(
 		document->setLocation(Core::FileLocation(file->filepath));
 	}
 	session->data().keepAlive(std::move(media));
+}
+
+void ApplyLocalMediaUploadProgress(
+		not_null<Main::Session*> session,
+		const UploadProgress &progress) {
+	const auto size = std::max(progress.size, int64(0));
+	const auto offset = std::clamp(progress.offset, int64(0), size);
+	if (progress.photo) {
+		const auto photo = session->data().photo(PhotoId(progress.id));
+		if (!photo->uploadingData) {
+			photo->uploadingData = std::make_unique<Data::UploadState>(size);
+		}
+		photo->uploadingData->size = size;
+		photo->uploadingData->offset = offset;
+	} else {
+		const auto document = session->data().document(DocumentId(progress.id));
+		if (!document->uploadingData) {
+			document->uploadingData = std::make_unique<Data::UploadState>(size);
+		}
+		document->uploadingData->size = size;
+		document->uploadingData->offset = offset;
+	}
+}
+
+void FailLocalMediaUpload(
+		not_null<Main::Session*> session,
+		uint64 id,
+		bool photo) {
+	if (photo) {
+		session->data().photo(PhotoId(id))->uploadingData = nullptr;
+	} else {
+		const auto document = session->data().document(DocumentId(id));
+		document->uploadingData = nullptr;
+		document->status = FileUploadFailed;
+	}
 }
 
 bool SendText(BotId bot, Api::MessageToSend message, std::optional<MsgId> localId) {
@@ -435,6 +501,17 @@ bool SendRich(
 	const auto id = FullMsgId(history->peer->id,
 		history->session().data().nextLocalMessageId());
 	const auto info = FindBot(history, bot);
+	auto targets = std::vector<LocalUploadTarget>();
+	for (const auto &source : sources) {
+		if (source.file) {
+			PrepareLocalMediaPreview(&history->session(), source.file);
+			targets.push_back({
+				.id = source.file->id,
+				.photo = source.file->type == SendMediaType::Photo,
+				.message = id,
+			});
+		}
+	}
 	const auto item = history->addNewLocalMessage(
 		LocalFields(action, info.userId, id.msg),
 		TextWithEntities(), MTP_messageMediaEmpty());
@@ -443,7 +520,9 @@ bool SendRich(
 	history->session().api().sendAction(action);
 	const auto operation = history->session().domain().botUse().sendRichMessage(
 		bot, page, action,
-		CompletionFor(history, { id }, std::move(done)), sources);
+		CompletionFor(history, { id }, std::move(done)),
+		sources,
+		LocalUploadProgress(&history->session(), std::move(targets)));
 	if (!operation) {
 		return false;
 	}
@@ -501,11 +580,17 @@ bool SendPrepared(
 	}
 	const auto info = FindBot(history, bot);
 	auto locals = std::vector<FullMsgId>();
+	auto targets = std::vector<LocalUploadTarget>();
 	for (const auto &prepared : files) {
 		const auto id = FullMsgId(history->peer->id,
 			localId ? std::exchange(localId, std::nullopt).value()
 				: session->data().nextLocalMessageId());
 		locals.push_back(id);
+		targets.push_back({
+			.id = prepared->id,
+			.photo = prepared->type == SendMediaType::Photo,
+			.message = id,
+		});
 		auto caption = SnapshotText(prepared->caption);
 		TextUtilities::Trim(caption);
 		const auto itemAction = Api::SendAction(history, action.options);
@@ -520,12 +605,20 @@ bool SendPrepared(
 	auto operation = OperationId();
 	if (files.size() > 1) {
 		operation = session->domain().botUse().sendAlbum(
-			bot, action, files, completion);
+			bot,
+			action,
+			files,
+			completion,
+			LocalUploadProgress(session, std::move(targets)));
 	} else {
 		auto message = Api::MessageToSend(action);
 		message.textWithTags = files.front()->caption;
 		operation = session->domain().botUse().sendMedia(
-			bot, message, files.front(), completion);
+			bot,
+			message,
+			files.front(),
+			completion,
+			LocalUploadProgress(session, std::move(targets)));
 	}
 	if (!operation) {
 		return false;
@@ -633,21 +726,27 @@ bool SendExisting(
 	}
 	const auto fullId = FullMsgId(history->peer->id,
 		localId ? *localId : history->session().data().nextLocalMessageId());
+	PrepareLocalMediaPreview(&history->session(), prepared);
 	const auto info = FindBot(history, bot);
 	auto caption = SnapshotText(message.textWithTags);
 	TextUtilities::Trim(caption);
 	const auto fields = LocalFields(message.action, info.userId, fullId.msg);
-	if (photo) {
-		history->addNewLocalMessage(HistoryItemCommonFields(fields),
-			not_null{ photo }, caption);
-	} else {
-		history->addNewLocalMessage(HistoryItemCommonFields(fields),
-			not_null{ document }, caption);
-	}
+	history->addNewLocalMessage(
+		HistoryItemCommonFields(fields),
+		caption,
+		LocalMedia(*prepared));
 	history->session().botUseChats().beginSend(fullId, info.userId);
 	history->session().api().sendAction(message.action);
 	const auto operation = history->session().domain().botUse().sendMedia(
-		bot, message, prepared, CompletionFor(history, { fullId }));
+		bot,
+		message,
+		prepared,
+		CompletionFor(history, { fullId }),
+		LocalUploadProgress(&history->session(), { LocalUploadTarget{
+			.id = prepared->id,
+			.photo = prepared->type == SendMediaType::Photo,
+			.message = fullId,
+		} }));
 	if (!operation) {
 		return false;
 	}
