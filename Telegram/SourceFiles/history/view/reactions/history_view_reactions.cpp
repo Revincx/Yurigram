@@ -7,6 +7,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/reactions/history_view_reactions.h"
 
+#include "bot_use/bot_use_sending.h"
+#include "bot_use/bot_use_chat_state.h"
+
 #include "history/history_item.h"
 #include "history/history.h"
 #include "history/view/history_view_message.h"
@@ -757,6 +760,9 @@ bool InlineList::getState(
 	}
 	for (const auto &button : _buttons) {
 		if (button.geometry.contains(point)) {
+			if (_data.blockCustomToggle && button.id.custom()) {
+				return false;
+			}
 			if (!button.link) {
 				button.link = _handlerFactory(button.id);
 				button.link->setProperty(
@@ -779,7 +785,7 @@ void InlineList::clickHandlerPressedChanged(
 		Fn<void()> repaint) {
 	if (pressed) {
 		const auto id = ReactionIdOfLink(handler);
-		if (id.empty()) {
+		if (id.empty() || (_data.blockCustomToggle && id.custom())) {
 			return;
 		}
 		const auto i = ranges::find(_buttons, id, &Button::id);
@@ -915,6 +921,15 @@ InlineListData InlineListDataFromMessage(not_null<Element*> view) {
 	const auto item = view->data();
 	auto result = InlineListData();
 	result.reactions = item->reactionsWithLocal();
+	result.blockCustomToggle = item->history()->peer->isMegagroup()
+		&& BotUse::Selected(item->history());
+	if (result.blockCustomToggle) {
+		const auto chosen = item->chosenReactions();
+		for (auto &entry : result.reactions) {
+			entry.my = !entry.id.custom()
+				&& ranges::contains(chosen, entry.id);
+		}
+	}
 
 	const auto shouldAddEmptyPaidButton = [&] {
 		if (view->context() == Context::ChatPreview) {
@@ -958,8 +973,42 @@ InlineListData InlineListDataFromMessage(not_null<Element*> view) {
 		}
 	} else {
 		const auto &recent = item->recentReactions();
+		auto peers = base::flat_map<
+			ReactionId,
+			std::vector<not_null<PeerData*>>>();
+		for (const auto &[id, list] : recent) {
+			auto &row = peers[id];
+			for (const auto &entry : list) {
+				row.push_back(entry.peer);
+			}
+		}
+		const auto &state = item->history()->session().botUseChats();
+		for (const auto &[user, choices]
+				: state.reactionActors(item->fullId())) {
+			const auto actor = item->history()->owner().user(user);
+			for (auto i = begin(peers); i != end(peers);) {
+				if (!ranges::contains(choices, i->first)) {
+					std::erase(i->second, actor);
+				}
+				if (i->second.empty()) {
+					i = peers.erase(i);
+				} else {
+					++i;
+				}
+			}
+			for (const auto &id : choices) {
+				if (!ranges::contains(result.reactions, id,
+						&MessageReaction::id)) {
+					continue;
+				}
+				auto &row = peers[id];
+				if (!ranges::contains(row, actor)) {
+					row.insert(begin(row), actor);
+				}
+			}
+		}
 		const auto showUserpics = [&] {
-			if (recent.size() != result.reactions.size()) {
+			if (peers.size() != result.reactions.size()) {
 				return false;
 			}
 			auto sum = 0;
@@ -967,20 +1016,15 @@ InlineListData InlineListDataFromMessage(not_null<Element*> view) {
 				if ((sum += reaction.count) > kMaxRecentUserpics) {
 					return false;
 				}
-				const auto i = recent.find(reaction.id);
-				if (i == end(recent) || reaction.count != i->second.size()) {
+				const auto i = peers.find(reaction.id);
+				if (i == end(peers) || reaction.count != i->second.size()) {
 					return false;
 				}
 			}
 			return true;
 		}();
 		if (showUserpics) {
-			result.recent.reserve(recent.size());
-			for (const auto &[id, list] : recent) {
-				result.recent.emplace(id).first->second = list
-					| ranges::views::transform(&Data::RecentReaction::peer)
-					| ranges::to_vector;
-			}
+			result.recent = std::move(peers);
 		}
 	}
 	result.flags = (view->hasOutLayout() ? Flag::OutLayout : Flag())

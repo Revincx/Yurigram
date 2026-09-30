@@ -1,6 +1,7 @@
 #pragma once
 
 #include "api/api_common.h"
+#include "data/data_message_reaction_id.h"
 #include "iv/iv_rich_page.h"
 #include "mtproto/mtproto_auth_key.h"
 #include "mtproto/mtproto_dc_options.h"
@@ -67,6 +68,7 @@ struct Result {
 	std::vector<MTPMessage> data;
 	std::optional<MTPMessageMedia> media;
 	std::optional<MTPUpdates> updates;
+	std::vector<Data::ReactionId> chosenReactions;
 	Error error;
 	int64 uploaded = 0;
 	int64 total = 0;

@@ -33,6 +33,7 @@ enum class Kind {
 	Authenticate,
 	ReplaceToken,
 	Typing,
+	Reaction,
 	Text,
 	Media,
 	Album,
@@ -53,6 +54,9 @@ struct Operation {
 	std::optional<TextWithEntities> text;
 	std::optional<Data::WebPageDraft> webPage;
 	MTPsendMessageAction typingAction;
+	Data::ReactionId reaction;
+	bool reactionRemove = false;
+	bool reactionAddToRecent = false;
 	MsgId topMsgId;
 	std::vector<MediaSource> media;
 	std::shared_ptr<Iv::RichPage> page;

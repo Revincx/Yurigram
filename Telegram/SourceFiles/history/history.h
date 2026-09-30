@@ -108,6 +108,7 @@ public:
 	void removeNewPeerMessages();
 
 	void reactionsEnabledChanged(bool enabled);
+	void refreshReactionIdentity();
 
 	[[nodiscard]] bool isEmpty() const;
 	[[nodiscard]] bool isDisplayedEmpty() const;

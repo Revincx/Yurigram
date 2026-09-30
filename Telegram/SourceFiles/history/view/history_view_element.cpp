@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/history_view_element.h"
 
+#include "bot_use/bot_use_sending.h"
+
 #include "apiwrap.h"
 #include "api/api_transcribes.h"
 #include "history/view/history_view_service_message.h"
@@ -2909,6 +2911,11 @@ void Element::refreshReactions() {
 					return;
 				}
 				const auto item = strong->data();
+				if (id.custom()
+					&& item->history()->peer->isMegagroup()
+					&& BotUse::Selected(item->history())) {
+					return;
+				}
 				const auto controller = ExtractController(context);
 				const auto wasChosen = ranges::contains(
 					item->chosenReactions(),

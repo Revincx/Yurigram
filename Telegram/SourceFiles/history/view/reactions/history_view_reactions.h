@@ -49,6 +49,7 @@ struct InlineListData {
 
 	std::vector<MessageReaction> reactions;
 	base::flat_map<ReactionId, std::vector<not_null<PeerData*>>> recent;
+	bool blockCustomToggle = false;
 	Flags flags = {};
 };
 

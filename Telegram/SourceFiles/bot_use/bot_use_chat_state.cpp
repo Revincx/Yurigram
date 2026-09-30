@@ -52,6 +52,11 @@ void ChatState::bind(
 	) | rpl::on_next([=](const Data::PeerUpdate &update) {
 		invalidateMembers(update.peer->id);
 	}, _lifetime);
+	changes() | rpl::on_next([=](PeerId peer) {
+		if (const auto history = session->data().historyLoaded(peer)) {
+			history->refreshReactionIdentity();
+		}
+	}, _lifetime);
 	prune();
 }
 
@@ -77,6 +82,46 @@ void ChatState::clear(PeerId peer) {
 
 rpl::producer<PeerId> ChatState::changes() const {
 	return _changes.events();
+}
+
+std::optional<std::vector<Data::ReactionId>> ChatState::reactionChoices(
+		BotId bot,
+		FullMsgId message) const {
+	const auto i = _reactions.find({ bot, message });
+	return i == end(_reactions)
+		? std::nullopt
+		: std::make_optional(i->second);
+}
+
+std::vector<std::pair<UserId, std::vector<Data::ReactionId>>>
+ChatState::reactionActors(FullMsgId message) const {
+	auto result = std::vector<
+		std::pair<UserId, std::vector<Data::ReactionId>>>();
+	if (!_manager) {
+		return result;
+	}
+	const auto bots = _manager->bots();
+	for (const auto &[key, choices] : _reactions) {
+		if (key.second != message) {
+			continue;
+		}
+		const auto bot = ranges::find(bots, key.first, &BotInfo::id);
+		if (bot != end(bots) && bot->userId) {
+			result.emplace_back(bot->userId, choices);
+		}
+	}
+	return result;
+}
+
+void ChatState::setReactionChoices(
+		BotId bot,
+		FullMsgId message,
+		std::vector<Data::ReactionId> choices) {
+	_reactions.insert_or_assign({ bot, message }, std::move(choices));
+}
+
+void ChatState::forgetReactionChoices(BotId bot, FullMsgId message) {
+	_reactions.erase({ bot, message });
 }
 
 std::optional<std::set<UserId>> ChatState::cachedMembers(

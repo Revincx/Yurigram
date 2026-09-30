@@ -423,6 +423,26 @@ OperationId Manager::setTyping(
 	return submit(std::move(op));
 }
 
+OperationId Manager::toggleReaction(
+		BotId bot,
+		FullMsgId message,
+		Data::ReactionId reaction,
+		bool remove,
+		bool addToRecent,
+		Completion done) {
+	auto op = makeOperation(bot, std::move(done));
+	op->kind = Kind::Reaction;
+	op->action.peer = message.peer;
+	op->targets = { message };
+	op->reaction = std::move(reaction);
+	op->reactionRemove = remove;
+	op->reactionAddToRecent = addToRecent;
+	if (op->reaction.empty() || op->reaction.paid() || op->reaction.custom()) {
+		op->validation = { u"UNSUPPORTED_REACTION"_q };
+	}
+	return submit(std::move(op));
+}
+
 OperationId Manager::sendText(
 		BotId bot, const Api::MessageToSend &message, Completion done) {
 	auto op = makeOperation(bot, std::move(done));

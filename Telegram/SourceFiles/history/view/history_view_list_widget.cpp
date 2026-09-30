@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/history_view_list_widget.h"
 
+#include "bot_use/bot_use_sending.h"
+
 #include "history/view/history_view_about_view.h"
 #include "base/unixtime.h"
 #include "base/qt/qt_key_modifiers.h"
@@ -4092,6 +4094,11 @@ void ListWidget::mouseDoubleClickEvent(QMouseEvent *e) {
 void ListWidget::toggleFavoriteReaction(not_null<Element*> view) const {
 	const auto item = view->data();
 	const auto favorite = session().data().reactions().favoriteId();
+	if (favorite.custom()
+		&& item->history()->peer->isMegagroup()
+		&& BotUse::Selected(item->history())) {
+		return;
+	}
 	if (_delegate->listShowReactPremiumError(item, favorite)
 		|| !ranges::contains(
 			Data::LookupPossibleReactions(item).recent,
@@ -4345,6 +4352,10 @@ void ListWidget::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 void ListWidget::reactionChosen(ChosenReaction reaction) {
 	const auto item = session().data().message(reaction.context);
 	if (!item) {
+		return;
+	} else if (reaction.id.custom()
+		&& item->history()->peer->isMegagroup()
+		&& BotUse::Selected(item->history())) {
 		return;
 	} else if (reaction.id.paid()) {
 		Payments::ShowPaidReactionDetails(

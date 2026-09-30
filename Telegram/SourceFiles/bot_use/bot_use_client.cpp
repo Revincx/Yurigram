@@ -275,7 +275,9 @@ void Client::begin(const Op &operation) {
 		finish(operation, OperationState::Failed, error);
 		return;
 	}
-	if (operation->kind == Kind::Delete || Editing(operation->kind)) {
+	if (operation->kind == Kind::Delete
+		|| operation->kind == Kind::Reaction
+		|| Editing(operation->kind)) {
 		if (operation->targets.empty()) {
 			finish(operation, OperationState::Failed, { u"MESSAGE_IDS_EMPTY"_q });
 			return;
@@ -296,6 +298,7 @@ void Client::checkPeer(const Op &operation) {
 		MTP_vector<MTPInputChannel>(1, channel(operation->action.peer))),
 		Fn<void(const MTPmessages_Chats &)>([=](const MTPmessages_Chats &result) {
 			auto found = false;
+			auto megagroup = false;
 			result.match([&](const auto &data) {
 				for (const auto &chat : data.vchats().v) {
 					if (chat.type() != mtpc_channel) {
@@ -306,7 +309,8 @@ void Client::checkPeer(const Op &operation) {
 						|| channel.is_monoforum()) {
 						continue;
 					}
-					found = true;
+				found = true;
+				megagroup = channel.is_megagroup();
 					operation->channel = channel.is_broadcast();
 					if (!channel.is_min()) {
 						_peers[operation->action.peer] = channel.vaccess_hash().value_or_empty();
@@ -315,6 +319,8 @@ void Client::checkPeer(const Op &operation) {
 			});
 			if (!found) {
 				finish(operation, OperationState::Failed, { u"CHANNEL_UNAVAILABLE"_q });
+			} else if (operation->kind == Kind::Reaction && !megagroup) {
+				finish(operation, OperationState::Failed, { u"UNSUPPORTED_PEER"_q });
 			} else if (operation->kind == Kind::Typing && operation->channel) {
 				finish(operation, OperationState::Failed, { u"UNSUPPORTED_PEER"_q });
 			} else if (operation->kind == Kind::Delete
@@ -371,7 +377,8 @@ MTPInputChannel Client::channel(PeerId id) const {
 }
 
 void Client::prepare(const Op &operation) {
-	if (operation->kind == Kind::Typing) {
+	if (operation->kind == Kind::Typing
+		|| operation->kind == Kind::Reaction) {
 		send(operation);
 		return;
 	}
@@ -568,7 +575,10 @@ Error Client::validateNativeRich(const Op &operation) {
 }
 
 void Client::send(const Op &operation) {
-	if (operation->kind == Kind::Typing) {
+	if (operation->kind == Kind::Reaction) {
+		toggleReaction(operation);
+		return;
+	} else if (operation->kind == Kind::Typing) {
 		setTyping(operation);
 		return;
 	} else if (operation->kind == Kind::Upload) {
@@ -602,6 +612,33 @@ void Client::setTyping(const Op &operation) {
 		MTP_int(topMsgId.bare),
 		operation->typingAction),
 		Fn<void(const MTPBool &)>([=](const MTPBool &) {
+			finish(operation);
+		}));
+}
+
+void Client::toggleReaction(const Op &operation) {
+	const auto message = operation->targets.front();
+	const auto next = operation->reactionRemove
+		? std::vector<Data::ReactionId>()
+		: std::vector<Data::ReactionId>{ operation->reaction };
+	using Flag = MTPmessages_SendReaction::Flag;
+	const auto flags = (next.empty() ? Flag() : Flag::f_reaction)
+		| (operation->reactionAddToRecent
+			? Flag::f_add_to_recent : Flag());
+	auto reactions = QVector<MTPReaction>();
+	for (const auto &id : next) {
+		reactions.push_back(Data::ReactionToMTP(id));
+	}
+	operation->submitted = true;
+	rpc(operation, MTPmessages_SendReaction(
+		MTP_flags(flags),
+		peer(message.peer),
+		MTP_int(message.msg.bare),
+		MTP_vector<MTPReaction>(reactions)),
+		Fn<void(const MTPUpdates &)>([=](const MTPUpdates &result) {
+			operation->result.messages = { message };
+			operation->result.chosenReactions = next;
+			operation->result.updates = result;
 			finish(operation);
 		}));
 }

@@ -8,6 +8,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_message_reactions.h"
 
 #include "api/api_global_privacy.h"
+#include "bot_use/bot_use_chat_state.h"
+#include "bot_use/bot_use_manager.h"
+#include "bot_use/bot_use_sending.h"
 #include "calls/group/calls_group_call.h"
 #include "calls/group/calls_group_messages.h"
 #include "chat_helpers/stickers_lottie.h"
@@ -16,6 +19,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_item.h"
 #include "history/history_item_components.h"
 #include "main/main_session.h"
+#include "main/main_domain.h"
 #include "main/main_session_settings.h"
 #include "main/main_app_config.h"
 #include "main/session/send_as_peers.h"
@@ -318,6 +322,12 @@ PossibleItemReactionsRef LookupPossibleReactions(
 		if (paidInFront) {
 			toFront(ReactionId::Paid());
 		}
+	}
+	if (peer->isMegagroup() && BotUse::Selected(item->history())) {
+		const auto custom = [](const auto &entry) { return entry->id.custom(); };
+		std::erase_if(result.recent, custom);
+		std::erase_if(result.stickers, custom);
+		result.customAllowed = false;
 	}
 	return result;
 }
@@ -1526,6 +1536,88 @@ void Reactions::send(not_null<HistoryItem*> item, bool addToRecent) {
 	}).send();
 }
 
+void Reactions::sendBot(
+		not_null<HistoryItem*> item,
+		uint64 bot,
+		const ReactionId &reaction,
+		bool remove,
+		bool addToRecent) {
+	const auto id = item->fullId();
+	const auto key = std::make_pair(bot, id);
+	auto &queue = _botQueue[key];
+	queue.push_back({ reaction, remove, addToRecent });
+	if (queue.size() == 1) {
+		startBotSend(bot, id);
+	}
+}
+
+void Reactions::startBotSend(uint64 bot, FullMsgId message) {
+	const auto key = std::make_pair(bot, message);
+	const auto request = _botQueue.at(key).front();
+	const auto weak = base::make_weak(&_owner->session());
+	const auto operation = _owner->session().domain().botUse().toggleReaction(
+		bot, message, request.reaction, request.remove,
+		request.addToRecent, [weak, bot, message](
+				const BotUse::Result &result) {
+			if (const auto session = weak.get()) {
+				session->data().reactions().finishBotSend(
+					bot, message,
+					result.state == BotUse::OperationState::Completed,
+					result.chosenReactions, result.error.type);
+			}
+		});
+	if (!operation) {
+		finishBotSend(bot, message, false, {}, u"BOT_NOT_AVAILABLE"_q);
+	}
+}
+
+void Reactions::finishBotSend(
+		uint64 bot,
+		FullMsgId message,
+		bool success,
+		std::vector<ReactionId> chosen,
+		QString error) {
+	const auto key = std::make_pair(bot, message);
+	const auto i = _botQueue.find(key);
+	if (i == end(_botQueue)) {
+		return;
+	}
+	i->second.pop_front();
+	if (!success) {
+		if (const auto item = _owner->message(message)) {
+			BotUse::ShowSendError(item->history(), { error });
+		}
+	}
+	if (!i->second.empty()) {
+		startBotSend(bot, message);
+		return;
+	}
+	_botQueue.erase(i);
+	if (success) {
+		_owner->session().botUseChats().setReactionChoices(
+			bot, message, std::move(chosen));
+	} else {
+		_owner->session().botUseChats().forgetReactionChoices(bot, message);
+	}
+	const auto item = _owner->message(message);
+	if (!item) {
+		return;
+	}
+	_owner->notifyItemDataChange(item);
+	if (success) {
+		return;
+	}
+	const auto weak = base::make_weak(&_owner->session());
+	_owner->session().api().request(MTPmessages_GetMessagesReactions(
+		item->history()->peer->input(),
+		MTP_vector<MTPint>(1, MTP_int(message.msg.bare))
+	)).done([weak](const MTPUpdates &updates) {
+		if (const auto session = weak.get()) {
+			session->api().applyUpdates(updates);
+		}
+	}).send();
+}
+
 void Reactions::poll(not_null<HistoryItem*> item, crl::time now) {
 	// Group them by one second.
 	const auto last = item->lastReactionsRefreshTime();
@@ -1747,6 +1839,9 @@ void Reactions::pollCollected() {
 
 bool Reactions::sending(not_null<HistoryItem*> item) const {
 	return _sentRequests.contains(item->fullId())
+		|| ranges::any_of(_botQueue, [=](const auto &pending) {
+			return pending.first.second == item->fullId();
+		})
 		|| _sendingPaid.contains(item);
 }
 
@@ -2048,6 +2143,48 @@ void MessageReactions::remove(const ReactionId &id) {
 	auto &owner = history->owner();
 	owner.reactions().send(_item, false);
 	owner.notifyItemDataChange(_item);
+}
+
+void MessageReactions::applyBotChoices(
+		not_null<PeerData*> actor,
+		const std::vector<ReactionId> &before,
+		const std::vector<ReactionId> &after) {
+	for (const auto &id : before) {
+		if (ranges::contains(after, id)) {
+			continue;
+		}
+		if (const auto i = ranges::find(_list, id, &MessageReaction::id);
+			i != end(_list)) {
+			if (!--i->count) {
+				_list.erase(i);
+			}
+		}
+		if (const auto i = _recent.find(id); i != end(_recent)) {
+			std::erase_if(i->second, [=](const RecentReaction &entry) {
+				return entry.peer == actor;
+			});
+			if (i->second.empty()) {
+				_recent.erase(i);
+			}
+		}
+	}
+	for (const auto &id : after) {
+		if (ranges::contains(before, id)) {
+			continue;
+		}
+		if (const auto i = ranges::find(_list, id, &MessageReaction::id);
+			i != end(_list)) {
+			++i->count;
+		} else {
+			_list.push_back({ .id = id, .count = 1 });
+		}
+		if (_item->history()->peer->isMegagroup()) {
+			auto &list = _recent[id];
+			if (!ranges::contains(list, actor, &RecentReaction::peer)) {
+				list.insert(begin(list), RecentReaction{ .peer = actor });
+			}
+		}
+	}
 }
 
 bool MessageReactions::removeFromParticipant(

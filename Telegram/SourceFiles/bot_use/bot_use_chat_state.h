@@ -1,6 +1,7 @@
 #pragma once
 
 #include "bot_use/bot_use_types.h"
+#include "data/data_message_reaction_id.h"
 
 #include <map>
 #include <optional>
@@ -35,6 +36,16 @@ public:
 	void choose(PeerId peer, BotId bot);
 	void clear(PeerId peer);
 	[[nodiscard]] rpl::producer<PeerId> changes() const;
+	[[nodiscard]] std::optional<std::vector<Data::ReactionId>> reactionChoices(
+		BotId bot,
+		FullMsgId message) const;
+	[[nodiscard]] std::vector<std::pair<UserId, std::vector<Data::ReactionId>>>
+	reactionActors(FullMsgId message) const;
+	void setReactionChoices(
+		BotId bot,
+		FullMsgId message,
+		std::vector<Data::ReactionId> choices);
+	void forgetReactionChoices(BotId bot, FullMsgId message);
 	[[nodiscard]] std::optional<std::set<UserId>> cachedMembers(
 		PeerId peer) const;
 	void cacheMembers(PeerId peer, std::set<UserId> users);
@@ -75,6 +86,7 @@ private:
 	Main::Session *_session = nullptr;
 	Manager *_manager = nullptr;
 	std::map<PeerId, ChatChoice> _choices;
+	std::map<std::pair<BotId, FullMsgId>, std::vector<Data::ReactionId>> _reactions;
 	std::map<PeerId, MembersCache> _members;
 	std::map<PeerId, PendingChat> _pending;
 	std::map<std::tuple<PeerId, MsgId, PeerId>, BotId> _richDraftBots;

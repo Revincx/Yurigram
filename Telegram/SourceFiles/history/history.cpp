@@ -4412,6 +4412,12 @@ void History::reactionsEnabledChanged(bool enabled) {
 	}
 }
 
+void History::refreshReactionIdentity() {
+	for (const auto &item : _items) {
+		owner().notifyItemDataChange(item.get());
+	}
+}
+
 bool History::isEmpty() const {
 	return blocks.empty();
 }

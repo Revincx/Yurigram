@@ -11,6 +11,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_message_reaction_id.h"
 #include "data/stickers/data_custom_emoji.h"
 
+#include <deque>
+
 namespace Calls {
 class GroupCall;
 } // namespace Calls
@@ -143,6 +145,15 @@ public:
 	void preloadAnimationsFor(const ReactionId &emoji);
 
 	void send(not_null<HistoryItem*> item, bool addToRecent);
+	void sendBot(
+		not_null<HistoryItem*> item,
+		uint64 bot,
+		const ReactionId &reaction,
+		bool remove,
+		bool addToRecent);
+	void startBotSend(uint64 bot, FullMsgId message);
+	void finishBotSend(uint64 bot, FullMsgId message, bool success,
+		std::vector<ReactionId> chosen, QString error);
 	[[nodiscard]] bool sending(not_null<HistoryItem*> item) const;
 
 	void poll(not_null<HistoryItem*> item, crl::time now);
@@ -355,6 +366,12 @@ private:
 	bool _waitingForEffects = false;
 
 	base::flat_map<FullMsgId, mtpRequestId> _sentRequests;
+	struct BotReactionRequest {
+		ReactionId reaction;
+		bool remove = false;
+		bool addToRecent = false;
+	};
+	std::map<std::pair<uint64, FullMsgId>, std::deque<BotReactionRequest>> _botQueue;
 
 	base::flat_map<not_null<HistoryItem*>, crl::time> _repaintItems;
 	base::Timer _repaintTimer;
@@ -405,6 +422,10 @@ public:
 
 	void add(const ReactionId &id, bool addToRecent);
 	void remove(const ReactionId &id);
+	void applyBotChoices(
+		not_null<PeerData*> actor,
+		const std::vector<ReactionId> &before,
+		const std::vector<ReactionId> &after);
 	bool removeFromParticipant(
 		not_null<PeerData*> participant,
 		const ReactionId &knownReaction);

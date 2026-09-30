@@ -12,6 +12,7 @@
 #include "data/data_document.h"
 #include "data/data_photo_media.h"
 #include "data/data_document_media.h"
+#include "data/data_message_reactions.h"
 #include "history/history.h"
 #include "history/history_item.h"
 #include "iv/editor/iv_editor_session.h"
@@ -169,6 +170,12 @@ struct Fixture {
 	int parts = 0;
 	int uploads = 0;
 	int typings = 0;
+	int reactionsSent = 0;
+	uint64 reactionUser = 0;
+	uint64 reactionPeer = 0;
+	int reactionMessage = 0;
+	bool reactionRemoved = false;
+	bool reactionAddedToRecent = false;
 	int typingBefore = 0;
 	uint64 typingUser = 0;
 	uint64 typingPeer = 0;
@@ -440,6 +447,30 @@ void Fixture::respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuff
 		typingAction = actionType;
 		Reply<MTPmessages_SetTyping>(instance, id, MTP_boolTrue());
 	} break;
+	case mtpc_messages_sendReaction: {
+		auto from = body.constData() + 1;
+		const auto end = body.constData() + body.size();
+		const auto flags = Read<MTPint>(from, end).v;
+		const auto peer = Read<MTPInputPeer>(from, end);
+		const auto message = Read<MTPint>(from, end).v;
+		const auto chosen = (flags & 1)
+			? Read<MTPVector<MTPReaction>>(from, end).v
+			: QVector<MTPReaction>();
+		Check(from == end && peer.type() == mtpc_inputPeerChannel,
+			u"Bot reaction request decodes completely"_q);
+		Check(chosen.size() <= 1
+			&& (chosen.empty() || !Data::ReactionFromMTP(chosen.front()).custom()),
+			u"Bot sends only ordinary reactions"_q);
+		++reactionsSent;
+		reactionUser = users.at(instance.data());
+		reactionPeer = peer.c_inputPeerChannel().vchannel_id().v;
+		reactionMessage = message;
+		reactionRemoved = chosen.empty();
+		reactionAddedToRecent = flags & (1 << 2);
+		Reply<MTPmessages_SendReaction>(instance, id, MTP_updates(
+			MTP_vector<MTPUpdate>(), MTP_vector<MTPUser>(),
+			MTP_vector<MTPChat>(), MTP_int(1), MTP_int(1)));
+	} break;
 	case mtpc_messages_sendMedia: {
 		auto from = body.constData() + 1;
 		const auto end = body.constData() + body.size();
@@ -504,6 +535,129 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		state->operation = state->manager->authenticate(state->b, state->completion());
 	}, [=] { Check(state->result->state == BotUse::OperationState::Completed && state->users.size() == 2,
 		u"Bot B has an independent instance"_q); });
+	add(u"supergroup bot reaction add"_q, [=] {
+		const auto peer = state->text(101).action.history->peer->id;
+		state->operation = state->manager->toggleReaction(
+			state->a, FullMsgId(peer, MsgId(901)),
+			Data::ReactionId{ u"👍"_q }, false, true,
+			state->completion());
+	}, [=] {
+		Check(state->result->state == BotUse::OperationState::Completed
+			&& state->reactionsSent == 1
+			&& state->reactionUser == 11
+			&& state->reactionPeer == 101
+			&& state->reactionMessage == 901
+			&& !state->reactionRemoved
+			&& state->reactionAddedToRecent,
+			u"Selected bot sends an ordinary reaction"_q);
+	});
+	add(u"supergroup bot reaction remove"_q, [=] {
+		const auto peer = state->text(101).action.history->peer->id;
+		state->operation = state->manager->toggleReaction(
+			state->b, FullMsgId(peer, MsgId(901)),
+			Data::ReactionId{ u"👍"_q }, true, false,
+			state->completion());
+	}, [=] {
+		Check(state->result->state == BotUse::OperationState::Completed
+			&& state->reactionsSent == 2
+			&& state->reactionUser == 22
+			&& state->reactionRemoved,
+			u"Selected bot removes its reaction"_q);
+	});
+	add(u"supergroup bot custom reaction rejected"_q, [=] {
+		const auto peer = state->text(101).action.history->peer->id;
+		state->operation = state->manager->toggleReaction(
+			state->a, FullMsgId(peer, MsgId(901)),
+			Data::ReactionId{ DocumentId(12345) }, false, false,
+			state->completion());
+	}, [=] {
+		Check(state->result->state == BotUse::OperationState::Failed
+			&& state->result->error.type == u"UNSUPPORTED_REACTION"_q
+			&& state->reactionsSent == 2,
+			u"Custom emoji cannot reach bot reaction RPC"_q);
+	});
+	runner->add({ .name = u"bot reaction on human message"_q, .run = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto history = state->text(101).action.history;
+		session->data().processUser(User(77, false));
+		const auto item = session->data().addNewMessage(
+			Message(903, 101, 77), MessageFlags(), NewMessageType::Existing);
+		Expects(item != nullptr);
+		session->botUseChats().choose(history->peer->id, state->a);
+		const auto emoji = Data::ReactionId{ u"👍"_q };
+		item->toggleReaction(emoji, HistoryReactionSource::Selector);
+		const auto &recent = item->recentReactions();
+		const auto found = recent.find(emoji);
+		Check(found != end(recent) && !found->second.empty()
+			&& found->second.front().peer->id == peerFromUser(UserId(11)),
+			u"Local reaction immediately shows bot avatar"_q);
+		item->toggleReaction(Data::ReactionId{ DocumentId(12345) },
+			HistoryReactionSource::Selector);
+		Check(state->reactionsSent == 2
+			&& item->chosenReactions() == std::vector<Data::ReactionId>{ emoji },
+			u"Custom reaction is ignored in bot mode"_q);
+	}, .until = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto peer = peerFromChannel(ChannelId(101));
+		const auto item = session->data().message(peer, MsgId(903));
+		return item && state->reactionsSent == 3
+			&& !session->data().reactions().sending(item);
+	}, .then = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto peer = peerFromChannel(ChannelId(101));
+		const auto item = session->data().message(peer, MsgId(903));
+		const auto emoji = Data::ReactionId{ u"👍"_q };
+		const auto &recent = item->recentReactions();
+		const auto found = recent.find(emoji);
+		Check(state->reactionUser == 11
+			&& state->reactionMessage == 903
+			&& !state->reactionRemoved,
+			u"Human message reaction reaches bot send without a list read"_q);
+		Check(ranges::contains(item->reactions(), emoji,
+				&Data::MessageReaction::id)
+			&& found != end(recent) && !found->second.empty()
+			&& found->second.front().peer->id == peerFromUser(UserId(11)),
+			u"Bot reaction remains visible after send completes"_q);
+		item->updateReactions(nullptr);
+		Check(item->reactions().empty()
+			&& ranges::contains(item->reactionsWithLocal(), emoji,
+				&Data::MessageReaction::id)
+			&& item->chosenReactions() == std::vector<Data::ReactionId>{ emoji },
+			u"Stale account update cannot hide a sent bot reaction"_q);
+		session->botUseChats().setReactionChoices(
+			state->b, item->fullId(), { emoji });
+		session->botUseChats().choose(peer, state->b);
+		const auto forBotB = item->reactionsWithLocal();
+		Check(forBotB.size() == 1
+			&& forBotB.front().id == emoji
+			&& forBotB.front().count == 2
+			&& forBotB.front().my,
+			u"Switching bots retains both known reactions"_q);
+		session->botUseChats().clear(peer);
+		const auto forUser = item->reactionsWithLocal();
+		Check(forUser.size() == 1
+			&& forUser.front().id == emoji
+			&& forUser.front().count == 2
+			&& !forUser.front().my,
+			u"Switching to user preserves bot reactions without choosing them"_q);
+		session->botUseChats().forgetReactionChoices(state->b, item->fullId());
+		session->botUseChats().choose(peer, state->a);
+	} });
+	runner->add({ .name = u"bot reaction toggles off"_q, .run = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto peer = state->text(101).action.history->peer->id;
+		const auto item = session->data().message(peer, MsgId(903));
+		Expects(item != nullptr);
+		item->toggleReaction(Data::ReactionId{ u"👍"_q },
+			HistoryReactionSource::Existing);
+		Check(item->chosenReactions().empty(),
+			u"Second click clears bot reaction locally"_q);
+	}, .until = [=] { return state->reactionsSent == 4; }, .then = [=] {
+		Check(state->reactionUser == 11
+			&& state->reactionMessage == 903
+			&& state->reactionRemoved,
+			u"Second click sends an empty bot reaction vector"_q);
+	} });
 	runner->add({ .name = u"supergroup bot message actions"_q, .run = [=] {
 		const auto session = Core::App().domain().active().maybeSession();
 		const auto history = state->text(101).action.history;

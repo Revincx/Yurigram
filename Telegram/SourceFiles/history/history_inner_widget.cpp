@@ -588,6 +588,10 @@ void HistoryInner::reactionChosen(const ChosenReaction &reaction) {
 	const auto item = session().data().message(reaction.context);
 	if (!item) {
 		return;
+	} else if (reaction.id.custom()
+		&& item->history()->peer->isMegagroup()
+		&& BotUse::Selected(item->history())) {
+		return;
 	} else if (reaction.id.paid()) {
 		Payments::ShowPaidReactionDetails(
 			_controller,
@@ -2876,6 +2880,11 @@ void HistoryInner::mouseDoubleClickEvent(QMouseEvent *e) {
 void HistoryInner::toggleFavoriteReaction(not_null<Element*> view) const {
 	const auto item = view->data();
 	const auto favorite = session().data().reactions().favoriteId();
+	if (favorite.custom()
+		&& item->history()->peer->isMegagroup()
+		&& BotUse::Selected(item->history())) {
+		return;
+	}
 	if (Window::ShowReactPremiumError(_controller, item, favorite)
 		|| !ranges::contains(
 			Data::LookupPossibleReactions(item).recent,

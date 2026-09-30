@@ -10,6 +10,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_premium.h"
 #include "api/api_sensitive_content.h"
 #include "api/api_transcribes.h"
+#include "bot_use/bot_use_chat_state.h"
+#include "bot_use/bot_use_manager.h"
+#include "bot_use/bot_use_sending.h"
 #include "lang/lang_keys.h"
 #include "calls/calls_instance.h" // Core::App().calls().joinGroupCall.
 #include "history/view/history_view_item_preview.h"
@@ -32,6 +35,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "storage/file_upload.h"
 #include "storage/storage_shared_media.h"
 #include "main/main_session.h"
+#include "main/main_domain.h"
 #include "main/main_app_config.h"
 #include "main/main_session_settings.h"
 #include "menu/menu_ttl_validator.h"
@@ -3703,6 +3707,40 @@ void HistoryItem::toggleReaction(
 		const Data::ReactionId &reaction,
 		HistoryReactionSource source) {
 	Expects(!reaction.paid());
+	const auto bot = _history->peer->isMegagroup()
+		? BotUse::Selected(_history) : 0;
+	if (bot) {
+		if (reaction.custom()) {
+			return;
+		}
+		if (!IsServerMsgId(id) || !canReact()) {
+			return;
+		}
+		const auto bots = _history->session().domain().botUse().bots();
+		const auto info = ranges::find(bots, bot, &BotUse::BotInfo::id);
+		if (info == end(bots) || !info->userId
+			|| info->environment != _history->session().mtp().environment()) {
+			BotUse::ShowSendError(_history, { u"BOT_NOT_AVAILABLE"_q });
+			return;
+		}
+		const auto before = chosenReactions();
+		const auto after = ranges::contains(before, reaction)
+			? std::vector<Data::ReactionId>()
+			: std::vector<Data::ReactionId>{ reaction };
+		if (!_reactions) {
+			_reactions = std::make_unique<Data::MessageReactions>(this);
+			_flags |= MessageFlag::CanViewReactions;
+		}
+		const auto actor = _history->owner().user(info->userId);
+		_reactions->applyBotChoices(actor, before, after);
+		_history->session().botUseChats().setReactionChoices(
+			bot, fullId(), after);
+		_history->owner().reactions().sendBot(
+			this, bot, reaction, after.empty(),
+			source == HistoryReactionSource::Selector);
+		_history->owner().notifyItemDataChange(this);
+		return;
+	}
 
 	const auto addToRecent = (source == HistoryReactionSource::Selector);
 	if (_reactions
@@ -3759,30 +3797,70 @@ const std::vector<Data::MessageReaction> &HistoryItem::reactions() const {
 }
 
 std::vector<Data::MessageReaction> HistoryItem::reactionsWithLocal() const {
-	if (!_reactions) {
-		return {};
-	}
-	auto result = _reactions->list();
-	const auto i = ranges::find(
-		result,
-		Data::ReactionId::Paid(),
-		&Data::MessageReaction::id);
-	if (const auto local = _reactions->localPaidCount()) {
-		if (i != end(result)) {
-			i->my = true;
-			i->count += local;
-			if (i != begin(result)) {
-				std::rotate(begin(result), i, i + 1);
+	auto result = _reactions
+		? _reactions->list()
+		: std::vector<Data::MessageReaction>();
+	if (_reactions) {
+		const auto i = ranges::find(
+			result,
+			Data::ReactionId::Paid(),
+			&Data::MessageReaction::id);
+		if (const auto local = _reactions->localPaidCount()) {
+			if (i != end(result)) {
+				i->my = true;
+				i->count += local;
+				if (i != begin(result)) {
+					std::rotate(begin(result), i, i + 1);
+				}
+			} else {
+				result.insert(begin(result), Data::MessageReaction{
+					.id = Data::ReactionId::Paid(),
+					.count = local,
+					.my = true,
+				});
 			}
-		} else {
-			result.insert(begin(result), Data::MessageReaction{
-				.id = Data::ReactionId::Paid(),
-				.count = local,
-				.my = true,
-			});
+		} else if (i != end(result) && i != begin(result)) {
+			std::rotate(begin(result), i, i + 1);
 		}
-	} else if (i != end(result) && i != begin(result)) {
-		std::rotate(begin(result), i, i + 1);
+	}
+	const auto &state = _history->session().botUseChats();
+	const auto &recent = recentReactions();
+	for (const auto &[user, choices] : state.reactionActors(fullId())) {
+		const auto actor = peerFromUser(user);
+		for (auto i = begin(result); i != end(result);) {
+			if (i->id.paid()) {
+				++i;
+				continue;
+			}
+			const auto selected = ranges::contains(choices, i->id);
+			const auto j = recent.find(i->id);
+			const auto listed = j != end(recent)
+				&& ranges::contains(j->second, actor,
+					[](const Data::RecentReaction &entry) {
+						return entry.peer->id;
+					});
+			if (listed && !selected && !--i->count) {
+				i = result.erase(i);
+				continue;
+			} else if (selected && !listed
+				&& (j == end(recent) || j->second.size() == i->count)) {
+				++i->count;
+			}
+			++i;
+		}
+		for (const auto &id : choices) {
+			if (!ranges::contains(result, id, &Data::MessageReaction::id)) {
+				result.push_back({ .id = id, .count = 1 });
+			}
+		}
+	}
+	if (_history->peer->isMegagroup() && BotUse::Selected(_history)) {
+		const auto chosen = chosenReactions();
+		for (auto &entry : result) {
+			if (!entry.id.paid()) {
+				entry.my = ranges::contains(chosen, entry.id);
+			}
+		}
 	}
 	return result;
 }
@@ -3856,6 +3934,29 @@ bool HistoryItem::canViewReactions() const {
 }
 
 std::vector<Data::ReactionId> HistoryItem::chosenReactions() const {
+	const auto bot = _history->peer->isMegagroup()
+		? BotUse::Selected(_history) : 0;
+	if (bot) {
+		const auto &state = _history->session().botUseChats();
+		if (const auto cached = state.reactionChoices(bot, fullId())) {
+			return *cached;
+		}
+		const auto bots = _history->session().domain().botUse().bots();
+		const auto info = ranges::find(bots, bot, &BotUse::BotInfo::id);
+		if (info == end(bots) || !_reactions) {
+			return {};
+		}
+		const auto actor = peerFromUser(info->userId);
+		auto result = std::vector<Data::ReactionId>();
+		for (const auto &[id, list] : _reactions->recent()) {
+			if (ranges::contains(list, actor, [](const Data::RecentReaction &entry) {
+				return entry.peer->id;
+			})) {
+				result.push_back(id);
+			}
+		}
+		return result;
+	}
 	return _reactions
 		? _reactions->chosen()
 		: std::vector<Data::ReactionId>();

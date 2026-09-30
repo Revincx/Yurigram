@@ -49,6 +49,13 @@ public:
 		MsgId topMsgId,
 		MTPsendMessageAction action,
 		Completion done = {});
+	[[nodiscard]] OperationId toggleReaction(
+		BotId bot,
+		FullMsgId message,
+		Data::ReactionId reaction,
+		bool remove,
+		bool addToRecent,
+		Completion done = {});
 	[[nodiscard]] OperationId sendText(
 		BotId bot,
 		const Api::MessageToSend &message,
