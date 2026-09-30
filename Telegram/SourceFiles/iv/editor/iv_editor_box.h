@@ -74,6 +74,7 @@ struct ShowWindowDescriptor {
 	not_null<Main::Session*> session;
 	not_null<PeerData*> peer;
 	std::shared_ptr<State> state;
+	bool premiumOverride = false;
 	QString title;
 	QString submitLabel;
 	SubmitType submitType = SubmitType::Send;

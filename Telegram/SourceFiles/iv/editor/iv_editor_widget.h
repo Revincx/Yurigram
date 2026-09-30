@@ -92,6 +92,7 @@ struct WidgetServices {
 	not_null<Main::Session*> session;
 	std::shared_ptr<Main::SessionShow> show;
 	not_null<QWidget*> outer;
+	bool premiumOverride = false;
 	Fn<bool()> customEmojiPaused;
 	Fn<void(
 		not_null<Widget*>,
@@ -995,6 +996,7 @@ private:
 	const not_null<Main::Session*> _session;
 	const std::shared_ptr<Main::SessionShow> _show;
 	const not_null<QWidget*> _outer;
+	const bool _premiumOverride = false;
 	const Fn<bool()> _customEmojiPaused;
 	const Fn<void(
 		not_null<Widget*>,

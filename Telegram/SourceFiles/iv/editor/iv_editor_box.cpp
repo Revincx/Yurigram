@@ -280,7 +280,8 @@ public:
 	ToolbarStarButton(
 		QWidget *parent,
 		const style::IconButton &st,
-		not_null<Main::Session*> session);
+		not_null<Main::Session*> session,
+		bool premiumOverride);
 
 	void setIconOverride(const style::icon *icon);
 	void setIconColorOverride(std::optional<QColor> color);
@@ -314,7 +315,8 @@ public:
 		bool hasRequestMedia,
 		Fn<void(not_null<Widget*>, QPointer<QWidget>, rpl::producer<>)> requestMap,
 		Fn<void()> toggleEmoji,
-		not_null<Main::Session*> session);
+		not_null<Main::Session*> session,
+		bool premiumOverride);
 
 	int resizeGetHeight(int width) override;
 	bool eventFilter(QObject *object, QEvent *event) override;
@@ -366,6 +368,7 @@ private:
 
 	const QPointer<Widget> _editor;
 	const not_null<Main::Session*> _session;
+	const bool _premiumOverride = false;
 	const QPointer<QWidget> _tooltipParent;
 	const bool _hasRequestMedia = false;
 	const Fn<void(not_null<Widget*>, QPointer<QWidget>, rpl::producer<>)> _requestMap;
@@ -590,11 +593,15 @@ private:
 ToolbarStarButton::ToolbarStarButton(
 	QWidget *parent,
 	const style::IconButton &st,
-	not_null<Main::Session*> session)
+	not_null<Main::Session*> session,
+	bool premiumOverride)
 : RippleButton(parent, st.ripple)
 , _st(st) {
 	resize(_st.width, _st.height);
-	AmPremiumValue(session) | rpl::on_next([=](bool premium) {
+	auto premiumValue = premiumOverride
+		? rpl::single(true)
+		: AmPremiumValue(session);
+	std::move(premiumValue) | rpl::on_next([=](bool premium) {
 		_premium = premium;
 		_frame = QImage();
 		update();
@@ -693,10 +700,12 @@ Toolbar::Toolbar(
 	bool hasRequestMedia,
 	Fn<void(not_null<Widget*>, QPointer<QWidget>, rpl::producer<>)> requestMap,
 	Fn<void()> toggleEmoji,
-	not_null<Main::Session*> session)
+	not_null<Main::Session*> session,
+	bool premiumOverride)
 : Ui::RpWidget(parent)
 , _editor(editor.get())
 , _session(session)
+, _premiumOverride(premiumOverride)
 , _tooltipParent(std::move(tooltipParent))
 , _hasRequestMedia(hasRequestMedia)
 , _requestMap(std::move(requestMap))
@@ -755,7 +764,8 @@ not_null<ToolbarStarButton*> Toolbar::addStarPillButton(
 	auto owned = object_ptr<ToolbarStarButton>(
 		pill.get(),
 		st::ivEditorToolbarButton,
-		_session);
+		_session,
+		_premiumOverride);
 	const auto raw = owned.data();
 	raw->setIconOverride(icon);
 	SetupToolbarButtonState(
@@ -935,7 +945,7 @@ void Toolbar::buildPills() {
 }
 
 void Toolbar::fillHeadingMenu(not_null<Ui::PopupMenu*> menu) {
-	const auto starSize = SessionPremium(_session)
+	const auto starSize = (_premiumOverride || SessionPremium(_session))
 		? 0
 		: st::ivEditorStyleMenuPremiumStarSize;
 	for (const auto level : std::array{ 1, 2, 3, 4, 5, 6 }) {
@@ -973,7 +983,7 @@ void Toolbar::fillBlockStyleMenu(not_null<Ui::PopupMenu*> menu) {
 			_editor->insertBlock({ .type = type });
 		}
 	};
-	const auto premium = SessionPremium(_session);
+	const auto premium = _premiumOverride || SessionPremium(_session);
 	const auto starSize = premium
 		? 0
 		: st::ivEditorStyleMenuPremiumStarSize;
@@ -1074,7 +1084,7 @@ void Toolbar::showBlockStyleMenu(not_null<Ui::IconButton*> button) {
 
 void Toolbar::fillTextStyleMenu(not_null<Ui::PopupMenu*> menu) {
 	using Action = Widget::ToolbarFormatAction;
-	const auto premium = SessionPremium(_session);
+	const auto premium = _premiumOverride || SessionPremium(_session);
 	const auto starSize = premium
 		? 0
 		: st::ivEditorStyleMenuPremiumStarSize;
@@ -1155,7 +1165,7 @@ void Toolbar::showTextStyleMenu(not_null<Ui::IconButton*> button) {
 }
 
 void Toolbar::fillAttachMenu(not_null<Ui::PopupMenu*> menu) {
-	const auto starSize = SessionPremium(_session)
+	const auto starSize = (_premiumOverride || SessionPremium(_session))
 		? 0
 		: st::ivEditorStyleMenuPremiumStarSize;
 	Menu::AddActiveColorAction(
@@ -1238,7 +1248,7 @@ void Toolbar::fillListStyleMenu(not_null<Ui::PopupMenu*> menu) {
 			_editor->insertBlock({ .type = type });
 		}
 	};
-	const auto starSize = SessionPremium(_session)
+	const auto starSize = (_premiumOverride || SessionPremium(_session))
 		? 0
 		: st::ivEditorStyleMenuPremiumStarSize;
 	const auto lists = !_editor || _editor->canInsertListAtCaret();
@@ -1598,7 +1608,8 @@ private:
 	void setupEmojiColumn(const ShowWindowDescriptor &descriptor);
 	void setupBottomAiStar(
 		not_null<HistoryView::Controls::ComposeAiButton*> button,
-		not_null<Main::Session*> session);
+		not_null<Main::Session*> session,
+		bool premiumOverride);
 	void layout();
 	void updateBottomMask();
 	void toggleEmojiColumn();
@@ -1734,6 +1745,7 @@ void WindowHost::Impl::setupWindow(ShowWindowDescriptor &&descriptor) {
 			.session = descriptor.session,
 			.show = _show,
 			.outer = window->body(),
+			.premiumOverride = descriptor.premiumOverride,
 			.customEmojiPaused = [show = _show] {
 				return show->paused(ChatHelpers::PauseReason::Layer);
 			},
@@ -1773,7 +1785,8 @@ void WindowHost::Impl::setupWindow(ShowWindowDescriptor &&descriptor) {
 			_toolbar->hideShownTooltip();
 			toggleEmojiColumn();
 		},
-		descriptor.session);
+		descriptor.session,
+		descriptor.premiumOverride);
 	window->setMinimumWidth(minimalWindowWidth());
 	const auto save = (descriptor.submitType
 		== ShowWindowDescriptor::SubmitType::Save);
@@ -1823,7 +1836,7 @@ void WindowHost::Impl::setupWindow(ShowWindowDescriptor &&descriptor) {
 		button->setAccessibleName(tr::lng_ai_compose_title(tr::now));
 		button->setClickedCallback([=] {
 			const auto premiumRequired = [=] {
-				if (SessionPremium(session)) {
+				if (descriptor.premiumOverride || SessionPremium(session)) {
 					return false;
 				}
 				ShowRichMessagesPremiumToast(_show);
@@ -1881,7 +1894,10 @@ void WindowHost::Impl::setupWindow(ShowWindowDescriptor &&descriptor) {
 				},
 			});
 		});
-		setupBottomAiStar(button, session);
+		setupBottomAiStar(
+			button,
+			session,
+			descriptor.premiumOverride);
 	}
 	_send = object_ptr<Ui::SendButton>(
 		_bottom.data(),
@@ -1952,9 +1968,10 @@ void WindowHost::Impl::setupWindow(ShowWindowDescriptor &&descriptor) {
 			}
 			updateBottomMask();
 		};
-		AmPremiumValue(
-			session
-		) | rpl::on_next([=](bool value) {
+		auto premiumValue = descriptor.premiumOverride
+			? rpl::single(true)
+			: AmPremiumValue(session);
+		std::move(premiumValue) | rpl::on_next([=](bool value) {
 			*premium = value;
 			refresh();
 		}, lock->lifetime());
@@ -2023,7 +2040,8 @@ void WindowHost::Impl::setupWindow(ShowWindowDescriptor &&descriptor) {
 
 void WindowHost::Impl::setupBottomAiStar(
 		not_null<HistoryView::Controls::ComposeAiButton*> button,
-		not_null<Main::Session*> session) {
+		not_null<Main::Session*> session,
+		bool premiumOverride) {
 	const auto editor = not_null<Widget*>(_editor.data());
 	const auto locked = button->lifetime().make_state<bool>(false);
 	const auto refresh = [=] {
@@ -2040,8 +2058,11 @@ void WindowHost::Impl::setupBottomAiStar(
 				st::ivEditorToolbarPremiumStarOutline);
 		}
 	};
+	auto premiumValue = premiumOverride
+		? rpl::single(true)
+		: AmPremiumValue(session);
 	rpl::combine(
-		AmPremiumValue(session),
+		std::move(premiumValue),
 		editor->hasSelectionValue()
 	) | rpl::on_next([=](bool premium, bool selection) {
 		*locked = (selection && !premium);
@@ -2104,7 +2125,7 @@ void WindowHost::Impl::setupEmojiColumn(const ShowWindowDescriptor &descriptor) 
 		if (!IsEmojiDocument(document)) {
 			return;
 		}
-		if (PremiumEmojiForbidden(
+		if (!descriptor.premiumOverride && PremiumEmojiForbidden(
 				descriptor.session,
 				descriptor.peer,
 				document)) {

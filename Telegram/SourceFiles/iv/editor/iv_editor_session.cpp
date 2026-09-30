@@ -2052,6 +2052,7 @@ private:
 			.session = _session,
 			.peer = _peer,
 			.state = _state,
+			.premiumOverride = (_botUse != 0),
 			.title = windowTitle(),
 			.submitType = _submitType,
 			.centerOver = [&] {

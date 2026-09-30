@@ -989,6 +989,7 @@ Widget::Widget(
 , _session(services.session)
 , _show(std::move(services.show))
 , _outer(services.outer)
+, _premiumOverride(services.premiumOverride)
 , _customEmojiPaused(std::move(services.customEmojiPaused))
 , _requestMedia(std::move(services.requestMedia))
 , _requestMap(std::move(services.requestMap))
@@ -1080,7 +1081,9 @@ Widget::Widget(
 			.field = [=] {
 				return _field->isHidden() ? nullptr : _field.get();
 			},
-			.premium = AmPremiumValue(_session),
+			.premium = _premiumOverride
+				? rpl::single(true)
+				: AmPremiumValue(_session),
 			.chosen = [=](InsertSuggestionCommand command) {
 				applyInsertSuggestion(command);
 			},
@@ -2239,7 +2242,7 @@ void Widget::resolveImportedLocalMedia(BlocksImportResult &&imported) {
 				? Storage::PrepareMediaList(
 					QStringList{ media[i].path },
 					st::sendMediaPreviewSize,
-					SessionPremium(_session))
+					(_premiumOverride || SessionPremium(_session)))
 				: image.isNull()
 				? Ui::PreparedList()
 				: Storage::PrepareMediaFromImage(
@@ -2716,7 +2719,7 @@ bool Widget::handleClipboardKey(QKeyEvent *e) {
 		if (mimeData && _applyPreparedMedia) {
 			if (auto list = PreparedMediaFromClipboard(
 					not_null<const QMimeData*>(mimeData),
-					SessionPremium(_session))) {
+					(_premiumOverride || SessionPremium(_session)))) {
 				_applyPreparedMedia(
 					not_null<Widget*>(this),
 					std::move(*list),
@@ -5164,7 +5167,7 @@ void Widget::replaceMediaFromClipboard(
 	}
 	auto list = PreparedMediaFromClipboard(
 		not_null<const QMimeData*>(data),
-		SessionPremium(_session));
+		(_premiumOverride || SessionPremium(_session)));
 	if (!list) {
 		return;
 	}
@@ -7623,7 +7626,7 @@ bool Widget::handleIvClipboardMime(
 		return CanPrepareMediaFromClipboard(data);
 	} else if (auto list = PreparedMediaFromClipboard(
 			data,
-			SessionPremium(_session))) {
+			(_premiumOverride || SessionPremium(_session)))) {
 		if (_applyPreparedMedia) {
 			auto target = preparedMediaPasteTarget();
 			crl::on_main(this, [=, list = std::move(*list)]() mutable {
@@ -10875,7 +10878,7 @@ void Widget::dropEvent(QDropEvent *e) {
 	}
 	auto list = PreparedMediaFromClipboard(
 		e->mimeData(),
-		SessionPremium(_session));
+		(_premiumOverride || SessionPremium(_session)));
 	if (!list) {
 		return;
 	}
