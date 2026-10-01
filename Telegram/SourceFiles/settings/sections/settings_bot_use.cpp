@@ -265,7 +265,8 @@ void BotUseSettings::setupContent() {
 		BotUse::Settings::Option::DisableTypingStatus);
 	addToggleOption(
 		behavior,
-		BotUse::Settings::Option::AutoSwitchRichEditor);
+		BotUse::Settings::Option::AutoSwitchRichEditor,
+		tr::lng_bot_use_auto_switch_rich_editor_about());
 
 	refreshBots();
 	controller()->session().domain().botUse().changes(
@@ -275,14 +276,19 @@ void BotUseSettings::setupContent() {
 
 void BotUseSettings::addToggleOption(
 		not_null<Ui::VerticalLayout*> content,
-		BotUse::Settings::Key<bool> key) {
+		BotUse::Settings::Key<bool> key,
+		std::optional<rpl::producer<QString>> about) {
 	const auto manager = &controller()->session().domain().botUse();
 	const auto title = BotUse::Settings::DescriptorFor(key.id).title;
 	Expects(title != nullptr);
-	const auto button = AddButtonWithIcon(
-		content,
-		(*title)(),
-		st::settingsButtonNoIcon);
+	const auto button = about
+		? AddButtonWithAbout(
+			content,
+			(*title)(),
+			std::move(*about),
+			st::settingsButtonNoIcon,
+			st::settingsExperimentalTitle)
+		: AddButtonWithIcon(content, (*title)(), st::settingsButtonNoIcon);
 	registerOption(key.id, button);
 	button->toggleOn(
 		rpl::single(manager->option(key)) | rpl::then(

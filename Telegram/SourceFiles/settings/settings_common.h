@@ -276,6 +276,12 @@ not_null<Button*> AddButtonWithIcon(
 	rpl::producer<QString> text,
 	const style::SettingsButton &st,
 	IconDescriptor &&descriptor = {});
+not_null<Button*> AddButtonWithAbout(
+	not_null<Ui::VerticalLayout*> container,
+	rpl::producer<QString> title,
+	rpl::producer<QString> about,
+	const style::SettingsButton &buttonStyle,
+	const style::FlatLabel &titleStyle);
 not_null<Button*> AddButtonWithLabel(
 	not_null<Ui::VerticalLayout*> container,
 	rpl::producer<QString> text,

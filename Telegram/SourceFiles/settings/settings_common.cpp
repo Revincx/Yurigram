@@ -482,6 +482,52 @@ not_null<Button*> AddButtonWithIcon(
 			std::move(descriptor)));
 }
 
+not_null<Button*> AddButtonWithAbout(
+		not_null<Ui::VerticalLayout*> container,
+		rpl::producer<QString> titleText,
+		rpl::producer<QString> aboutText,
+		const style::SettingsButton &buttonStyle,
+		const style::FlatLabel &titleStyle) {
+	const auto &titlePadding = st::settingsExperimentalTitlePadding;
+	const auto &aboutPadding = st::settingsExperimentalAboutPadding;
+	const auto button = Ui::CreateChild<Button>(
+		container.get(),
+		rpl::single(QString()),
+		buttonStyle);
+	const auto title = container->add(
+		object_ptr<Ui::FlatLabel>(
+			container,
+			std::move(titleText),
+			titleStyle),
+		titlePadding);
+	const auto about = container->add(
+		object_ptr<Ui::FlatLabel>(
+			container,
+			std::move(aboutText),
+			st::settingsExperimentalAbout),
+		aboutPadding);
+	title->setAttribute(Qt::WA_TransparentForMouseEvents);
+	about->setAttribute(Qt::WA_TransparentForMouseEvents);
+	rpl::combine(
+		container->widthValue(),
+		title->heightValue(),
+		about->heightValue()
+	) | rpl::on_next([=](int width, int titleHeight, int aboutHeight) {
+		button->resize(width, titlePadding.top()
+			+ titleHeight
+			+ titlePadding.bottom()
+			+ aboutPadding.top()
+			+ aboutHeight
+			+ aboutPadding.bottom());
+	}, button->lifetime());
+	title->topValue(
+	) | rpl::on_next([=](int top) {
+		button->moveToLeft(0, top - titlePadding.top());
+	}, button->lifetime());
+	button->show();
+	return button;
+}
+
 void CreateRightLabel(
 		not_null<Button*> button,
 		v::text::data &&label,

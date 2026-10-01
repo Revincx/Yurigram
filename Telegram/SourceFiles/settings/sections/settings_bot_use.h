@@ -11,6 +11,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace Ui {
@@ -47,7 +48,8 @@ private:
 	void addBot();
 	void addToggleOption(
 		not_null<Ui::VerticalLayout*> content,
-		BotUse::Settings::Key<bool> key);
+		BotUse::Settings::Key<bool> key,
+		std::optional<rpl::producer<QString>> about = std::nullopt);
 	void registerOption(
 		BotUse::Settings::OptionId id,
 		not_null<Ui::RpWidget*> widget);
