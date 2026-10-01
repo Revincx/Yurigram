@@ -10,8 +10,6 @@
 namespace BotUse {
 namespace {
 
-constexpr auto kIdleTimeout = crl::time(5 * 60 * 1000);
-
 [[nodiscard]] bool Editing(Kind kind) {
 	return kind == Kind::Edit || kind == Kind::EditRich;
 }
@@ -37,8 +35,7 @@ constexpr auto kIdleTimeout = crl::time(5 * 60 * 1000);
 Client::Client(not_null<Manager*> manager, Record record)
 : _manager(manager)
 , _record(std::move(record))
-, _resourceGeneration(base::RandomValue<uint64>())
-, _idleTimer([=] { idle(); }) {
+, _resourceGeneration(base::RandomValue<uint64>()) {
 	_record.info.environment = _record.environment;
 }
 
@@ -74,7 +71,6 @@ bool Client::active(const Op &operation) const {
 
 void Client::enqueue(Op operation) {
 	_queue.push_back(std::move(operation));
-	_idleTimer.cancel();
 	crl::on_main(this, [=] { pump(); });
 }
 
@@ -111,15 +107,6 @@ void Client::stop() {
 	_sender.reset();
 	_instance.reset();
 	_ready = false;
-	_idleTimer.cancel();
-}
-
-void Client::idle() {
-	if (!busy()) {
-		stop();
-		_record.info.state = State::Disconnected;
-		_manager->changed();
-	}
 }
 
 void Client::resetAuthorization() {
@@ -1078,7 +1065,6 @@ void Client::finish(const Op &operation, OperationState state, Error error) {
 		if (!_manager->save()) { _manager->changed(); }
 		notify(operation);
 		_manager->changed();
-		_idleTimer.callOnce(kIdleTimeout);
 		pump();
 	});
 }

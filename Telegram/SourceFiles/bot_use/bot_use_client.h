@@ -1,7 +1,6 @@
 #pragma once
 
 #include "base/call_delayed.h"
-#include "base/timer.h"
 #include "base/weak_ptr.h"
 #include "bot_use/bot_use_adapter.h"
 #include "iv/iv_rich_message_serializer.h"
@@ -87,7 +86,6 @@ private:
 		Error error = {});
 	void notify(const Op &operation);
 	void saveKeys();
-	void idle();
 
 	const not_null<Manager*> _manager;
 	Record _record;
@@ -106,7 +104,6 @@ private:
 	Iv::RichMessageLimits _richLimits;
 	uint64 _resourceGeneration = 0;
 	bool _ready = false;
-	base::Timer _idleTimer;
 	rpl::lifetime _connectionLifetime;
 
 };
