@@ -24,10 +24,12 @@
 #include "ui/wrap/slide_wrap.h"
 #include "ui/wrap/vertical_layout.h"
 #include "window/window_session_controller.h"
+#include "styles/style_chat.h"
 #include "styles/style_chat_helpers.h"
-#include "styles/style_menu_icons.h"
 #include "styles/style_layers.h"
+#include "styles/style_menu_icons.h"
 #include "styles/style_settings.h"
+#include "styles/style_window.h"
 
 #include <QtCore/QPointer>
 
@@ -207,7 +209,14 @@ void BotUseSettings::setupContent() {
 		api,
 		tr::lng_bot_use_api_credentials(),
 		st::settingsButtonNoIcon);
-	configure->addClickHandler([=] { showApiSettings(); });
+	configure->addClickHandler([=] {
+		if (!controller()->session().domain().botUse().bots().empty()) {
+			controller()->showToast(
+				tr::lng_bot_use_api_remove_bots_first(tr::now));
+			return;
+		}
+		showApiSettings();
+	});
 
 	const auto manage = AddGroup(page, tr::lng_bot_use_manage());
 	_bots = manage->add(object_ptr<Ui::VerticalLayout>(manage));
@@ -276,35 +285,19 @@ void BotUseSettings::showApiSettings() {
 				(validId ? apiHash : apiId)->setFocusFast();
 				return;
 			}
-			const auto apply = [=] {
-				if (!dialog) {
-					return;
-				}
-				if (const auto error = manager->setApiCredentials(updated)) {
-					if (error.type == u"API_CREDENTIALS_INVALID"_q) {
-						apiId->showErrorNoFocus();
-						apiHash->showErrorNoFocus();
-						apiId->setFocusFast();
-					} else {
-						ShowError(controller, error);
-					}
+			if (const auto error = manager->setApiCredentials(updated)) {
+				if (error.type == u"API_CREDENTIALS_INVALID"_q) {
+					apiId->showErrorNoFocus();
+					apiHash->showErrorNoFocus();
+					apiId->setFocusFast();
 				} else {
-					controller->showToast(tr::lng_bot_use_saved(tr::now));
+					ShowError(controller, error);
+				}
+			} else {
+				controller->showToast(tr::lng_bot_use_saved(tr::now));
+				if (dialog) {
 					dialog->closeBox();
 				}
-			};
-			if (updated != manager->apiCredentials()
-				&& !manager->bots().empty()) {
-				controller->show(Ui::MakeConfirmBox({
-					.text = tr::lng_bot_use_api_change_confirm(),
-					.confirmed = [=](Fn<void()> closeConfirm) {
-						closeConfirm();
-						apply();
-					},
-					.confirmText = tr::lng_settings_save(),
-				}));
-			} else {
-				apply();
 			}
 		});
 		box->addButton(tr::lng_cancel(), [=] { box->closeBox(); });
@@ -417,13 +410,47 @@ void BotUseSettings::showBot(const BotUse::BotInfo &info) {
 	const auto controller = this->controller();
 	controller->show(Box([=](not_null<Ui::GenericBox*> box) {
 		const auto details = QPointer<Ui::GenericBox>(box.get());
-		box->setTitle(rpl::single(info.name.isEmpty()
+		box->setTitle(tr::lng_bot_use_manage());
+		const auto name = info.name.isEmpty()
 			? (info.username.isEmpty()
 				? tr::lng_bot_use_unknown(tr::now)
 				: u"@"_q + info.username)
-			: info.name));
+			: info.name;
 		const auto content = box->verticalLayout();
-		AddSubsectionTitle(content, rpl::single(StateText(info.state)));
+		const auto manager = &controller->session().domain().botUse();
+		const auto status = box->lifetime().make_state<rpl::variable<QString>>(
+			StateText(info.state));
+		const auto labels = Ui::CreateChild<Ui::VerticalLayout>(content);
+		labels->add(object_ptr<Ui::FlatLabel>(
+			labels,
+			rpl::single(name),
+			st::previewName));
+		labels->add(object_ptr<Ui::FlatLabel>(
+			labels,
+			status->value(),
+			st::previewStatus));
+		manager->changes() | rpl::on_next([=] {
+			for (const auto &current : manager->bots()) {
+				if (current.id != info.id) {
+					continue;
+				}
+				const auto value = StateText(current.state);
+				if (status->current() != value) {
+					*status = value;
+				}
+				return;
+			}
+		}, box->lifetime());
+		const auto user = controller->session().data().user(info.userId);
+		Ui::IconWithTitle(
+			content,
+			Ui::CreateChild<Ui::UserpicButton>(
+				content,
+				not_null<PeerData*>(user.get()),
+				st::mainMenuUserpic),
+			labels);
+		Ui::AddSkip(content);
+		Ui::AddDivider(content);
 		const auto active = box->lifetime().make_state<BotUse::OperationId>(0);
 		box->boxClosing() | rpl::on_next([=] {
 			if (*active) {
@@ -438,15 +465,14 @@ void BotUseSettings::showBot(const BotUse::BotInfo &info) {
 			if (*active) {
 				return;
 			}
-			auto &manager = controller->session().domain().botUse();
-			*active = manager.authenticate(info.id, crl::guard(box, [=](const BotUse::Result &result) {
-				*active = 0;
-				if (result.state == BotUse::OperationState::Completed) {
-					box->closeBox();
-				} else {
-					ShowError(controller, result.error);
-				}
-			}));
+			*active = manager->authenticate(
+				info.id,
+				crl::guard(box, [=](const BotUse::Result &result) {
+					*active = 0;
+					if (result.state != BotUse::OperationState::Completed) {
+						ShowError(controller, result.error);
+					}
+				}));
 			if (!*active) {
 				ShowError(controller, { u"BOT_NOT_AVAILABLE"_q });
 			}
@@ -499,11 +525,7 @@ void BotUseSettings::showBot(const BotUse::BotInfo &info) {
 				edit->addButton(tr::lng_cancel(), [=] { edit->closeBox(); });
 			}));
 		});
-		const auto remove = AddButtonWithIcon(
-			content,
-			tr::lng_box_remove(),
-			st::settingsAttentionButton);
-		remove->addClickHandler([=] {
+		box->addLeftButton(tr::lng_box_remove(), [=] {
 			controller->show(Ui::MakeConfirmBox({
 				.text = tr::lng_bot_use_remove_confirm(),
 				.confirmed = [=](Fn<void()> closeConfirm) {
@@ -521,8 +543,9 @@ void BotUseSettings::showBot(const BotUse::BotInfo &info) {
 					}
 				},
 				.confirmText = tr::lng_box_remove(),
+				.confirmStyle = &st::attentionBoxButton,
 			}));
-		});
+		}, st::attentionBoxButton);
 		box->addButton(tr::lng_close(), [=] { box->closeBox(); });
 	}));
 }
