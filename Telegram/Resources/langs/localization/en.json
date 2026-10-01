@@ -30,6 +30,8 @@
     "lng_bot_use_store_error": "BotUse could not save its encrypted data.",
     "lng_bot_use_error": "BotUse error: {error}",
     "lng_bot_use_disable_typing_status": "Disable sending typing status",
+    "lng_bot_use_auto_switch_rich_editor": "Auto switch to bot when editing rich messages in channels",
+    "lng_bot_use_rich_editor_switched": "Switched to {bot} for the rich message editor.",
     "lng_settings_show_media_metadata": "Show media metadata",
     "lng_media_metadata_average_bitrate": "{bitrate} kbps",
     "lng_media_metadata_silent": "Silent",

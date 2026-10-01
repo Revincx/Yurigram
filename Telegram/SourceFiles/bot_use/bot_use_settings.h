@@ -25,6 +25,7 @@ namespace Settings {
 
 enum class OptionId {
 	DisableTypingStatus,
+	AutoSwitchRichEditor,
 	Count,
 };
 
@@ -38,6 +39,8 @@ struct Key {
 namespace Option {
 inline constexpr auto DisableTypingStatus
 	= Key<bool>{ OptionId::DisableTypingStatus };
+inline constexpr auto AutoSwitchRichEditor
+	= Key<bool>{ OptionId::AutoSwitchRichEditor };
 } // namespace Option
 
 using StoredValue = std::variant<bool, int, QString>;

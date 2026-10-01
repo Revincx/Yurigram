@@ -32,6 +32,7 @@
 #include "test/test_log.h"
 #include "test/test_rpc_fixture.h"
 #include "test/test_runner.h"
+#include "test/test_toast_capture.h"
 #include "test/test_widgets.h"
 #include "ui/widgets/buttons.h"
 #include "window/window_session_controller.h"
@@ -514,16 +515,20 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		MTP::details::pause();
 		state->manager = &Core::App().domain().botUse();
 		state->manager->reset();
-		const auto controlId = BotUse::Settings::ControlId(
-			BotUse::Settings::Option::DisableTypingStatus.id);
-		const auto deepLink = u"tg://settings/"_q + controlId;
-		Check(Core::DeepLinks::SettingsDeepLink(
-			Settings::BotUseSettingsId(),
-			controlId) == deepLink,
-			u"BotUse option has a registered settings route"_q);
-		Check(Core::TryConvertUrlToLocal(
-			u"https://t.me/yurisettings/"_q + controlId) == deepLink,
-			u"Yurisettings BotUse links keep the BotUse route prefix"_q);
+		for (const auto id : {
+				BotUse::Settings::Option::DisableTypingStatus.id,
+				BotUse::Settings::Option::AutoSwitchRichEditor.id,
+		}) {
+			const auto controlId = BotUse::Settings::ControlId(id);
+			const auto deepLink = u"tg://settings/"_q + controlId;
+			Check(Core::DeepLinks::SettingsDeepLink(
+				Settings::BotUseSettingsId(),
+				controlId) == deepLink,
+				u"BotUse option has a registered settings route"_q);
+			Check(Core::TryConvertUrlToLocal(
+				u"https://t.me/yurisettings/"_q + controlId) == deepLink,
+				u"Yurisettings BotUse links keep the BotUse route prefix"_q);
+		}
 		const auto error = state->manager->setApiCredentials({ 12345, u"0123456789abcdef0123456789abcdef"_q });
 		Check(!error, u"Configure shared application credentials"_q, error.type);
 		state->a = state->manager->addBot(u"fixture-a"_q);
@@ -1137,9 +1142,20 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 			session->botUseChats().clear(history->peer->id);
 			Check(!BotUse::RichEditBot(item),
 				u"Personal identity does not enable Bot rich editing"_q);
-			session->botUseChats().choose(history->peer->id, state->a);
-			Check(BotUse::RichEditBot(item) == state->a && !session->premium(),
-				u"Selected Bot permits channel rich editing without Premium"_q);
+			if (mode == 3) {
+				state->settingError = state->manager->setOption(
+					BotUse::Settings::Option::AutoSwitchRichEditor, true);
+				session->botUseChats().cacheMembers(
+					history->peer->id, { UserId(11) });
+				Check(!state->settingError,
+					u"Enable automatic Bot choice for rich editing"_q,
+					state->settingError.type);
+			} else {
+				session->botUseChats().choose(history->peer->id, state->a);
+				Check(BotUse::RichEditBot(item) == state->a
+					&& !session->premium(),
+						u"Selected Bot permits channel rich editing without Premium"_q);
+			}
 			const auto controller = session->tryResolveWindow(history->peer);
 			Expects(controller != nullptr);
 			Iv::Editor::ShowEditBox(controller, item);
@@ -1147,6 +1163,21 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 			const auto session = Core::App().domain().active().maybeSession();
 			const auto editor = FindRichEditor();
 			Expects(editor != nullptr);
+			if (mode == 3) {
+				Check(BotUse::Selected(state->text().action.history) == state->a,
+					u"Rich editor activates the first Ready channel Bot"_q);
+				const auto infos = state->manager->bots();
+				const auto info = ranges::find(infos, state->a, &BotUse::BotInfo::id);
+				Expects(info != end(infos));
+				const auto expected = tr::lng_bot_use_rich_editor_switched(
+					tr::now, lt_bot, info->name);
+				const auto toasts = FindLiveToasts();
+				Check(ranges::any_of(toasts, [=](QWidget *toast) {
+					return toast->window() == editor->window()
+						&& ReadToastText(toast).contains(expected);
+				}), u"Bot switch toast belongs to the rich editor window"_q,
+					u"liveToasts=%1"_q.arg(toasts.size()));
+			}
 			editor->applyExternalRichPageMutation([=](Iv::RichPage &page) {
 				page.blocks.front().text.text.text = u"Bot editor saved"_q;
 				if (mode == 1) {
@@ -1196,6 +1227,13 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 			if (mode == 2) {
 				Check(item->richPage() == state->editOriginal,
 					u"Rejected Bot edit preserves the original channel content"_q);
+			}
+			if (mode == 3) {
+				state->settingError = state->manager->setOption(
+					BotUse::Settings::Option::AutoSwitchRichEditor, false);
+				Check(!state->settingError,
+					u"Restore automatic Bot choice setting"_q,
+					state->settingError.type);
 			}
 		} });
 	}

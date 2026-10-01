@@ -42,6 +42,11 @@ const DescriptorList &DescriptorData() {
 			"disable_typing_status",
 			&tr::lng_bot_use_disable_typing_status,
 			"bot-use/disable-typing-status"),
+		Bool(
+			OptionId::AutoSwitchRichEditor,
+			"auto_switch_rich_editor",
+			&tr::lng_bot_use_auto_switch_rich_editor,
+			"bot-use/auto-switch-rich-editor"),
 	};
 	return result;
 }

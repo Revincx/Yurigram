@@ -22,6 +22,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "bot_use/bot_use_sending.h"
 #include "bot_use/bot_use_manager.h"
 #include "bot_use/bot_use_chat_state.h"
+#include "bot_use/bot_use_settings.h"
 #include "base/flat_map.h"
 #include "base/timer.h"
 #include "base/weak_qptr.h"
@@ -35,6 +36,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/components/ephemeral_messages.h"
 #include "data/components/welcome_messages.h"
 #include "data/data_changes.h"
+#include "data/data_channel.h"
 #include "data/data_chat_participant_status.h"
 #include "data/data_drafts.h"
 #include "data/data_document.h"
@@ -76,6 +78,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "storage/storage_media_prepare.h"
 #include "ui/boxes/confirm_box.h"
 #include "ui/chat/attach/attach_prepare.h"
+#include "ui/chat/choose_bot_use.h"
 #include "ui/controls/location_picker.h"
 #include "ui/controls/send_button.h"
 #include "ui/image/image.h"
@@ -607,7 +610,8 @@ public:
 		TextWithTags fieldText,
 		Fn<void()> onMigrated,
 		ComposeBoxOptions options,
-		base::weak_ptr<Window::SessionController> controller) {
+		base::weak_ptr<Window::SessionController> controller,
+		BotUse::BotId switched) {
 		const auto history = action.history;
 		auto composeThreadKey = std::optional<ComposeThreadKey>();
 		auto page = std::make_shared<RichPage>();
@@ -672,13 +676,15 @@ public:
 			std::move(controller),
 			draftBot));
 		articleSession->showWindow();
+		articleSession->showAutoSwitchToast(switched);
 	}
 
 	static void ShowEdit(
 		not_null<HistoryItem*> item,
 		std::shared_ptr<const RichPage> richPage,
 		BotUse::BotId bot,
-		base::weak_ptr<Window::SessionController> controller) {
+		base::weak_ptr<Window::SessionController> controller,
+		BotUse::BotId switched) {
 		if (ActivateEditWindow(&item->history()->session(), item->fullId())) {
 			return;
 		}
@@ -708,6 +714,7 @@ public:
 			std::move(controller),
 			bot));
 		articleSession->showWindow();
+		articleSession->showAutoSwitchToast(switched);
 	}
 
 	static void ShowEditFromField(
@@ -917,6 +924,19 @@ private:
 	void showToast(const QString &text) const {
 		if (const auto show = resolveShow()) {
 			show->showToast(text);
+		}
+	}
+
+	void showAutoSwitchToast(BotUse::BotId bot) const {
+		if (!bot || !_editorShow || !_editorShow->valid()) {
+			return;
+		}
+		for (const auto &info : _session->domain().botUse().bots()) {
+			if (info.id == bot) {
+				_editorShow->showToast(tr::lng_bot_use_rich_editor_switched(
+					tr::now, lt_bot, info.name));
+				break;
+			}
 		}
 	}
 
@@ -5317,6 +5337,39 @@ bool CanAuthorRichMessages(not_null<Main::Session*> session) {
 	return RichMessagePostingMode(session) != RichMessagePosting::Disabled;
 }
 
+void OpenWithAutoBot(
+		not_null<Window::SessionController*> controller,
+		not_null<PeerData*> peer,
+		Fn<void(BotUse::BotId)> open) {
+	const auto channel = peer->asChannel();
+	const auto session = &controller->session();
+	if (!channel
+		|| !channel->isBroadcast()
+		|| !session->domain().botUse().option(
+			BotUse::Settings::Option::AutoSwitchRichEditor)
+		|| session->botUseChats().choice(peer->id).enabled) {
+		open(0);
+		return;
+	}
+	const auto weak = base::make_weak(controller);
+	Ui::FindFirstReadyBotInChannel(
+		not_null{ channel },
+		[=, open = std::move(open)](BotUse::BotId bot) {
+			const auto strong = weak.get();
+			if (!strong) {
+				return;
+			}
+			const auto now = strong->session().botUseChats().choice(peer->id);
+			auto switched = BotUse::BotId();
+			if (bot && !now.enabled && strong->session().domain().botUse().option(
+					BotUse::Settings::Option::AutoSwitchRichEditor)) {
+				strong->session().botUseChats().choose(peer->id, bot);
+				switched = bot;
+			}
+			open(switched);
+		});
+}
+
 bool SessionPremium(not_null<Main::Session*> session) {
 	return session->premium();
 }
@@ -5402,28 +5455,71 @@ void ShowComposeBox(
 		TextWithTags fieldText,
 		Fn<void()> onMigrated,
 		ComposeBoxOptions options) {
-	ArticleSession::ShowCompose(
-		&controller->session(),
-		peer,
-		std::move(action),
-		std::move(sendMenuDetails),
-		std::move(fieldText),
-		std::move(onMigrated),
-		std::move(options),
-		base::make_weak(controller));
+	const auto alreadyOpen = options.scope == ComposeBoxOptions::Scope::Thread
+		&& IsComposeBoxOpen(
+			&controller->session(),
+			peer->id,
+			action.replyTo.topicRootId,
+			action.replyTo.monoforumPeerId);
+	const auto weak = base::make_weak(controller);
+	auto open = [=,
+			action = std::move(action),
+			sendMenuDetails = std::move(sendMenuDetails),
+			fieldText = std::move(fieldText),
+			onMigrated = std::move(onMigrated),
+			options = std::move(options)](BotUse::BotId switched) mutable {
+		if (const auto strong = weak.get()) {
+			if (switched && options.scope == ComposeBoxOptions::Scope::Thread) {
+				strong->session().botUseChats().bindRichDraft(
+					peer->id,
+					action.replyTo.topicRootId,
+					action.replyTo.monoforumPeerId,
+					switched);
+			}
+			ArticleSession::ShowCompose(
+				&strong->session(),
+				peer,
+				std::move(action),
+				std::move(sendMenuDetails),
+				std::move(fieldText),
+				std::move(onMigrated),
+				std::move(options),
+				base::make_weak(strong),
+				switched);
+		}
+	};
+	if (alreadyOpen) {
+		open(0);
+	} else {
+		OpenWithAutoBot(controller, peer, std::move(open));
+	}
 }
 
 void ShowEditBox(
 		not_null<Window::SessionController*> controller,
 		not_null<HistoryItem*> item,
 		std::optional<uint64> botOverride) {
-	const auto bot = botOverride.value_or(BotUse::RichEditBot(item));
-	if (!bot && !CanAuthorRichMessages(&controller->session())) {
+	if (ArticleSession::ActivateEditWindow(
+			&controller->session(), item->fullId())) {
 		return;
 	}
-	const auto weak = base::make_weak(controller);
 	const auto itemId = item->fullId();
-	Core::App().iv().resolveRichMessage(&controller->session(), item, [=](
+	const auto weak = base::make_weak(controller);
+	OpenWithAutoBot(controller, item->history()->peer, [=](
+			BotUse::BotId switched) {
+		const auto strong = weak.get();
+		const auto current = strong
+			? strong->session().data().message(itemId)
+			: nullptr;
+		if (!current) {
+			return;
+		}
+		const auto bot = switched
+			? switched : botOverride.value_or(BotUse::RichEditBot(current));
+		if (!bot && !CanAuthorRichMessages(&strong->session())) {
+			return;
+		}
+		Core::App().iv().resolveRichMessage(&strong->session(), current, [=](
 			std::shared_ptr<const RichPage> page) {
 		const auto strong = weak.get();
 		const auto current = strong
@@ -5440,7 +5536,9 @@ void ShowEditBox(
 			not_null{ current },
 			std::move(page),
 			bot,
-			base::make_weak(strong));
+			base::make_weak(strong),
+			switched);
+	});
 	});
 }
 

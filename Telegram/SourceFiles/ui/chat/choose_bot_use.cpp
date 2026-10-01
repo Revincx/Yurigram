@@ -1,6 +1,7 @@
 #include "ui/chat/choose_bot_use.h"
 
 #include "api/api_chat_participants.h"
+#include "apiwrap.h"
 #include "bot_use/bot_use_chat_state.h"
 #include "bot_use/bot_use_manager.h"
 #include "boxes/peer_list_box.h"
@@ -20,10 +21,78 @@
 #include "styles/style_calls.h"
 #include "styles/style_chat_helpers.h"
 
+#include <set>
+
 namespace Ui {
 namespace {
 
 constexpr auto kParticipantsPage = 100;
+
+[[nodiscard]] BotUse::BotId FirstReadyBot(
+		not_null<ChannelData*> channel,
+		const std::set<UserId> &members) {
+	for (const auto &info : channel->session().domain().botUse().bots()) {
+		if (info.state == BotUse::State::Ready
+			&& info.environment == channel->session().mtp().environment()
+			&& members.contains(info.userId)) {
+			return info.id;
+		}
+	}
+	return 0;
+}
+
+class ReadyBotLookup final
+	: public std::enable_shared_from_this<ReadyBotLookup> {
+public:
+	ReadyBotLookup(
+		not_null<ChannelData*> channel,
+		Fn<void(BotUse::BotId)> done)
+	: _channel(channel)
+	, _done(std::move(done)) {
+	}
+
+	void request() {
+		const auto self = shared_from_this();
+		_channel->session().api().request(MTPchannels_GetParticipants(
+			_channel->inputChannel(),
+			MTPChannelParticipantsFilter(MTP_channelParticipantsAdmins()),
+			MTP_int(_offset),
+			MTP_int(kParticipantsPage),
+			MTP_long(0)
+		)).done([self](const MTPchannels_ChannelParticipants &result) {
+			result.match([&](const MTPDchannels_channelParticipants &data) {
+				self->_channel->owner().processUsers(data.vusers());
+				const auto count = int(data.vparticipants().v.size());
+				for (const auto &participant : data.vparticipants().v) {
+					const auto parsed = Api::ChatParticipant(
+						participant,
+						self->_channel);
+					if (parsed.isUser()) {
+						self->_members.insert(parsed.userId());
+					}
+				}
+				self->_offset += count;
+				if (count > 0 && self->_offset < data.vcount().v) {
+					self->request();
+				} else {
+					self->_channel->session().botUseChats().cacheMembers(
+						self->_channel->id, self->_members);
+					self->_done(FirstReadyBot(self->_channel, self->_members));
+				}
+			}, [&](const MTPDchannels_channelParticipantsNotModified &) {
+				self->_done(0);
+			});
+		}).fail([self](const MTP::Error &) {
+			self->_done(0);
+		}).handleAllErrors().send();
+	}
+
+private:
+	const not_null<ChannelData*> _channel;
+	Fn<void(BotUse::BotId)> _done;
+	std::set<UserId> _members;
+	int _offset = 0;
+};
 
 [[nodiscard]] QString StateText(BotUse::State state) {
 	switch (state) {
@@ -337,6 +406,23 @@ void ChooseBotUseBox(
 bool CanChooseBotUse(not_null<PeerData*> peer) {
 	const auto channel = peer->asChannel();
 	return channel && (channel->isMegagroup() || channel->isBroadcast());
+}
+
+void FindFirstReadyBotInChannel(
+		not_null<ChannelData*> channel,
+		Fn<void(BotUse::BotId)> done) {
+	if (!channel->isBroadcast()) {
+		done(0);
+		return;
+	}
+	const auto cached = channel->session().botUseChats().cachedMembers(
+		channel->id);
+	if (cached) {
+		done(FirstReadyBot(channel, *cached));
+	} else {
+		std::make_shared<ReadyBotLookup>(
+			channel, std::move(done))->request();
+	}
 }
 
 void ShowChooseBotUse(

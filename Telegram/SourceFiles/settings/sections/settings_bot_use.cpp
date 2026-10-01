@@ -201,6 +201,16 @@ void AddBotStatus(
 				+ BotUse::Settings::ControlId(id),
 		};
 	});
+	const auto richId = BotUse::Settings::Option::AutoSwitchRichEditor.id;
+	builder.add(nullptr, [=] {
+		return Builder::SearchEntry{
+			.id = BotUse::Settings::ControlId(richId),
+			.title = BotUse::Settings::OptionTitle(richId),
+			.keywords = { u"bot"_q, u"rich"_q, u"editor"_q },
+			.deeplink = u"tg://settings/"_q
+				+ BotUse::Settings::ControlId(richId),
+		};
+	});
 });
 
 } // namespace
@@ -253,6 +263,9 @@ void BotUseSettings::setupContent() {
 	addToggleOption(
 		behavior,
 		BotUse::Settings::Option::DisableTypingStatus);
+	addToggleOption(
+		behavior,
+		BotUse::Settings::Option::AutoSwitchRichEditor);
 
 	refreshBots();
 	controller()->session().domain().botUse().changes(
