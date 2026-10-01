@@ -569,6 +569,23 @@ void BotUseSettings::showBot(const BotUse::BotInfo &info) {
 				controller->session().domain().botUse().cancel(*active);
 			}
 		}, box->lifetime());
+		const auto autoAuth = AddButtonWithIcon(
+			content,
+			tr::lng_bot_use_auto_login_startup(),
+			st::settingsButtonNoIcon);
+		autoAuth->toggleOn(
+			rpl::single(manager->autoAuth(info.id)) | rpl::then(
+				manager->changes() | rpl::map([=] {
+					return manager->autoAuth(info.id);
+				})) | rpl::distinct_until_changed()
+		)->toggledChanges(
+		) | rpl::filter([=](bool value) {
+			return value != manager->autoAuth(info.id);
+		}) | rpl::on_next([=](bool value) {
+			if (const auto error = manager->setAutoAuth(info.id, value)) {
+				ShowError(controller, error);
+			}
+		}, box->lifetime());
 		const auto authenticate = AddButtonWithIcon(
 			content,
 			tr::lng_bot_use_reauthenticate(),

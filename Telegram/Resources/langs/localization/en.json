@@ -14,6 +14,7 @@
     "lng_bot_use_added": "Bot added to BotUse.",
     "lng_bot_use_token": "Bot token",
     "lng_bot_use_unknown": "Unknown bot",
+    "lng_bot_use_auto_login_startup": "Auto login on start",
     "lng_bot_use_reauthenticate": "Authenticate again",
     "lng_bot_use_replace_token": "Update bot token",
     "lng_bot_use_remove_confirm": "Remove this bot from BotUse?",

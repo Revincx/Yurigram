@@ -19,6 +19,7 @@ public:
 	~Client();
 	[[nodiscard]] const Record &record() const;
 	[[nodiscard]] const BotInfo &info() const;
+	void setAutoAuth(bool enabled);
 	[[nodiscard]] bool busy() const;
 	void enqueue(std::shared_ptr<Operation> operation);
 	void cancel(OperationId operation);

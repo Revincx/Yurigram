@@ -152,6 +152,8 @@ struct Fixture {
 	BotUse::Manager *manager = nullptr;
 	BotUse::BotId a = 0;
 	BotUse::BotId b = 0;
+	BotUse::BotId startupValid = 0;
+	BotUse::BotId startupInvalid = 0;
 	BotUse::OperationId operation = 0;
 	std::optional<BotUse::Result> result;
 	std::map<MTP::Instance*, uint64> users;
@@ -1353,11 +1355,22 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		state->manager->cancel(state->operation);
 	}, [=] { Check(state->result->state == BotUse::OperationState::Cancelled, u"Queued cancellation completes"_q); });
 	runner->add({ .name = u"botuse validation and storage"_q, .run = [=] {
+		state->startupValid = state->manager->addBot(u"fixture-c"_q);
+		state->startupInvalid = state->manager->addBot(u"fixture-invalid"_q);
+		Check(state->startupValid && state->startupInvalid
+			&& !state->manager->setAutoAuth(state->startupValid, true)
+			&& !state->manager->setAutoAuth(state->startupInvalid, true)
+			&& !state->manager->autoAuth(state->a),
+			u"Auto authentication is stored for individual bots"_q);
 		const auto before = state->manager->bots();
 		state->manager->finish();
 		state->manager->start();
 		Check(state->manager->bots().size() == before.size() && state->manager->apiId() == 12345
-			&& !state->manager->storageError(), u"Global encrypted bot store restores identities and API ID"_q);
+			&& !state->manager->storageError()
+			&& state->manager->autoAuth(state->startupValid)
+			&& state->manager->autoAuth(state->startupInvalid)
+			&& !state->manager->autoAuth(state->a),
+			u"Global encrypted bot store restores identities and auto authentication"_q);
 		auto partial = Iv::RichPage();
 		partial.part = true;
 		auto operation = BotUse::Operation();
@@ -1386,6 +1399,21 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 			&& (!clearedDraft || !clearedDraft->noForwards),
 			u"Using the personal account clears its protected draft"_q);
 	} });
+	runner->add({ .name = u"botuse startup authentication"_q,
+		.until = [=] {
+			const auto bots = state->manager->bots();
+			const auto valid = ranges::find(bots, state->startupValid, &BotUse::BotInfo::id);
+			const auto invalid = ranges::find(bots, state->startupInvalid, &BotUse::BotInfo::id);
+			return valid != bots.end() && invalid != bots.end()
+				&& valid->state == BotUse::State::Ready
+				&& invalid->state == BotUse::State::NeedsAuthentication;
+		}, .then = [=] {
+			const auto bots = state->manager->bots();
+			const auto disabled = ranges::find(bots, state->a, &BotUse::BotInfo::id);
+			Check(disabled != bots.end()
+				&& disabled->state == BotUse::State::Disconnected,
+				u"Startup authenticates enabled bots and keeps failures in state"_q);
+		} });
 }
 
 } // namespace Test

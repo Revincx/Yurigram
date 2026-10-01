@@ -50,6 +50,12 @@ Client::~Client() {
 
 const Record &Client::record() const { return _rollback ? *_rollback : _record; }
 const BotInfo &Client::info() const { return _record.info; }
+void Client::setAutoAuth(bool enabled) {
+	_record.info.autoAuth = enabled;
+	if (_rollback) {
+		_rollback->info.autoAuth = enabled;
+	}
+}
 bool Client::busy() const { return _active || !_queue.empty(); }
 
 std::shared_ptr<const ResourceContext> Client::resources() const {
@@ -1014,6 +1020,11 @@ void Client::finish(const Op &operation, OperationState state, Error error) {
 				_rollback.reset();
 				_ready = false;
 			}
+		}
+		if (state != OperationState::Completed
+			&& _record.info.state == State::Authenticating) {
+			_record.info.state = State::Disconnected;
+			_record.info.error = operation->result.error;
 		}
 		_active.reset();
 		if (!_manager->save()) { _manager->changed(); }

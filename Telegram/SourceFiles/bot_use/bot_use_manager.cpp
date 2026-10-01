@@ -10,7 +10,7 @@
 namespace BotUse {
 namespace {
 
-constexpr auto kStoreVersion = quint32(1);
+constexpr auto kStoreVersion = quint32(2);
 constexpr auto kMaximumStoreSize = 64 * 1024 * 1024;
 
 } // namespace
@@ -36,7 +36,8 @@ void Manager::start() {
 	auto version = quint32();
 	auto count = quint32();
 	stream >> version;
-	if (version != kStoreVersion || bytes->size() > kMaximumStoreSize) {
+	if ((version != 1 && version != kStoreVersion)
+		|| bytes->size() > kMaximumStoreSize) {
 		_readOnly = true;
 		_storageError = { u"BOT_STORE_VERSION_OR_SIZE"_q };
 		return;
@@ -91,11 +92,22 @@ void Manager::start() {
 		valid = valid && stream.status() == QDataStream::Ok;
 		records.push_back(std::move(record));
 	}
-	if (valid && !stream.atEnd()) {
+	if (valid && (version == kStoreVersion || !stream.atEnd())) {
 		auto settings = QByteArray();
 		stream >> settings;
 		valid = stream.status() == QDataStream::Ok
 			&& _settings.deserialize(settings);
+	}
+	if (valid && version == kStoreVersion) {
+		for (auto &record : records) {
+			auto enabled = quint8();
+			stream >> enabled;
+			valid = stream.status() == QDataStream::Ok && enabled <= 1;
+			if (!valid) {
+				break;
+			}
+			record.info.autoAuth = enabled;
+		}
 	}
 	if (!valid || !stream.atEnd() || stream.status() != QDataStream::Ok) {
 		_readOnly = true;
@@ -105,6 +117,14 @@ void Manager::start() {
 	for (auto &record : records) {
 		const auto id = record.info.id;
 		_clients.emplace(id, std::make_unique<Client>(this, std::move(record)));
+	}
+	if (_credentials.apiId) {
+		for (const auto &[id, client] : _clients) {
+			if (client->info().autoAuth) {
+				const auto operation = authenticate(id);
+				Expects(operation);
+			}
+		}
 	}
 }
 
@@ -163,6 +183,35 @@ Error Manager::storageError() const {
 
 int Manager::apiId() const {
 	return _credentials.apiId;
+}
+
+bool Manager::autoAuth(BotId bot) const {
+	const auto i = _clients.find(bot);
+	return i != _clients.end() && i->second->info().autoAuth;
+}
+
+Error Manager::setAutoAuth(BotId bot, bool enabled) {
+	if (!_started || _readOnly) {
+		return _storageError
+			? _storageError
+			: Error{ u"BOT_STORE_UNAVAILABLE"_q };
+	}
+	const auto i = _clients.find(bot);
+	if (i == _clients.end()) {
+		return { u"BOT_NOT_FOUND"_q };
+	}
+	const auto previous = i->second->info().autoAuth;
+	if (previous == enabled) {
+		return {};
+	}
+	i->second->setAutoAuth(enabled);
+	if (!save()) {
+		i->second->setAutoAuth(previous);
+		changed();
+		return _storageError;
+	}
+	changed();
+	return {};
 }
 
 ApiCredentials Manager::apiCredentials() const {
@@ -691,6 +740,9 @@ bool Manager::save() {
 		}
 	}
 	stream << _settings.serialize();
+	for (const auto &[id, client] : _clients) {
+		stream << quint8(client->info().autoAuth);
+	}
 	if (data.size() > kMaximumStoreSize || !_storage->writeBotUseData(data)) {
 		_storageError = { u"BOT_STORE_WRITE_FAILED"_q };
 		return false;

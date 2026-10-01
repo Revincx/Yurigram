@@ -26,6 +26,8 @@ public:
 	[[nodiscard]] Error setApiCredentials(ApiCredentials credentials);
 	[[nodiscard]] ApiCredentials apiCredentials() const;
 	[[nodiscard]] int apiId() const;
+	[[nodiscard]] bool autoAuth(BotId bot) const;
+	[[nodiscard]] Error setAutoAuth(BotId bot, bool enabled);
 	[[nodiscard]] const Settings::StoredValue &optionValue(
 		Settings::OptionId id) const;
 	[[nodiscard]] Error setOptionValue(

@@ -55,6 +55,7 @@ struct BotInfo {
 	MTP::Environment environment = MTP::Environment::Production;
 	QString name;
 	QString username;
+	bool autoAuth = false;
 	State state = State::Unconfigured;
 	Error error;
 };
