@@ -8842,6 +8842,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_bot_use_disable_typing_status" = "Disable sending typing status";
 "lng_bot_use_auto_switch_rich_editor" = "Auto switch to bot when opening rich editor";
 "lng_bot_use_auto_switch_rich_editor_about" = "Only applies to channels.";
+"lng_bot_use_allow_reply_and_repeat_bots" = "Allow replying and repeating bot messages";
+"lng_bot_use_allow_reply_and_repeat_bots_about" = "This requires Bot-to-Bot Communication to be enabled in BotFather.";
 "lng_bot_use_rich_editor_switched" = "Switched to {bot} for the rich message editor.";
 "lng_bot_use_choose" = "Send as Bot in this chat";
 "lng_bot_use_choose_about" = "Choose a BotUse identity:";

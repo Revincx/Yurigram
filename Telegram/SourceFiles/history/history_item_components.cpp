@@ -534,6 +534,15 @@ void HistoryMessageReply::updateData(
 		not_null<HistoryItem*> holder,
 		bool force) {
 	const auto guard = gsl::finally([&] { refreshReplyToMedia(); });
+	if (!_fields.messageId && !_fields.storyId
+		&& _fields.topicPost && _fields.topMessageId
+		&& !external() && !_fields.externalMedia
+		&& _fields.quote.empty()) {
+		_displaying = 0;
+		_unavailable = 0;
+		_pendingResolve = 0;
+		return;
+	}
 	const auto peerId = _fields.externalPeerId
 		? _fields.externalPeerId
 		: holder->history()->peer->id;

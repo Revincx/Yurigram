@@ -86,6 +86,11 @@ public:
 		BotId bot,
 		const Api::MessageToSend &message,
 		Completion done = {});
+	[[nodiscard]] OperationId repeatMessage(
+		BotId bot,
+		FullMsgId message,
+		const Api::SendAction &action,
+		Completion done = {});
 	[[nodiscard]] OperationId sendMedia(
 		BotId bot,
 		const Api::MessageToSend &message,

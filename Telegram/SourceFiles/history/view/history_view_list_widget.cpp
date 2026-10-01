@@ -4298,6 +4298,7 @@ void ListWidget::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 	request.link = link;
 	request.view = _overElement;
 	request.item = overItem;
+	request.history = _delegate->listTranslateHistory();
 	request.pointState = _overState.pointState;
 	request.quote = (_overElement
 		&& _selectedTextItem == _overElement->data())

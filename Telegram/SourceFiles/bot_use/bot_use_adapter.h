@@ -36,6 +36,7 @@ enum class Kind {
 	Typing,
 	Reaction,
 	Text,
+	Repeat,
 	Media,
 	Album,
 	Rich,

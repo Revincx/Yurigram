@@ -11,6 +11,18 @@ namespace Main { class Session; }
 namespace BotUse {
 
 [[nodiscard]] BotId Selected(not_null<History*> history);
+[[nodiscard]] bool AllowReplyAndRepeat(
+	not_null<History*> history,
+	not_null<HistoryItem*> item);
+[[nodiscard]] bool CanRepeat(
+	not_null<History*> history,
+	not_null<HistoryItem*> item,
+	bool asForward);
+[[nodiscard]] bool RepeatMessage(
+	not_null<History*> history,
+	FullMsgId message,
+	bool asForward,
+	bool replyToOriginal);
 [[nodiscard]] BotId EditBot(not_null<HistoryItem*> item);
 [[nodiscard]] BotId DeleteBot(not_null<HistoryItem*> item);
 [[nodiscard]] bool CanEditAs(not_null<HistoryItem*> item, BotId bot);

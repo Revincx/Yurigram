@@ -3474,6 +3474,9 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 					tr::now,
 					Ui::Text::FixAmpersandInAction);
 			const auto replyToItem = selected.item ? selected.item : item;
+			if (!BotUse::AllowReplyAndRepeat(_history, replyToItem)) {
+				return;
+			}
 			const auto itemId = replyToItem->fullId();
 			_menu->addAction(std::move(text), [=] {
 				_widget->replyToMessage({
@@ -3591,7 +3594,9 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 			}, &st::menuIconLink);
 		}
 		if (isUponSelected > 1) {
-			if (selectedState.count > 0 && selectedState.canForwardCount == selectedState.count) {
+			if (!BotUse::Selected(_history)
+				&& selectedState.count > 0
+				&& selectedState.canForwardCount == selectedState.count) {
 				_menu->addAction(tr::lng_context_forward_selected(tr::now), [=] {
 					_widget->forwardSelected();
 				}, &st::menuIconForward);
@@ -3644,7 +3649,9 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 					? std::make_unique<Ui::PopupMenu>(this, st::popupMenuWithIcons)
 					: nullptr;
 				auto repeatSubmenu = std::make_unique<Ui::PopupMenu>(this, st::popupMenuWithIcons);
-				if (item->allowsForward() && !IsAnchoredEphemeral(item)) {
+				if (!BotUse::Selected(_history)
+					&& item->allowsForward()
+					&& !IsAnchoredEphemeral(item)) {
 					if (moreForward) {
 						fwdSubmenu->addAction(tr::lng_context_forward_msg_old(tr::now), [=] {
 							oldForwardItem(itemId);
@@ -3661,7 +3668,10 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 						}, &st::menuIconForward);
 					}
 				}
-				if ((item->history()->peer->isMegagroup() || item->history()->peer->isChat() || item->history()->peer->isUser())) {
+				if (!HistoryView::AddBotUseRepeaterAction(_menu, _history, item)
+					&& (item->history()->peer->isMegagroup()
+						|| item->history()->peer->isChat()
+						|| item->history()->peer->isUser())) {
 					if (EnhancedSettings::HasExtraContextMenuOption(EnhancedSettings::ExtraContextMenuOption::Repeater)) {
 						if (item->allowsForward()) {
 							repeatSubmenu->addAction(tr::lng_context_repeat_msg(tr::now), [=] {
@@ -3749,7 +3759,10 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 						}
 					}
 				}
-				if (moreForward && item->allowsForward() && !IsAnchoredEphemeral(item)) {
+				if (!BotUse::Selected(_history)
+					&& moreForward
+					&& item->allowsForward()
+					&& !IsAnchoredEphemeral(item)) {
 					fwdSubmenu->addAction(tr::lng_forward_to_saved_message(tr::now), [=] {
 						if (item->id <= 0) return;
 						const auto api = &item->history()->peer->session().api();
@@ -4061,7 +4074,9 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 			}
 		}
 		if (isUponSelected > 1) {
-			if (selectedState.count > 0 && selectedState.count == selectedState.canForwardCount) {
+			if (!BotUse::Selected(_history)
+				&& selectedState.count > 0
+				&& selectedState.count == selectedState.canForwardCount) {
 				_menu->addAction(tr::lng_context_forward_selected(tr::now), [=] {
 					_widget->forwardSelected();
 				}, &st::menuIconForward);
@@ -4115,7 +4130,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 					? std::make_unique<Ui::PopupMenu>(this, st::popupMenuWithIcons)
 					: nullptr;
 				auto repeatSubmenu = std::make_unique<Ui::PopupMenu>(this, st::popupMenuWithIcons);
-				if (canForward) {
+				if (!BotUse::Selected(_history) && canForward) {
 					if (moreForward) {
 						fwdSubmenu->addAction(tr::lng_context_forward_msg_old(tr::now), [=] {
 							oldForwardAsGroup(itemId);
@@ -4132,7 +4147,10 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 						}, &st::menuIconForward);
 					}
 				}
-				if ((item->history()->peer->isMegagroup() || item->history()->peer->isChat() || item->history()->peer->isUser())) {
+				if (!HistoryView::AddBotUseRepeaterAction(_menu, _history, item)
+					&& (item->history()->peer->isMegagroup()
+						|| item->history()->peer->isChat()
+						|| item->history()->peer->isUser())) {
 					if (EnhancedSettings::HasExtraContextMenuOption(EnhancedSettings::ExtraContextMenuOption::Repeater)) {
 						if (canForward) {
 							repeatSubmenu->addAction(tr::lng_context_repeat_msg(tr::now), [=] {
@@ -4214,7 +4232,7 @@ void HistoryInner::showContextMenu(QContextMenuEvent *e, bool showFromTouch) {
 						}
 					}
 				}
-				if (moreForward && canForward) {
+				if (!BotUse::Selected(_history) && moreForward && canForward) {
 					fwdSubmenu->addAction(tr::lng_forward_to_saved_message(tr::now), [=] {
 						if (item->id <= 0) return;
 						const auto api = &item->history()->peer->session().api();

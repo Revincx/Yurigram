@@ -54,6 +54,7 @@ private:
 	void setTyping(const Op &operation);
 	void toggleReaction(const Op &operation);
 	void sendText(const Op &operation);
+	void repeatMessage(const Op &operation);
 	void sendMedia(const Op &operation);
 	void edit(const Op &operation);
 	void remove(const Op &operation, size_t offset = 0);

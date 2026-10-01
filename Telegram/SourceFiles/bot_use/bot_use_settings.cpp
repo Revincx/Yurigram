@@ -47,6 +47,11 @@ const DescriptorList &DescriptorData() {
 			"auto_switch_rich_editor",
 			&tr::lng_bot_use_auto_switch_rich_editor,
 			"bot-use/auto-switch-rich-editor"),
+		Bool(
+			OptionId::AllowReplyAndRepeatBots,
+			"allow_reply_and_repeat_bots",
+			&tr::lng_bot_use_allow_reply_and_repeat_bots,
+			"bot-use/allow-reply-and-repeat-bots"),
 	};
 	return result;
 }

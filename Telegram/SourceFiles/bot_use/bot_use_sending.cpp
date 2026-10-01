@@ -229,6 +229,94 @@ BotId Selected(not_null<History*> history) {
 		? choice.bot : 0;
 }
 
+bool AllowReplyAndRepeat(
+		not_null<History*> history,
+		not_null<HistoryItem*> item) {
+	const auto bot = Selected(history);
+	const auto author = item->from()->asUser();
+	if (!bot || !author || !author->isBot()) {
+		return true;
+	}
+	return author->id == peerFromUser(FindBot(history, bot).userId)
+		|| history->session().domain().botUse().option(
+			Settings::Option::AllowReplyAndRepeatBots);
+}
+
+bool CanRepeat(
+		not_null<History*> history,
+		not_null<HistoryItem*> item,
+		bool asForward) {
+	if (item->history() != history
+		|| !history->peer->isMegagroup()
+		|| !item->isRegular()
+		|| !IsServerMsgId(item->id)
+		|| item->isScheduled()
+		|| item->isSending()
+		|| item->hasFailed()
+		|| IsAnchoredEphemeral(item)
+		|| !AllowReplyAndRepeat(history, item)) {
+		return false;
+	}
+	if (asForward) {
+		return item->allowsForward();
+	}
+	const auto media = item->media();
+	const auto document = media ? media->document() : nullptr;
+	return (!media && !item->emptyText())
+		|| (document && document->sticker());
+}
+
+bool RepeatMessage(
+		not_null<History*> history,
+		FullMsgId message,
+		bool asForward,
+		bool replyToOriginal) {
+	const auto bot = Selected(history);
+	const auto item = history->owner().message(message);
+	if (!bot || !item || !CanRepeat(history, item, asForward)) {
+		return false;
+	}
+	auto action = Api::SendAction(history);
+	action.clearDraft = false;
+	action.replyTo.topicRootId = item->topicRootId();
+	if (!asForward && replyToOriginal) {
+		action.replyTo.messageId = message;
+	}
+	if (const auto error = ValidateSend(bot, action)) {
+		ShowSendError(history, error);
+		return false;
+	}
+	if (!asForward) {
+		auto sending = Api::MessageToSend(action);
+		const auto text = item->originalText();
+		sending.textWithTags = {
+			text.text,
+			TextUtilities::ConvertEntitiesToTextTags(text.entities),
+		};
+		return item->media()
+			? SendExisting(bot, std::move(sending),
+				nullptr, item->media()->document())
+			: SendText(bot, std::move(sending));
+	}
+	const auto info = FindBot(history, bot);
+	const auto local = FullMsgId(
+		history->peer->id,
+		history->owner().nextLocalMessageId());
+	history->addNewLocalMessage(LocalFields(action, info.userId, local.msg), item);
+	history->session().botUseChats().beginSend(local, info.userId);
+	history->session().api().sendAction(action);
+	const auto operation = history->session().domain().botUse().repeatMessage(
+		bot,
+		message,
+		action,
+		CompletionFor(history, { local }));
+	if (!operation) {
+		return false;
+	}
+	NotifySent(history);
+	return true;
+}
+
 bool CanEditAs(not_null<HistoryItem*> item, BotId bot) {
 	const auto peer = item->history()->peer;
 	if (!bot || !peer->isMegagroup()) {

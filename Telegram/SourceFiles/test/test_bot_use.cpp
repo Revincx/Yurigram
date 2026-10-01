@@ -8,6 +8,7 @@
 #include "bot_use/bot_use_manager.h"
 #include "bot_use/bot_use_sending.h"
 #include "core/application.h"
+#include "core/enhanced_settings.h"
 #include "core/deep_links/deep_links_settings.h"
 #include "core/local_url_handlers.h"
 #include "data/data_session.h"
@@ -15,8 +16,15 @@
 #include "data/data_photo_media.h"
 #include "data/data_document_media.h"
 #include "data/data_message_reactions.h"
+#include "data/data_user.h"
+#include "history/view/history_view_chat_section.h"
+#include "history/view/history_view_context_menu.h"
+#include "history/view/history_view_list_widget.h"
 #include "history/history.h"
+#include "history/history_inner_widget.h"
 #include "history/history_item.h"
+#include "history/history_item_components.h"
+#include "history/history_widget.h"
 #include "iv/editor/iv_editor_session.h"
 #include "iv/editor/iv_editor_widget.h"
 #include "iv/iv_rich_message_serializer.h"
@@ -35,10 +43,15 @@
 #include "test/test_toast_capture.h"
 #include "test/test_widgets.h"
 #include "ui/widgets/buttons.h"
+#include "ui/widgets/popup_menu.h"
 #include "window/window_session_controller.h"
 
 #include <QtWidgets/QApplication>
 #include <QtCore/QBuffer>
+#include <QtCore/QDataStream>
+#include <QtGui/QContextMenuEvent>
+
+#include "styles/style_widgets.h"
 
 #include <map>
 
@@ -97,16 +110,26 @@ MTPChat Channel(uint64 id) {
 MTPMessage Message(int id, uint64 peer, uint64 author,
 		std::optional<MTPRichMessage> rich = {},
 		QString text = u"fixture message"_q,
-		std::optional<MTPMessageMedia> media = {}) {
+		std::optional<MTPMessageMedia> media = {},
+		std::optional<MTPMessageReplyHeader> reply = {},
+		std::optional<MTPMessageFwdHeader> forwarded = {},
+		QVector<MTPMessageEntity> entities = {},
+		uint64 viaBot = 0) {
 	auto buffer = mtpBuffer{
-		mtpPrime(mtpc_message), mtpPrime(256 | (media ? 512 : 0)),
+		mtpPrime(mtpc_message), mtpPrime(256 | (media ? 512 : 0)
+			| (reply ? 8 : 0) | (forwarded ? 4 : 0)
+			| (entities.empty() ? 0 : 128) | (viaBot ? 2048 : 0)),
 		mtpPrime(rich ? 8192 : 0) };
 	MTP_int(id).write(buffer);
 	MTPPeer(MTP_peerUser(MTP_long(author))).write(buffer);
 	MTPPeer(MTP_peerChannel(MTP_long(peer))).write(buffer);
+	if (forwarded) { forwarded->write(buffer); }
+	if (viaBot) { MTP_long(viaBot).write(buffer); }
+	if (reply) { reply->write(buffer); }
 	MTP_int(1).write(buffer);
 	MTP_string(text).write(buffer);
 	if (media) { media->write(buffer); }
+	if (!entities.empty()) { MTP_vector<MTPMessageEntity>(entities).write(buffer); }
 	if (rich) { rich->write(buffer); }
 	return Decode<MTPMessage>(buffer);
 }
@@ -123,6 +146,58 @@ MTPPhoto RichPhoto(const QByteArray &reference) {
 		MTP_int(1), MTP_vector<MTPPhotoSize>(1, MTP_photoSize(
 			MTP_string("x"), MTP_int(32), MTP_int(32), MTP_int(512))),
 		MTP_vector<MTPVideoSize>(), MTP_int(2));
+}
+
+MTPMessageReplyHeader MessageReply(int message, int top = 0) {
+	using Flag = MTPDmessageReplyHeader::Flag;
+	return MTP_messageReplyHeader(
+		MTP_flags(Flag::f_reply_to_msg_id
+			| (top ? Flag::f_reply_to_top_id | Flag::f_forum_topic : Flag())),
+		MTP_int(message), MTPPeer(), MTPMessageFwdHeader(), MTPMessageMedia(),
+		MTP_int(top), MTPstring(), MTPVector<MTPMessageEntity>(), MTPint(),
+		MTPint(), MTPbytes());
+}
+
+MTPMessageFwdHeader ForwardHeader(uint64 author) {
+	return MTP_messageFwdHeader(
+		MTP_flags(MTPDmessageFwdHeader::Flag::f_from_id),
+		MTP_peerUser(MTP_long(author)), MTPstring(), MTP_int(1),
+		MTPint(), MTPstring(), MTPPeer(), MTPint(), MTPPeer(),
+		MTPstring(), MTPint(), MTPstring());
+}
+
+QAction *MenuAction(not_null<Ui::PopupMenu*> menu, const QString &text) {
+	for (const auto &action : menu->actions()) {
+		if (action->text() == text) {
+			return action;
+		}
+		if (action->menu()) {
+			if (const auto found = MenuAction(
+					menu->ensureSubmenu(action, st::popupMenuWithIcons), text)) {
+				return found;
+			}
+		}
+	}
+	return nullptr;
+}
+
+void CheckMessageMenu(
+		not_null<Ui::PopupMenu*> menu,
+		bool forward,
+		bool reply,
+		bool repeat) {
+	Check(bool(MenuAction(menu, tr::lng_context_forward_msg(tr::now))) == forward,
+		u"Message menu forward visibility"_q);
+	Check(bool(MenuAction(menu, tr::lng_context_reply_msg(tr::now))) == reply,
+		u"Message menu reply visibility"_q);
+	Check(bool(MenuAction(menu, tr::lng_context_repeater(tr::now))) == repeat,
+		u"Message menu repeater visibility"_q);
+	if (!forward) {
+		Check(!MenuAction(menu, tr::lng_context_forward_msg_multi(tr::now))
+			&& !MenuAction(menu, tr::lng_forward_to_saved_message(tr::now))
+			&& !MenuAction(menu, tr::lng_context_forward_selected(tr::now)),
+			u"Bot menu hides enhanced and selected forwards"_q);
+	}
 }
 
 Iv::Editor::Widget *FindRichEditor() {
@@ -176,6 +251,18 @@ struct Fixture {
 	int parts = 0;
 	int uploads = 0;
 	int typings = 0;
+	int repeats = 0;
+	uint64 sendUser = 0;
+	QString sendText;
+	QVector<MTPMessageEntity> sendEntities;
+	std::optional<MTPInputReplyTo> sendReply;
+	int repeatTop = 0;
+	FullMsgId repeatSource;
+	bool repeatForwarded = false;
+	base::unique_qptr<Ui::PopupMenu> repeatMenu;
+	std::unique_ptr<HistoryView::ChatWidget> modern;
+	std::unique_ptr<HistoryWidget> legacy;
+	std::optional<QList<int>> previousMenuOptions;
 	int reactionsSent = 0;
 	uint64 reactionUser = 0;
 	uint64 reactionPeer = 0;
@@ -282,9 +369,15 @@ void Fixture::respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuff
 		const auto flags = Read<MTPint>(from, end).v;
 		textNoForwards.push_back(flags & (1 << 14));
 		const auto peer = Read<MTPInputPeer>(from, end);
-		if (flags & 1) { Read<MTPInputReplyTo>(from, end); }
+		sendReply = (flags & 1)
+			? std::optional(Read<MTPInputReplyTo>(from, end)) : std::nullopt;
 		const auto text = Read<MTPstring>(from, end);
 		const auto random = Read<MTPlong>(from, end).v;
+		sendUser = users.at(instance.data());
+		sendText = qs(text);
+		sendEntities = (flags & (1 << 3))
+			? Read<MTPVector<MTPMessageEntity>>(from, end).v
+			: QVector<MTPMessageEntity>();
 		const auto channel = peer.c_inputPeerChannel().vchannel_id().v;
 		const auto [i, added] = randoms.emplace(random, nextMessage++);
 		if (retryNext) {
@@ -305,7 +398,12 @@ void Fixture::respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuff
 			rich = MTP_richMessage(MTP_flags(0), value.c_inputRichMessage().vblocks(),
 				MTP_vector<MTPPhoto>(), MTP_vector<MTPDocument>());
 		}
-		const auto message = Message(i->second, channel, users.at(instance.data()), rich);
+		const auto message = Message(i->second, channel, sendUser, rich,
+			sendText, {}, sendReply
+				? std::optional(MessageReply(
+					sendReply->c_inputReplyToMessage().vreply_to_msg_id().v,
+					sendReply->c_inputReplyToMessage().vtop_msg_id().value_or_empty()))
+				: std::nullopt, {}, sendEntities);
 		messages.emplace(i->second, message);
 		auto updates = QVector<MTPUpdate>();
 		updates.push_back(MTP_updateMessageID(MTP_int(i->second), MTP_long(random)));
@@ -320,6 +418,57 @@ void Fixture::respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuff
 			delayedUpdates = response;
 		} else {
 			Reply<MTPmessages_SendMessage>(instance, id, response);
+		}
+	} break;
+	case mtpc_messages_forwardMessages: {
+		auto from = body.constData() + 1;
+		const auto end = body.constData() + body.size();
+		const auto flags = Read<MTPint>(from, end).v;
+		const auto sourcePeer = Read<MTPInputPeer>(from, end);
+		const auto ids = Read<MTPVector<MTPint>>(from, end);
+		const auto randomIds = Read<MTPVector<MTPlong>>(from, end);
+		const auto targetPeer = Read<MTPInputPeer>(from, end);
+		repeatTop = (flags & (1 << 9)) ? Read<MTPint>(from, end).v : 0;
+		++repeats;
+		sendUser = users.at(instance.data());
+		repeatSource = FullMsgId(
+			peerFromChannel(ChannelId(sourcePeer.c_inputPeerChannel().vchannel_id().v)),
+			MsgId(ids.v.front().v));
+		Check(targetPeer.c_inputPeerChannel().vchannel_id().v
+			== peerToChannel(repeatSource.peer).bare
+			&& !(flags & ((1 << 11) | (1 << 13))) && from == end,
+			u"Bot repeats in the same chat without user sendAs"_q);
+		if (base::take(rejectNext)) {
+			const auto delivered = DeliverControlledRpcError(
+				instance.data(), id, 400, u"CHAT_WRITE_FORBIDDEN"_q);
+			Check(delivered.diagnosis.isEmpty(), u"Repeat failure is delivered"_q);
+			break;
+		}
+		const auto source = Core::App().domain().active().session()
+			.data().message(repeatSource);
+		Expects(source != nullptr);
+		const auto random = randomIds.v.front().v;
+		const auto [i, added] = randoms.emplace(random, nextMessage++);
+		const auto text = source->originalText();
+		const auto message = Message(
+			i->second, peerToChannel(repeatSource.peer).bare, sendUser, {},
+			text.text, {}, repeatTop
+				? std::optional(MessageReply(repeatTop, repeatTop)) : std::nullopt,
+			ForwardHeader(peerToUser(source->from()->id).bare),
+			BotUse::EntitiesToMTP(text.entities, UserId(sendUser)).v);
+		messages.insert_or_assign(i->second, message);
+		auto response = MTP_updates(
+			MTP_vector<MTPUpdate>(QVector<MTPUpdate>{
+				MTP_updateMessageID(MTP_int(i->second), MTP_long(random)),
+				MTP_updateNewChannelMessage(message, MTP_int(1), MTP_int(1)),
+			}), MTP_vector<MTPUser>(), MTP_vector<MTPChat>(), MTP_int(1), MTP_int(1));
+		if (delayedBotResult) {
+			delayedBotResult = false;
+			delayedInstance = instance;
+			delayedRequest = id;
+			delayedUpdates = response;
+		} else {
+			Reply<MTPmessages_ForwardMessages>(instance, id, response);
 		}
 	} break;
 	case mtpc_messages_editMessage: {
@@ -484,7 +633,10 @@ void Fixture::respond(QPointer<MTP::Instance> instance, mtpRequestId id, mtpBuff
 		const auto end = body.constData() + body.size();
 		const auto flags = Read<MTPint>(from, end).v;
 		mediaNoForwards.push_back(flags & (1 << 14));
-		const auto request = Decode<MTPmessages_SendMedia>(body);
+		Read<MTPInputPeer>(from, end);
+		sendUser = users.at(instance.data());
+		sendReply = (flags & 1)
+			? std::optional(Read<MTPInputReplyTo>(from, end)) : std::nullopt;
 		Reply<MTPmessages_SendMedia>(instance, id, MTP_updateShortSentMessage(
 			MTP_flags(0), MTP_int(nextMessage++), MTP_int(1), MTP_int(1), MTP_int(1),
 			MTPMessageMedia(), MTP_vector<MTPMessageEntity>(), MTPint()));
@@ -520,6 +672,7 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		for (const auto id : {
 				BotUse::Settings::Option::DisableTypingStatus.id,
 				BotUse::Settings::Option::AutoSwitchRichEditor.id,
+				BotUse::Settings::Option::AllowReplyAndRepeatBots.id,
 		}) {
 			const auto controlId = BotUse::Settings::ControlId(id);
 			const auto deepLink = u"tg://settings/"_q + controlId;
@@ -542,6 +695,13 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		account->createSession(User(999000, false));
 	} });
 	runner->onFinish([=] {
+		state->repeatMenu = nullptr;
+		state->modern.reset();
+		state->legacy.reset();
+		if (state->previousMenuOptions) {
+			EnhancedSettings::Set(EnhancedSettings::Option::ExtraContextMenuOptions,
+				*state->previousMenuOptions);
+		}
 		Iv::Editor::CloseAllWindows();
 		Responder = nullptr;
 		state->manager->reset();
@@ -557,6 +717,262 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		state->operation = state->manager->authenticate(state->b, state->completion());
 	}, [=] { Check(state->result->state == BotUse::OperationState::Completed && state->users.size() == 2,
 		u"Bot B has an independent instance"_q); });
+	runner->add({ .name = u"bot menu and repeat fixtures"_q, .run = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto history = state->text(101).action.history;
+		const auto controller = session->tryResolveWindow(history->peer);
+		Expects(controller != nullptr);
+		session->data().processUser(User(11));
+		session->data().processUser(User(22));
+		session->data().processUser(User(77, false));
+		const auto key = BotUse::Settings::Option::AllowReplyAndRepeatBots;
+		Check(!state->manager->option(key), u"Bot reply option defaults off"_q);
+		auto old = QByteArray();
+		auto stream = QDataStream(&old, QIODevice::WriteOnly);
+		stream.setVersion(QDataStream::Qt_5_1);
+		stream << quint32(1) << quint32(0);
+		auto registry = BotUse::Settings::Registry();
+		Check(registry.deserialize(old) && !registry.get(key),
+			u"Older settings without the new key keep the default"_q);
+		const auto sticker = MTP_document(
+			MTP_flags(0), MTP_long(9300), MTP_long(9301),
+			MTP_bytes("fixture-sticker"), MTP_int(1), MTP_string("image/webp"),
+			MTP_long(512), MTP_vector<MTPPhotoSize>(), MTP_vector<MTPVideoSize>(),
+			MTP_int(2), MTP_vector<MTPDocumentAttribute>(1,
+				MTP_documentAttributeSticker(MTP_flags(0), MTP_string("sticker"),
+					MTP_inputStickerSetEmpty(), MTPMaskCoords())));
+		const auto entries = QVector<MTPMessage>{
+			Message(9700, 101, 77, {}, u"bold repeat"_q, {}, MessageReply(43, 43),
+				{}, { MTP_messageEntityBold(MTP_int(0), MTP_int(4)) }),
+			Message(9701, 101, 77),
+			Message(9702, 101, 11),
+			Message(9703, 101, 22),
+			Message(9704, 101, 77, {}, u"forwarded by human"_q, {}, {},
+				ForwardHeader(22)),
+			Message(9705, 101, 77, {}, u"inline by human"_q, {}, {}, {}, {}, 22),
+			Message(9706, 101, 77, {}, QString(),
+				MTP_messageMediaDocument(MTP_flags(MTPDmessageMediaDocument::Flag::f_document),
+					sticker, MTP_vector<MTPDocument>(), MTPPhoto(), MTPint(), MTPint())),
+		};
+		for (const auto &entry : entries) {
+			const auto item = session->data().addNewMessage(
+				entry, MessageFlags(), NewMessageType::Existing);
+			Check(item != nullptr, u"Menu source message is available"_q);
+		}
+		state->modern = std::make_unique<HistoryView::ChatWidget>(
+			nullptr, controller, HistoryView::ChatViewId{ history, MsgId() });
+		state->legacy = std::make_unique<HistoryWidget>(nullptr, controller);
+		state->legacy->showHistory(history->peer->id, ShowAtTheEndMsgId);
+		const auto inner = FindFirst<HistoryInner>(state->legacy.get());
+		Expects(inner != nullptr);
+		inner->messagesReceived(history->peer, entries);
+		state->previousMenuOptions = EnhancedSettings::Get(
+			EnhancedSettings::Option::ExtraContextMenuOptions);
+		session->botUseChats().choose(history->peer->id, state->a);
+	} });
+	for (const auto more : { false, true }) {
+		for (const auto repeat : { false, true }) {
+			runner->add({ .name = u"both bot menus more=%1 repeat=%2"_q.arg(more).arg(repeat),
+				.run = [=] {
+				const auto session = Core::App().domain().active().maybeSession();
+				const auto history = state->text(101).action.history;
+				const auto controller = session->tryResolveWindow(history->peer);
+				const auto list = FindFirst<HistoryView::ListWidget>(state->modern.get());
+				const auto inner = FindFirst<HistoryInner>(state->legacy.get());
+				Expects(controller && list && inner);
+				auto options = QList<int>();
+				if (more) {
+					options.push_back(int(EnhancedSettings::ExtraContextMenuOption::MoreForward));
+				}
+				if (repeat) {
+					options.push_back(int(EnhancedSettings::ExtraContextMenuOption::Repeater));
+				}
+				EnhancedSettings::Set(EnhancedSettings::Option::ExtraContextMenuOptions, options);
+				for (const auto allow : { false, true }) {
+					const auto error = state->manager->setOption(
+						BotUse::Settings::Option::AllowReplyAndRepeatBots, allow);
+					Check(!error, u"Bot reply option can change immediately"_q);
+					for (const auto id : { 9701, 9702, 9703, 9704, 9705 }) {
+						const auto item = session->data().message(history->peer->id, MsgId(id));
+						Expects(item != nullptr);
+						const auto expected = allow || id != 9703;
+						auto request = HistoryView::ContextMenuRequest(controller);
+						request.history = history;
+						request.item = item;
+						auto menu = HistoryView::FillContextMenu(list, request);
+						CheckMessageMenu(menu, false, expected, repeat && expected);
+						const auto view = inner->viewByItem(item);
+						Check(view != nullptr, u"Legacy menu has the exact source view"_q);
+						if (view) {
+							HistoryView::Element::Hovered(view);
+							QContextMenuEvent event(QContextMenuEvent::Keyboard,
+								QPoint(), inner->mapToGlobal(QPoint()));
+							QApplication::sendEvent(inner, &event);
+							const auto legacyMenu = FindFirst<Ui::PopupMenu>(inner);
+							Check(legacyMenu != nullptr, u"Legacy message context menu opens"_q);
+							if (legacyMenu) {
+								CheckMessageMenu(legacyMenu, false, expected, repeat && expected);
+								legacyMenu->hideMenu(true);
+							}
+							HistoryView::Element::Hovered(nullptr);
+						}
+					}
+				}
+				auto request = HistoryView::ContextMenuRequest(controller);
+				request.history = history;
+				request.overSelection = true;
+				request.selectedItems.emplace_back(FullMsgId(history->peer->id, MsgId(9701)));
+				request.selectedItems.front().canForward = true;
+				auto selected = HistoryView::FillContextMenu(list, request);
+				Check(!MenuAction(selected, tr::lng_context_forward_selected(tr::now))
+					&& !MenuAction(selected, tr::lng_forward_to_saved_message(tr::now)),
+					u"Bot selection menu hides forwarding without a hovered message"_q);
+				request.selectedItems.clear();
+				request.item = session->data().message(history->peer->id, MsgId(9701));
+				request.quote.item = session->data().message(history->peer->id, MsgId(9703));
+				const auto error = state->manager->setOption(
+					BotUse::Settings::Option::AllowReplyAndRepeatBots, false);
+				Check(!error, u"Disable replies to other bots"_q);
+				auto quote = HistoryView::FillContextMenu(list, request);
+				Check(!MenuAction(quote, tr::lng_context_reply_msg(tr::now)),
+					u"Reply filter uses the quoted author's identity"_q);
+				session->botUseChats().clear(history->peer->id);
+				request.quote.item = nullptr;
+				auto human = HistoryView::FillContextMenu(list, request);
+				CheckMessageMenu(human, true, true, repeat);
+				session->botUseChats().choose(history->peer->id, state->a);
+			} });
+		}
+	}
+	for (const auto asForward : { true, false }) {
+		runner->add({ .name = u"repeat text with source=%1"_q.arg(asForward), .run = [=] {
+			const auto history = state->text(101).action.history;
+			state->expectedReal = FullMsgId(history->peer->id, MsgId(state->nextMessage));
+			Check(BotUse::RepeatMessage(history,
+				FullMsgId(history->peer->id, MsgId(9700)), asForward, true),
+				u"Text repeat is submitted through bot sending"_q);
+		}, .until = [=] { return !state->manager->busy(); }, .then = [=] {
+			const auto session = Core::App().domain().active().maybeSession();
+			const auto item = session->data().message(state->expectedReal);
+		Check(item && item->from()->id == peerFromUser(UserId(11))
+				&& item->originalText().text == u"bold repeat"_q
+				&& !item->out()
+				&& !item->originalText().entities.empty()
+				&& item->topicRootId() == MsgId(43),
+				u"Repeated text retains bot identity, entities and forum topic"_q);
+			Check(item && bool(item->Get<HistoryMessageForwarded>()) == asForward,
+				u"Repeat retains or removes source information"_q);
+			Check(asForward ? state->repeatTop == 43
+				: (state->sendReply && state->sendReply->c_inputReplyToMessage()
+					.vreply_to_msg_id().v == 9700),
+				u"Repeat uses topic forwarding or the requested source reply"_q);
+		} });
+	}
+	runner->add({ .name = u"forward repeat user update wins race"_q, .run = [=] {
+		const auto history = state->text(101).action.history;
+		const auto source = history->owner().message(
+			FullMsgId(history->peer->id, MsgId(9700)));
+		Expects(source != nullptr);
+		state->expectedReal = FullMsgId(
+			history->peer->id, MsgId(state->nextMessage));
+		state->delayedBotResult = true;
+		Check(BotUse::RepeatMessage(history, source->fullId(), true, false),
+			u"Forward repeat starts with bot identity"_q);
+		Expects(!history->blocks.empty() && !history->blocks.back()->messages.empty());
+		const auto local = history->blocks.back()->messages.back()->data();
+		state->local = local->fullId();
+		Check(local->isSending()
+			&& !local->out()
+			&& local->from()->id == peerFromUser(UserId(11))
+			&& local->Get<HistoryMessageForwarded>()
+			&& !local->replyToId()
+			&& local->topicRootId() == MsgId(43)
+			&& local->date() > source->date(),
+			u"Forward local item has the bot author and only topic placement"_q);
+	}, .until = [=] { return state->delayedUpdates.has_value(); }, .then = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto server = state->messages.at(state->expectedReal.msg.bare);
+		Check(!session->data().addNewMessage(
+				server, MessageFlags(), NewMessageType::Unread)
+			&& session->data().message(state->local)
+			&& !session->data().message(state->expectedReal),
+			u"User update waits while forward Bot local item is sending"_q);
+		Reply<MTPmessages_ForwardMessages>(state->delayedInstance,
+			state->delayedRequest, *state->delayedUpdates);
+		state->delayedUpdates.reset();
+	} });
+	runner->add({ .name = u"forward repeat race reconciled"_q,
+		.until = [=] {
+			const auto session = Core::App().domain().active().maybeSession();
+			return session && session->data().message(state->expectedReal);
+		}, .then = [=] {
+			const auto session = Core::App().domain().active().maybeSession();
+			const auto item = session->data().message(state->expectedReal);
+			Check(item && !item->out()
+				&& item->from()->id == peerFromUser(UserId(11))
+				&& !item->isSending()
+				&& !item->isLocal()
+				&& !session->data().message(state->local),
+				u"Bot forward local item is promoted after user update"_q);
+		} });
+	runner->add({ .name = u"repeat callback revalidates bot identity"_q, .run = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto history = state->text(101).action.history;
+		const auto item = session->data().message(history->peer->id, MsgId(9701));
+		Expects(item != nullptr);
+		EnhancedSettings::Set(EnhancedSettings::Option::ExtraContextMenuOptions,
+			QList<int>{ int(EnhancedSettings::ExtraContextMenuOption::Repeater) });
+		state->repeatMenu = base::make_unique_q<Ui::PopupMenu>(state->modern.get());
+		Check(HistoryView::AddBotUseRepeaterAction(state->repeatMenu, history, item),
+			u"Bot repeat menu is handled"_q);
+		const auto action = MenuAction(state->repeatMenu, tr::lng_context_repeat_msg_no_fwd(tr::now));
+		Expects(action != nullptr);
+		session->botUseChats().choose(history->peer->id, state->b);
+		action->trigger();
+	}, .until = [=] { return !state->manager->busy(); }, .then = [=] {
+		Check(state->sendUser == 22, u"Open menu repeat uses the newly selected bot"_q);
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto history = state->text(101).action.history;
+		const auto action = MenuAction(state->repeatMenu, tr::lng_context_repeat_msg_no_fwd(tr::now));
+		const auto before = state->nextMessage;
+		session->botUseChats().clear(history->peer->id);
+		action->trigger();
+		Check(state->nextMessage == before && !state->manager->busy(),
+			u"Disabling bot mode cancels the open menu callback"_q);
+		session->botUseChats().choose(history->peer->id, state->a);
+		const auto source = session->data().message(history->peer->id, MsgId(9701));
+		source->destroy();
+		action->trigger();
+		Check(state->nextMessage == before && !state->manager->busy(),
+			u"Deleting the source safely cancels an open menu callback"_q);
+		state->repeatMenu = nullptr;
+	} });
+	runner->add({ .name = u"repeat sticker as bot"_q, .run = [=] {
+		const auto history = state->text(101).action.history;
+		Check(BotUse::RepeatMessage(history,
+			FullMsgId(history->peer->id, MsgId(9706)), false, true),
+			u"Sticker copy repeat uses the bot sticker sender"_q);
+	}, .until = [=] { return !state->manager->busy(); }, .then = [=] {
+		Check(state->sendUser == 11 && state->sendReply
+			&& state->sendReply->c_inputReplyToMessage().vreply_to_msg_id().v == 9706,
+			u"Sticker repeat carries bot identity and original reply"_q);
+	} });
+	runner->add({ .name = u"repeat forward failure"_q, .run = [=] {
+		const auto history = state->text(101).action.history;
+		state->rejectNext = true;
+		Check(BotUse::RepeatMessage(history,
+			FullMsgId(history->peer->id, MsgId(9700)), true, false),
+			u"Rejected repeat is initially submitted as bot"_q);
+		Expects(!history->blocks.empty() && !history->blocks.back()->messages.empty());
+		state->local = history->blocks.back()->messages.back()->data()->fullId();
+	}, .until = [=] { return !state->manager->busy(); }, .then = [=] {
+		const auto session = Core::App().domain().active().maybeSession();
+		const auto item = session->data().message(state->local);
+		Check(item && item->hasFailed() && item->from()->id == peerFromUser(UserId(11)),
+			u"Failed repeat retains a failed bot local message"_q);
+		state->modern.reset();
+		state->legacy.reset();
+	} });
 	add(u"supergroup bot reaction add"_q, [=] {
 		const auto peer = state->text(101).action.history->peer->id;
 		state->operation = state->manager->toggleReaction(

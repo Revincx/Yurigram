@@ -201,6 +201,16 @@ void AddBotStatus(
 				+ BotUse::Settings::ControlId(id),
 		};
 	});
+	const auto replyId = BotUse::Settings::Option::AllowReplyAndRepeatBots.id;
+	builder.add(nullptr, [=] {
+		return Builder::SearchEntry{
+			.id = BotUse::Settings::ControlId(replyId),
+			.title = BotUse::Settings::OptionTitle(replyId),
+			.keywords = { u"bot"_q, u"reply"_q, u"repeat"_q },
+			.deeplink = u"tg://settings/"_q
+				+ BotUse::Settings::ControlId(replyId),
+		};
+	});
 	const auto richId = BotUse::Settings::Option::AutoSwitchRichEditor.id;
 	builder.add(nullptr, [=] {
 		return Builder::SearchEntry{
@@ -267,6 +277,10 @@ void BotUseSettings::setupContent() {
 		behavior,
 		BotUse::Settings::Option::AutoSwitchRichEditor,
 		tr::lng_bot_use_auto_switch_rich_editor_about());
+	addToggleOption(
+		behavior,
+		BotUse::Settings::Option::AllowReplyAndRepeatBots,
+		tr::lng_bot_use_allow_reply_and_repeat_bots_about());
 
 	refreshBots();
 	controller()->session().domain().botUse().changes(

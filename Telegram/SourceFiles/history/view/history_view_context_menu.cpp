@@ -574,12 +574,30 @@ MessageIdsList ExtractIdsList(const SelectedItems &items) {
 	) | ranges::to_vector;
 }
 
+History *MenuHistory(const ContextMenuRequest &request) {
+	if (request.history) {
+		return request.history;
+	} else if (request.item) {
+		return request.item->history();
+	} else if (!request.selectedItems.empty()) {
+		const auto item = request.navigation->session().data().message(
+			request.selectedItems.front().msgId);
+		return item ? item->history().get() : nullptr;
+	}
+	return nullptr;
+}
+
 bool AddForwardSelectedAction(
 		not_null<Ui::PopupMenu*> menu,
 		const ContextMenuRequest &request,
 		not_null<ListWidget*> list) {
 	if (!request.overSelection || request.selectedItems.empty()) {
 		return false;
+	}
+	if (const auto history = MenuHistory(request)) {
+		if (BotUse::Selected(history)) {
+			return false;
+		}
 	}
 	if (!ranges::all_of(request.selectedItems, &SelectedItem::canForward)) {
 		return false;
@@ -639,6 +657,7 @@ bool AddForwardMessageAction(
 	if (!request.selectedItems.empty()) {
 		return false;
 	} else if (!item
+		|| BotUse::Selected(MenuHistory(request))
 		|| !item->allowsForward()
 		|| IsAnchoredEphemeral(item)) {
 		return false;
@@ -757,9 +776,20 @@ void AddRepeaterAction(
 	if (!request.selectedItems.empty() || !item) {
 		return;
 	}
+	const auto history = MenuHistory(request);
+	const auto context = list->elementContext();
+	if (BotUse::Selected(history)) {
+		if (context == Context::History
+			|| context == Context::Monoforum
+			|| (context == Context::Replies && item->topic())) {
+			if (!AddBotUseRepeaterAction(menu, history, item)) {
+				return;
+			}
+		}
+		return;
+	}
 	const auto itemId = item->fullId();
 	const auto _history = item->history();
-	const auto context = list->elementContext();
 	auto repeatSubmenu = std::make_unique<Ui::PopupMenu>(list, st::popupMenuWithIcons);
 	if ((item->history()->peer->isMegagroup() || item->history()->peer->isChat() || item->history()->peer->isUser())) {
 		if (EnhancedSettings::HasExtraContextMenuOption(EnhancedSettings::ExtraContextMenuOption::Repeater)
@@ -1108,6 +1138,10 @@ bool AddReplyToMessageAction(
 		|| (context != Context::History
 			&& context != Context::Replies
 			&& context != Context::Monoforum)) {
+		return false;
+	}
+	if (!BotUse::AllowReplyAndRepeat(
+			MenuHistory(request), item)) {
 		return false;
 	}
 	const auto canSendReply = topic
@@ -2080,6 +2114,54 @@ ContextMenuRequest::ContextMenuRequest(
 : navigation(navigation) {
 }
 
+bool AddBotUseRepeaterAction(
+		not_null<Ui::PopupMenu*> menu,
+		not_null<History*> history,
+		HistoryItem *item) {
+	if (!BotUse::Selected(history)) {
+		return false;
+	}
+	if (!item || !EnhancedSettings::HasExtraContextMenuOption(
+			EnhancedSettings::ExtraContextMenuOption::Repeater)) {
+		return true;
+	}
+	auto submenu = std::make_unique<Ui::PopupMenu>(
+		menu->parentWidget(),
+		st::popupMenuWithIcons);
+	const auto weak = base::make_weak(&history->session());
+	const auto peer = history->peer->id;
+	const auto itemId = item->fullId();
+	for (const auto asForward : { true, false }) {
+		if (!BotUse::CanRepeat(history, item, asForward)) {
+			continue;
+		}
+		submenu->addAction((asForward
+			? tr::lng_context_repeat_msg
+			: tr::lng_context_repeat_msg_no_fwd)(tr::now), [=] {
+			const auto session = weak.get();
+			if (!session) {
+				return;
+			}
+			const auto history = session->data().historyLoaded(peer);
+			if (!history || !BotUse::RepeatMessage(
+					history,
+					itemId,
+					asForward,
+					EnhancedSettings::Get(
+						EnhancedSettings::Option::RepeaterReplyToOriginal))) {
+				return;
+			}
+		}, &st::menuIconDiscussion);
+	}
+	if (!submenu->empty()) {
+		menu->addAction(
+			tr::lng_context_repeater(tr::now),
+			std::move(submenu),
+			&st::menuIconDiscussion);
+	}
+	return true;
+}
+
 void FillContextMenuItems(
 		not_null<Ui::PopupMenu*> result,
 		not_null<ListWidget*> list,
@@ -2115,6 +2197,7 @@ void FillContextMenuItems(
 			? Data::CanSendAnything(topic)
 			: Data::CanSendAnything(peer);
 		if (canSendText
+			&& BotUse::AllowReplyAndRepeat(MenuHistory(request), item)
 			&& (item->isRegular() || CanReplyToEphemeral(item))
 			&& document
 			&& document->isVoiceMessage()) {

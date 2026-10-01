@@ -26,6 +26,7 @@ namespace Settings {
 enum class OptionId {
 	DisableTypingStatus,
 	AutoSwitchRichEditor,
+	AllowReplyAndRepeatBots,
 	Count,
 };
 
@@ -41,6 +42,8 @@ inline constexpr auto DisableTypingStatus
 	= Key<bool>{ OptionId::DisableTypingStatus };
 inline constexpr auto AutoSwitchRichEditor
 	= Key<bool>{ OptionId::AutoSwitchRichEditor };
+inline constexpr auto AllowReplyAndRepeatBots
+	= Key<bool>{ OptionId::AllowReplyAndRepeatBots };
 } // namespace Option
 
 using StoredValue = std::variant<bool, int, QString>;

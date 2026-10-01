@@ -11,6 +11,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/unique_qptr.h"
 #include "history/view/history_view_element.h"
 
+class History;
+
 namespace Data {
 class Session;
 struct ReactionId;
@@ -49,6 +51,7 @@ struct ContextMenuRequest {
 	ClickHandlerPtr link;
 	Element *view = nullptr;
 	HistoryItem *item = nullptr;
+	History *history = nullptr;
 	SelectedItems selectedItems;
 	TextForMimeData selectedText;
 	SelectedQuote quote;
@@ -60,6 +63,11 @@ struct ContextMenuRequest {
 base::unique_qptr<Ui::PopupMenu> FillContextMenu(
 	not_null<ListWidget*> list,
 	const ContextMenuRequest &request);
+
+[[nodiscard]] bool AddBotUseRepeaterAction(
+	not_null<Ui::PopupMenu*> menu,
+	not_null<History*> history,
+	HistoryItem *item);
 
 void InsertPollHiddenResultsLabel(not_null<Ui::PopupMenu*> menu);
 void InsertPollVoteRestrictionsLabel(

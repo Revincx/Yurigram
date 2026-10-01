@@ -542,6 +542,18 @@ OperationId Manager::sendText(
 	return submit(std::move(op));
 }
 
+OperationId Manager::repeatMessage(
+		BotId bot,
+		FullMsgId message,
+		const Api::SendAction &action,
+		Completion done) {
+	auto op = makeOperation(bot, std::move(done));
+	op->kind = Kind::Repeat;
+	op->validation = SnapshotAction(action, op->action);
+	op->targets = { message };
+	return submit(std::move(op));
+}
+
 OperationId Manager::sendMedia(
 		BotId bot,
 		const Api::MessageToSend &message,

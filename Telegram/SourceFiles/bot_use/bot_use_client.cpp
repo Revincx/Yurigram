@@ -3,6 +3,7 @@
 #include "base/random.h"
 #include "bot_use/bot_use_manager.h"
 #include "bot_use/bot_use_uploader.h"
+#include "data/data_forum_topic.h"
 #include "mtproto/mtproto_config.h"
 #include "ui/text/text_utilities.h"
 
@@ -282,6 +283,7 @@ void Client::begin(const Op &operation) {
 		return;
 	}
 	if (operation->kind == Kind::Delete
+		|| operation->kind == Kind::Repeat
 		|| operation->kind == Kind::Reaction
 		|| Editing(operation->kind)) {
 		if (operation->targets.empty()) {
@@ -604,7 +606,9 @@ void Client::send(const Op &operation) {
 			return;
 		}
 	}
-	if (operation->kind == Kind::Delete) {
+	if (operation->kind == Kind::Repeat) {
+		repeatMessage(operation);
+	} else if (operation->kind == Kind::Delete) {
 		remove(operation);
 	} else if (Editing(operation->kind)) {
 		edit(operation);
@@ -675,6 +679,36 @@ void Client::sendText(const Op &operation) {
 		MTPint(), MTPint(), MTPInputPeer(), MTPInputQuickReplyShortcut(), MTPlong(), MTPlong(),
 		MTPSuggestedPost(), operation->rich.value_or(MTPInputRichMessage())),
 		Fn<void(const MTPUpdates &)>([=](const MTPUpdates &result) { received(operation, result); }));
+}
+
+void Client::repeatMessage(const Op &operation) {
+	const auto &action = operation->action;
+	const auto top = action.reply.topicRootId;
+	const auto topMsgId = top == Data::ForumTopic::kGeneralId ? MsgId() : top;
+	using Flag = MTPmessages_ForwardMessages::Flag;
+	const auto flags = (action.options.silent ? Flag::f_silent : Flag())
+		| (action.options.noForwards ? Flag::f_noforwards : Flag())
+		| (topMsgId ? Flag::f_top_msg_id : Flag());
+	operation->submitted = true;
+	rpc(operation, MTPmessages_ForwardMessages(
+		MTP_flags(flags),
+		peer(action.peer),
+		MTP_vector<MTPint>(1, MTP_int(operation->targets.front().msg.bare)),
+		MTP_vector<MTPlong>(1, MTP_long(operation->randomIds.front())),
+		peer(action.peer),
+		MTP_int(topMsgId.bare),
+		MTPInputReplyTo(),
+		MTPint(),
+		MTPint(),
+		MTPInputPeer(),
+		MTPInputQuickReplyShortcut(),
+		MTPlong(),
+		MTPint(),
+		MTPlong(),
+		MTPSuggestedPost()),
+		Fn<void(const MTPUpdates &)>([=](const MTPUpdates &result) {
+			received(operation, result);
+		}));
 }
 
 void Client::sendMedia(const Op &operation) {

@@ -208,7 +208,8 @@ template <typename T>
 	if (fields.flags & MessageFlag::FakeHistoryItem) {
 		return fields;
 	}
-	fields.flags |= NewForwardedFlags(history->peer, fields.from, original);
+	fields.flags |= NewForwardedFlags(history->peer, fields.from, original)
+		& ~MessageFlag::Outgoing;
 	return fields;
 }
 
@@ -692,8 +693,9 @@ HistoryItem::HistoryItem(
 	const auto dropForwardInfo = fields.ignoreForwardFrom
 		|| original->computeDropForwardedInfo();
 	const auto topicRootId = fields.replyTo.topicRootId;
-	config.reply.messageId = config.reply.topMessageId = topicRootId;
-	config.reply.topicPost = (topicRootId != 0) ? 1 : 0;
+	config.reply.topMessageId = topicRootId;
+	config.reply.topicPost = (topicRootId
+		&& topicRootId != Data::ForumTopic::kGeneralId) ? 1 : 0;
 	config.reply.monoforumPeerId = fields.replyTo.monoforumPeerId;
 	if (const auto originalReply = original->Get<HistoryMessageReply>()) {
 		if (originalReply->external()) {
@@ -5096,6 +5098,7 @@ const std::vector<ClickHandlerPtr> &HistoryItem::customTextLinks() const {
 void HistoryItem::createComponents(CreateConfig &&config) {
 	uint64 mask = 0;
 	if (config.reply.messageId
+		|| (config.reply.topicPost && config.reply.topMessageId)
 		|| config.reply.externalSenderId
 		|| !config.reply.externalSenderName.isEmpty()
 		|| config.reply.storyId) {
