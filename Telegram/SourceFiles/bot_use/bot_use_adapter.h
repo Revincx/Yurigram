@@ -25,6 +25,7 @@ struct MediaSource {
 	QVector<MTPDocumentAttribute> attributes;
 	TextWithEntities caption;
 	FullMsgId origin;
+	std::optional<MTPInputDocument> existingDocument;
 	std::optional<MTPInputPhoto> uploadedPhoto;
 	std::optional<MTPInputDocument> uploadedDocument;
 };

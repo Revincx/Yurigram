@@ -92,6 +92,11 @@ public:
 		const std::shared_ptr<FilePrepareResult> &file,
 		Completion done = {},
 		UploadCallback progress = {});
+	[[nodiscard]] OperationId sendSticker(
+		BotId bot,
+		const Api::MessageToSend &message,
+		const MTPInputDocument &document,
+		Completion done = {});
 	[[nodiscard]] OperationId uploadMedia(
 		BotId bot,
 		PeerId peer,

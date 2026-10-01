@@ -562,6 +562,26 @@ OperationId Manager::sendMedia(
 	return submit(std::move(op));
 }
 
+OperationId Manager::sendSticker(
+		BotId bot,
+		const Api::MessageToSend &message,
+		const MTPInputDocument &document,
+		Completion done) {
+	auto op = makeOperation(bot, std::move(done));
+	op->kind = Kind::Media;
+	op->validation = SnapshotAction(message.action, op->action);
+	if (document.type() != mtpc_inputDocument) {
+		op->validation = { u"DOCUMENT_INVALID"_q };
+	} else {
+		op->media.push_back(MediaSource{
+			.id = uint64(document.c_inputDocument().vid().v),
+			.caption = SnapshotText(message.textWithTags),
+			.existingDocument = document,
+		});
+	}
+	return submit(std::move(op));
+}
+
 OperationId Manager::uploadMedia(
 		BotId bot,
 		PeerId peer,

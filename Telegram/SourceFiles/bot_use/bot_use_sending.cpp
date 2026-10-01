@@ -873,6 +873,31 @@ bool SendExisting(
 	if (!photo && !document) {
 		return false;
 	}
+	if (document && document->sticker()) {
+		const auto fullId = FullMsgId(
+			history->peer->id,
+			localId ? *localId : history->owner().nextLocalMessageId());
+		const auto info = FindBot(history, bot);
+		auto caption = SnapshotText(message.textWithTags);
+		TextUtilities::Trim(caption);
+		const auto fields = LocalFields(message.action, info.userId, fullId.msg);
+		history->addNewLocalMessage(
+			HistoryItemCommonFields(fields),
+			not_null{ document },
+			caption);
+		history->session().botUseChats().beginSend(fullId, info.userId);
+		history->session().api().sendAction(message.action);
+		const auto operation = history->session().domain().botUse().sendSticker(
+			bot,
+			message,
+			document->mtpInput(),
+			CompletionFor(history, { fullId }));
+		if (!operation) {
+			return false;
+		}
+		NotifySent(history);
+		return true;
+	}
 	const auto available = photo
 		? (!photo->createMediaView()->imageBytes(Data::PhotoSize::Large).isEmpty()
 			|| !photo->location(true).isEmpty())

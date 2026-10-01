@@ -412,6 +412,13 @@ void Client::prepareMedia(const Op &operation, size_t index) {
 
 void Client::resolveMedia(const Op &operation, size_t index, Fn<void()> done) {
 	const auto source = operation->media[index];
+	if (source.existingDocument) {
+		operation->prepared.push_back(DocumentMedia(
+			*source.existingDocument,
+			source.spoiler));
+		done();
+		return;
+	}
 	if (source.uploadedPhoto || source.uploadedDocument) {
 		if (source.uploadedPhoto) {
 			_photos[source.id] = *source.uploadedPhoto;
@@ -970,8 +977,15 @@ void Client::failed(
 		finish(operation);
 		return;
 	} else if (type.startsWith(u"FILE_REFERENCE_"_q)) {
-		refresh(operation, retry);
-		return;
+		const auto existing = ranges::any_of(
+			operation->media,
+			[](const MediaSource &source) {
+				return source.existingDocument.has_value();
+			});
+		if (!existing) {
+			refresh(operation, retry);
+			return;
+		}
 	} else {
 		auto wait = 0;
 		for (const auto &prefix : { u"FLOOD_WAIT_"_q, u"FLOOD_PREMIUM_WAIT_"_q, u"SLOWMODE_WAIT_"_q }) {
