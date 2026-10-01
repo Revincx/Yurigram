@@ -1,6 +1,7 @@
 #pragma once
 
 #include "base/weak_ptr.h"
+#include "bot_use/bot_use_settings.h"
 #include "bot_use/bot_use_types.h"
 
 namespace Storage {
@@ -25,6 +26,29 @@ public:
 	[[nodiscard]] Error setApiCredentials(ApiCredentials credentials);
 	[[nodiscard]] ApiCredentials apiCredentials() const;
 	[[nodiscard]] int apiId() const;
+	[[nodiscard]] const Settings::StoredValue &optionValue(
+		Settings::OptionId id) const;
+	[[nodiscard]] Error setOptionValue(
+		Settings::OptionId id,
+		Settings::StoredValue value);
+	[[nodiscard]] rpl::producer<> optionChanges(
+		Settings::OptionId id) const;
+
+	template <typename Value>
+	[[nodiscard]] const Value &option(Settings::Key<Value> key) const {
+		return std::get<Value>(optionValue(key.id));
+	}
+
+	template <typename Value>
+	[[nodiscard]] Error setOption(Settings::Key<Value> key, Value value) {
+		return setOptionValue(key.id, Settings::StoredValue(std::move(value)));
+	}
+
+	template <typename Value>
+	[[nodiscard]] rpl::producer<> optionChanges(
+			Settings::Key<Value> key) const {
+		return optionChanges(key.id);
+	}
 	[[nodiscard]] OperationId addAuthenticatedBot(
 		QString token,
 		Completion done,
@@ -136,6 +160,7 @@ private:
 
 	const not_null<Storage::Domain*> _storage;
 	ApiCredentials _credentials;
+	Settings::Registry _settings;
 	std::map<BotId, std::unique_ptr<Client>> _clients;
 	std::map<BotId, std::unique_ptr<Client>> _pending;
 	std::vector<std::unique_ptr<Client>> _retired;

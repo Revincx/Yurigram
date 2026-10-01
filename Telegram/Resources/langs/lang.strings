@@ -8838,6 +8838,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_bot_use_busy" = "BotUse is busy. Try again after the current operation finishes.";
 "lng_bot_use_store_error" = "BotUse could not save its encrypted data.";
 "lng_bot_use_error" = "BotUse error: {error}";
+"lng_bot_use_disable_typing_status" = "Disable sending typing status";
 "lng_bot_use_choose" = "Send as Bot in this chat";
 "lng_bot_use_choose_about" = "Choose a BotUse identity:";
 "lng_bot_use_loading" = "Loading available Bots...";

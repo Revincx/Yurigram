@@ -2,6 +2,8 @@
 
 #include "bot_use/bot_use_manager.h"
 #include "apiwrap.h"
+#include "base/unique_qptr.h"
+#include "core/deep_links/deep_links_settings.h"
 #include "data/data_session.h"
 #include "data/data_user.h"
 #include "info/channel_statistics/boosts/giveaway/boost_badge.h"
@@ -14,6 +16,7 @@
 #include "ui/boxes/confirm_box.h"
 #include "ui/controls/userpic_button.h"
 #include "ui/layers/generic_box.h"
+#include "ui/text/text_utilities.h"
 #include "ui/toast/toast.h"
 #include "ui/vertical_list.h"
 #include "ui/rp_widget.h"
@@ -21,6 +24,7 @@
 #include "ui/widgets/fields/input_field.h"
 #include "ui/widgets/fields/password_input.h"
 #include "ui/widgets/labels.h"
+#include "ui/widgets/popup_menu.h"
 #include "ui/wrap/slide_wrap.h"
 #include "ui/wrap/vertical_layout.h"
 #include "window/window_session_controller.h"
@@ -182,13 +186,31 @@ void AddBotStatus(
 	.parentId = MainId(),
 	.title = &tr::lng_bot_use_settings,
 	.icon = &st::menuIconBot,
-}, [](Builder::SectionBuilder &) {
+}, [](Builder::SectionBuilder &builder) {
+	const auto id = BotUse::Settings::Option::DisableTypingStatus.id;
+	builder.add(nullptr, [=] {
+		return Builder::SearchEntry{
+			.id = BotUse::Settings::ControlId(id),
+			.title = BotUse::Settings::OptionTitle(id),
+			.keywords = {
+				u"bot"_q,
+				u"typing"_q,
+				u"status"_q,
+			},
+			.deeplink = u"tg://settings/"_q
+				+ BotUse::Settings::ControlId(id),
+		};
+	});
 });
 
 } // namespace
 
 Type BotUseSettingsId() {
 	return BotUseSettings::Id();
+}
+
+QString BotUseSettingsPath() {
+	return u"bot-use"_q;
 }
 
 BotUseSettings::BotUseSettings(
@@ -227,10 +249,87 @@ void BotUseSettings::setupContent() {
 		{ &st::menuIconAdd });
 	add->addClickHandler([=] { addBot(); });
 
+	const auto behavior = AddGroup(page, tr::lng_settings_behavior());
+	addToggleOption(
+		behavior,
+		BotUse::Settings::Option::DisableTypingStatus);
+
 	refreshBots();
 	controller()->session().domain().botUse().changes(
 	) | rpl::on_next([=] { refreshBots(); }, lifetime());
 	Ui::ResizeFitChild(this, page);
+}
+
+void BotUseSettings::addToggleOption(
+		not_null<Ui::VerticalLayout*> content,
+		BotUse::Settings::Key<bool> key) {
+	const auto manager = &controller()->session().domain().botUse();
+	const auto title = BotUse::Settings::DescriptorFor(key.id).title;
+	Expects(title != nullptr);
+	const auto button = AddButtonWithIcon(
+		content,
+		(*title)(),
+		st::settingsButtonNoIcon);
+	registerOption(key.id, button);
+	button->toggleOn(
+		rpl::single(manager->option(key)) | rpl::then(
+			manager->optionChanges(key) | rpl::map([=] {
+				return manager->option(key);
+			})) | rpl::distinct_until_changed()
+	)->toggledChanges(
+	) | rpl::filter([=](bool value) {
+		return value != manager->option(key);
+	}) | rpl::on_next([=](bool value) {
+		if (const auto error = manager->setOption(key, value)) {
+			ShowError(controller(), error);
+		}
+	}, content->lifetime());
+}
+
+void BotUseSettings::registerOption(
+		BotUse::Settings::OptionId id,
+		not_null<Ui::RpWidget*> widget) {
+	const auto controlId = BotUse::Settings::ControlId(id);
+	_highlightControls.emplace_back(controlId, widget.get());
+	const auto prefix = BotUseSettingsPath() + u"/"_q;
+	Expects(controlId.startsWith(prefix));
+	const auto session = &controller()->session();
+	const auto link = session->createInternalLinkFull(
+		u"%1/"_q.arg(Core::DeepLinks::kSettingsRouteChannel.utf16())
+			+ controlId);
+	const auto menu = widget->lifetime(
+	).make_state<base::unique_qptr<Ui::PopupMenu>>();
+	widget->events(
+	) | rpl::filter([](not_null<QEvent*> event) {
+		return event->type() == QEvent::ContextMenu;
+	}) | rpl::on_next([=](not_null<QEvent*> event) {
+		*menu = base::make_unique_q<Ui::PopupMenu>(
+			widget,
+			st::popupMenuWithIcons);
+		const auto copy = [=](QString value) {
+			TextUtilities::SetClipboardText({ std::move(value) });
+			controller()->showToast({
+				.text = { tr::lng_username_copied(tr::now) },
+				.iconLottie = u"toast/voip_invite"_q,
+				.iconLottieSize = st::toastLottieIconSize,
+			});
+		};
+		(*menu)->addAction(
+			tr::lng_auction_menu_copy_link(tr::now),
+			[=] { copy(link); },
+			&st::menuIconCopy);
+		(*menu)->popup(QCursor::pos());
+		event->accept();
+	}, widget->lifetime());
+}
+
+void BotUseSettings::showFinished() {
+	for (const auto &[id, widget] : _highlightControls) {
+		if (widget) {
+			controller()->checkHighlightControl(id, widget);
+		}
+	}
+	Section<BotUseSettings>::showFinished();
 }
 
 void BotUseSettings::showApiSettings() {

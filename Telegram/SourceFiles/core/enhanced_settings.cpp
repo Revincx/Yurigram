@@ -10,6 +10,7 @@ https://github.com/TDesktop-x64/tdesktop/blob/dev/LEGAL
 #include "base/parse_helper.h"
 #include "base/qthelp_url.h"
 #include "core/chat_enhanced_settings.h"
+#include "core/deep_links/deep_links_settings.h"
 #include "data/data_histories.h"
 #include "data/data_peer_id.h"
 #include "data/data_session.h"
@@ -835,7 +836,7 @@ QString DeepLink(not_null<Main::Session*> session, OptionId id) {
 	}
 	Expects(controlId.startsWith(prefix));
 	return session->createInternalLinkFull(
-		u"%1/"_q.arg(kEnhancedSettingsRouteChannel.utf16())
+		u"%1/"_q.arg(Core::DeepLinks::kSettingsRouteChannel.utf16())
 			+ controlId.mid(prefix.size()));
 }
 

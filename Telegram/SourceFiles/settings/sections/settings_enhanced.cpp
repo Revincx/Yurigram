@@ -44,6 +44,7 @@ https://github.com/TDesktop-x64/tdesktop/blob/dev/LEGAL
 #include "lang/lang_instance.h"
 #include "core/application.h"
 #include "core/chat_enhanced_settings.h"
+#include "core/deep_links/deep_links_settings.h"
 #include "core/enhanced_settings.h"
 #include "core/update_checker.h"
 #include "storage/localstorage.h"
@@ -1140,7 +1141,7 @@ struct DecodeEnhancedSettingsResult {
 			? EnhancedSettings::DeepLink(session, *option)
 			: session->createInternalLinkFull(
 				u"%1/"_q.arg(
-					EnhancedSettings::kEnhancedSettingsRouteChannel.utf16())
+					Core::DeepLinks::kSettingsRouteChannel.utf16())
 					+ id.mid(prefix.size()));
 		const auto menu = widget->lifetime(
 		).make_state<base::unique_qptr<Ui::PopupMenu>>();

@@ -8,13 +8,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/local_url_handlers.h"
 
 #include "core/deep_links/deep_links_router.h"
+#include "core/deep_links/deep_links_settings.h"
 #include "api/api_confirm_phone.h"
 #include "api/api_chat_filters.h"
 #include "api/api_chat_invite.h"
 #include "api/api_premium.h"
 #include "base/qthelp_regex.h"
 #include "base/qthelp_url.h"
-#include "core/enhanced_settings.h"
 #include "lang/lang_cloud_manager.h"
 #include "lang/lang_keys.h"
 #include "core/update_checker.h"
@@ -2051,11 +2051,20 @@ QString TryConvertUrlToLocal(QString url) {
 			return u"tg://setlanguage?lang="_q + url_encode(languageMatch->captured(1));
 		} else if (const auto enhancedSettingsMatch = regex_match(
 				u"^%1(/[^?#]*)?(\\?[^#]*)?(?:#.*)?$"_q.arg(
-					EnhancedSettings::kEnhancedSettingsRouteChannel.utf16()),
+					DeepLinks::kSettingsRouteChannel.utf16()),
 				query,
 				matchOptions)) {
-			return u"tg://settings/enhanced"_q
-				+ enhancedSettingsMatch->captured(1)
+			const auto path = enhancedSettingsMatch->captured(1);
+			const auto botUse = path.compare(
+				u"/bot-use"_q,
+				Qt::CaseInsensitive) == 0
+				|| path.startsWith(
+					u"/bot-use/"_q,
+					Qt::CaseInsensitive);
+			const auto target = botUse
+				? u"tg://settings"_q
+				: u"tg://settings/enhanced"_q;
+			return target + path
 				+ enhancedSettingsMatch->captured(2);
 		} else if (const auto shareUrlMatch = regex_match(u"^share/url/?\\?(.+)$"_q, query, matchOptions)) {
 			return u"tg://msg_url?"_q + shareUrlMatch->captured(1);

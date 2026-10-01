@@ -112,6 +112,12 @@ void SendProgressManager::update(
 	const auto doing = (progress >= 0);
 	const auto bot = BotUseSupports(type) ? BotUse::Selected(history) : 0;
 	const auto key = Key{ history, topMsgId, type, bot };
+	if (bot && _session->domain().botUse().option(
+			BotUse::Settings::Option::DisableTypingStatus)) {
+		updated(key, false);
+		cancel(history, topMsgId, type);
+		return;
+	}
 	if (updated(key, doing)) {
 		cancel(history, topMsgId, type);
 		if (doing) {

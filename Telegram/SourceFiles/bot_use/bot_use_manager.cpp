@@ -91,6 +91,12 @@ void Manager::start() {
 		valid = valid && stream.status() == QDataStream::Ok;
 		records.push_back(std::move(record));
 	}
+	if (valid && !stream.atEnd()) {
+		auto settings = QByteArray();
+		stream >> settings;
+		valid = stream.status() == QDataStream::Ok
+			&& _settings.deserialize(settings);
+	}
 	if (!valid || !stream.atEnd() || stream.status() != QDataStream::Ok) {
 		_readOnly = true;
 		_storageError = { u"BOT_STORE_CORRUPT"_q };
@@ -128,6 +134,7 @@ void Manager::reset() {
 	_credentials = {};
 	_configurationError = {};
 	_storageError = {};
+	_settings.reset();
 	_readOnly = false;
 	_nextBot = 1;
 	++_generation;
@@ -160,6 +167,40 @@ int Manager::apiId() const {
 
 ApiCredentials Manager::apiCredentials() const {
 	return _credentials;
+}
+
+const Settings::StoredValue &Manager::optionValue(
+		Settings::OptionId id) const {
+	return _settings.value(id);
+}
+
+Error Manager::setOptionValue(
+		Settings::OptionId id,
+		Settings::StoredValue value) {
+	if (!_started || _readOnly) {
+		_settings.notify(id);
+		return _storageError
+			? _storageError
+			: Error{ u"BOT_STORE_UNAVAILABLE"_q };
+	}
+	const auto previous = _settings.value(id);
+	if (!_settings.assign(id, std::move(value))) {
+		return {};
+	}
+	if (!save()) {
+		const auto restored = _settings.assign(id, previous);
+		Expects(restored);
+		_settings.notify(id);
+		changed();
+		return _storageError;
+	}
+	_settings.notify(id);
+	changed();
+	return {};
+}
+
+rpl::producer<> Manager::optionChanges(Settings::OptionId id) const {
+	return _settings.changes(id);
 }
 
 Error Manager::setApiCredentials(ApiCredentials credentials) {
@@ -649,6 +690,7 @@ bool Manager::save() {
 			stream << quint64(message.peer.value) << qint64(message.msg.bare);
 		}
 	}
+	stream << _settings.serialize();
 	if (data.size() > kMaximumStoreSize || !_storage->writeBotUseData(data)) {
 		_storageError = { u"BOT_STORE_WRITE_FAILED"_q };
 		return false;

@@ -7,9 +7,12 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include "base/const_string.h"
 #include "settings/settings_type.h"
 
 namespace Core::DeepLinks {
+
+inline constexpr auto kSettingsRouteChannel = "yurisettings"_cs;
 
 class Router;
 

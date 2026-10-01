@@ -29,6 +29,7 @@
     "lng_bot_use_busy": "BotUse is busy. Try again after the current operation finishes.",
     "lng_bot_use_store_error": "BotUse could not save its encrypted data.",
     "lng_bot_use_error": "BotUse error: {error}",
+    "lng_bot_use_disable_typing_status": "Disable sending typing status",
     "lng_settings_show_media_metadata": "Show media metadata",
     "lng_media_metadata_average_bitrate": "{bitrate} kbps",
     "lng_media_metadata_silent": "Silent",

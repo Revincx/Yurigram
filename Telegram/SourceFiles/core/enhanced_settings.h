@@ -6,7 +6,6 @@ https://github.com/TDesktop-x64/tdesktop/blob/dev/LEGAL
 */
 #pragma once
 
-#include "base/const_string.h"
 #include "base/flags.h"
 #include "core/link_preview_rules.h"
 #include "rpl/producer.h"
@@ -35,8 +34,6 @@ struct phrase;
 } // namespace tr
 
 namespace EnhancedSettings {
-
-inline constexpr auto kEnhancedSettingsRouteChannel = "yurisettings"_cs;
 
 enum class OptionId {
 	ShowMessagesId,

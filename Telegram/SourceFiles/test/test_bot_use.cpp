@@ -8,6 +8,8 @@
 #include "bot_use/bot_use_manager.h"
 #include "bot_use/bot_use_sending.h"
 #include "core/application.h"
+#include "core/deep_links/deep_links_settings.h"
+#include "core/local_url_handlers.h"
 #include "data/data_session.h"
 #include "data/data_document.h"
 #include "data/data_photo_media.h"
@@ -24,6 +26,7 @@
 #include "main/main_session.h"
 #include "main/main_session_settings.h"
 #include "mtproto/facade.h"
+#include "settings/sections/settings_bot_use.h"
 #include "storage/localimageloader.h"
 #include "test/test_agent.h"
 #include "test/test_log.h"
@@ -177,6 +180,8 @@ struct Fixture {
 	bool reactionRemoved = false;
 	bool reactionAddedToRecent = false;
 	int typingBefore = 0;
+	crl::time typingCheckAfter = 0;
+	BotUse::Error settingError;
 	uint64 typingUser = 0;
 	uint64 typingPeer = 0;
 	int typingTop = 0;
@@ -509,6 +514,16 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 		MTP::details::pause();
 		state->manager = &Core::App().domain().botUse();
 		state->manager->reset();
+		const auto controlId = BotUse::Settings::ControlId(
+			BotUse::Settings::Option::DisableTypingStatus.id);
+		const auto deepLink = u"tg://settings/"_q + controlId;
+		Check(Core::DeepLinks::SettingsDeepLink(
+			Settings::BotUseSettingsId(),
+			controlId) == deepLink,
+			u"BotUse option has a registered settings route"_q);
+		Check(Core::TryConvertUrlToLocal(
+			u"https://t.me/yurisettings/"_q + controlId) == deepLink,
+			u"Yurisettings BotUse links keep the BotUse route prefix"_q);
 		const auto error = state->manager->setApiCredentials({ 12345, u"0123456789abcdef0123456789abcdef"_q });
 		Check(!error, u"Configure shared application credentials"_q, error.type);
 		state->a = state->manager->addBot(u"fixture-a"_q);
@@ -855,6 +870,50 @@ void AppendBotUseSelfTest(not_null<Runner*> runner) {
 			Api::SendProgressType::Typing,
 			-1);
 	} });
+	runner->add({
+		.name = u"botuse typing setting suppresses typing status"_q,
+		.run = [=] {
+			const auto session = Core::App().domain().active().maybeSession();
+			const auto history = state->text(101).action.history;
+			const auto key = BotUse::Settings::Option::DisableTypingStatus;
+			state->settingError = state->manager->setOption(key, true);
+			state->typingBefore = state->typings;
+			for (const auto type : {
+				Api::SendProgressType::Typing,
+				Api::SendProgressType::RecordVideo,
+				Api::SendProgressType::UploadVideo,
+				Api::SendProgressType::RecordVoice,
+				Api::SendProgressType::UploadVoice,
+				Api::SendProgressType::RecordRound,
+				Api::SendProgressType::UploadRound,
+				Api::SendProgressType::UploadPhoto,
+				Api::SendProgressType::UploadFile,
+				Api::SendProgressType::ChooseSticker,
+			}) {
+				session->sendProgressManager().update(
+					history,
+					MsgId(43),
+					type,
+					42);
+			}
+			state->typingCheckAfter = crl::now() + crl::time(100);
+		},
+		.until = [=] { return crl::now() >= state->typingCheckAfter; },
+		.then = [=] {
+			const auto key = BotUse::Settings::Option::DisableTypingStatus;
+			Check(!state->settingError
+				&& state->manager->option(key)
+				&& state->typings == state->typingBefore,
+				u"Disabled BotUse input status sends no request"_q,
+				state->settingError.type);
+			state->settingError
+				= state->manager->setOption(key, false);
+			Check(!state->settingError
+				&& !state->manager->option(key),
+				u"BotUse typing status can be enabled again"_q,
+				state->settingError.type);
+		},
+	});
 	add(u"reject unverified bot"_q, [=] {
 		state->operation = state->manager->addAuthenticatedBot(
 			u"fixture-invalid"_q, state->completion());

@@ -50,6 +50,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "settings/sections/settings_active_sessions.h"
 #include "settings/sections/settings_advanced.h"
 #include "settings/sections/settings_blocked_peers.h"
+#include "settings/sections/settings_bot_use.h"
 #include "settings/sections/settings_business.h"
 #include "settings/sections/settings_calls.h"
 #include "settings/sections/settings_chat.h"
@@ -1937,6 +1938,25 @@ void RegisterSettingsHandlers(Router &router) {
 			return Result::Handled;
 		}},
 	});
+
+	router.add(u"settings"_q, {
+		.path = ::Settings::BotUseSettingsPath(),
+		.action = SettingsSection{ ::Settings::BotUseSettingsId() },
+	});
+
+	for (const auto &descriptor : BotUse::Settings::Descriptors()) {
+		const auto controlId = BotUse::Settings::ControlId(descriptor.id);
+		if (controlId.isEmpty()) {
+			continue;
+		}
+		router.add(u"settings"_q, {
+			.path = controlId,
+			.action = SettingsControl{
+				::Settings::BotUseSettingsId(),
+				controlId,
+			},
+		});
+	}
 
 	router.add(u"settings"_q, {
 		.path = u"enhanced"_q,
