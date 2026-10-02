@@ -208,8 +208,12 @@ template <typename T>
 	if (fields.flags & MessageFlag::FakeHistoryItem) {
 		return fields;
 	}
-	fields.flags |= NewForwardedFlags(history->peer, fields.from, original)
-		& ~MessageFlag::Outgoing;
+	auto flags = NewForwardedFlags(history->peer, fields.from, original);
+	if (peerIsUser(fields.from)
+		&& fields.from != history->session().userPeerId()) {
+		flags &= ~MessageFlag::Outgoing; // sent by a bot-use identity
+	}
+	fields.flags |= flags;
 	return fields;
 }
 
