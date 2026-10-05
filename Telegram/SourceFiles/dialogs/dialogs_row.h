@@ -121,6 +121,10 @@ public:
 		bool hasUnreadBadgesAbove) const final override;
 
 	[[nodiscard]] bool lookupIsInTopicJump(int x, int y) const;
+	[[nodiscard]] bool lookupIsInCommunityBadge(
+		int x,
+		int y,
+		const style::DialogRow &st) const;
 	void stopLastRipple() override;
 	void clearRipple() override;
 	void addTopicJumpRipple(
