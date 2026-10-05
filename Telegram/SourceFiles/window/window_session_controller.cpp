@@ -2089,9 +2089,7 @@ void SessionController::activateFirstChatsFilter() {
 		return;
 	}
 	_filtersActivated = true;
-	if (!EnhancedSettings::Get(EnhancedSettings::Option::HideAllChats)) {
-		setActiveChatsFilter(session().data().chatsFilters().defaultId());
-	}
+	setActiveChatsFilter(session().data().chatsFilters().defaultId());
 }
 
 bool SessionController::uniqueChatsInSearchResults(
