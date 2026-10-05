@@ -244,8 +244,10 @@ historyShortcutStateSpace: 18px;
 
 historyViewsSpace: 8px;
 historyViewsWidth: 20px;
+historyForwardsWidth: 16px;
 historyPinWidth: 24px;
 historyViewsTop: -15px;
+historyForwardsTop: -14px;
 historyPinTop: -18px;
 historySilentWidth: 12px;
 historySilentTop: -13px;

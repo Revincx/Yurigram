@@ -159,6 +159,7 @@ bool BottomInfo::isWide() const {
 		|| _data.scheduleRepeatPeriod
 		|| !_data.author.isEmpty()
 		|| !_views.isEmpty()
+		|| !_forwards.isEmpty()
 		|| !_replies.isEmpty()
 		|| _effect
 		|| _data.tonStake;
@@ -178,33 +179,52 @@ TextState BottomInfo::textState(
 	if (_data.flags & (Data::Flag::OutLayout | Data::Flag::Sending)) {
 		withTicksWidth += st::historySendStateSpace;
 	}
-	if (!_views.isEmpty()) {
-		const auto viewsWidth = _views.maxWidth();
+	if (!_views.isEmpty() || !_forwards.isEmpty()) {
+		const auto viewsWidth = _views.isEmpty()
+			? 0
+			: st::historyViewsSpace
+				+ st::historyViewsWidth
+				+ _views.maxWidth();
+		const auto forwardsWidth = _forwards.isEmpty()
+			? 0
+			: st::historyViewsSpace
+				+ st::historyForwardsWidth
+				+ _forwards.maxWidth();
 		const auto right = width()
 			- withTicksWidth
 			- ((_data.flags & Data::Flag::Pinned) ? st::historyPinWidth : 0)
-			- st::historyViewsSpace
-			- st::historyViewsWidth
-			- viewsWidth;
-		const auto inViews = QRect(
+			- viewsWidth
+			- forwardsWidth;
+		const auto addedWidth = (!_views.isEmpty() && !_forwards.isEmpty())
+			? forwardsWidth
+			: 0;
+		const auto iconWidth = _views.isEmpty()
+			? st::historyForwardsWidth
+			: st::historyViewsWidth;
+		const auto inStatistics = QRect(
 			right,
 			0,
-			withTicksWidth + st::historyViewsWidth,
+			withTicksWidth + iconWidth + addedWidth,
 			st::msgDateFont->height
 		).contains(position);
-		if (inViews) {
+		if (inStatistics) {
 			result.customTooltip = true;
-			const auto fullViews = tr::lng_views_tooltip(
-				tr::now,
-				lt_count_decimal,
-				*_data.views);
-			const auto fullForwards = _data.forwardsCount
-				? ('\n' + tr::lng_forwards_tooltip(
+			auto text = _data.views
+				? tr::lng_views_tooltip(
 					tr::now,
 					lt_count_decimal,
-					*_data.forwardsCount))
+					*_data.views)
 				: QString();
-			result.customTooltipText = fullViews + fullForwards;
+			if (_data.forwardsCount) {
+				if (!text.isEmpty()) {
+					text += '\n';
+				}
+				text += tr::lng_forwards_tooltip(
+					tr::now,
+					lt_count_decimal,
+					*_data.forwardsCount);
+			}
+			result.customTooltipText = std::move(text);
 		}
 	}
 	const auto inTime = QRect(
@@ -338,6 +358,21 @@ void BottomInfo::paint(
 			p,
 			right,
 			firstLineBottom + st::historyPinTop,
+			outerWidth);
+	}
+	if (!_forwards.isEmpty()) {
+		const auto forwardsWidth = _forwards.maxWidth();
+		right -= st::historyViewsSpace + forwardsWidth;
+		_forwards.drawLeft(p, right, position.y(), forwardsWidth, outerWidth);
+
+		const auto &icon = inverted
+			? st->historyForwardsInvertedIcon()
+			: stm->historyForwardsIcon;
+		right -= st::historyForwardsWidth;
+		icon.paint(
+			p,
+			right,
+			firstLineBottom + st::historyForwardsTop,
 			outerWidth);
 	}
 	if (!_views.isEmpty()) {
@@ -481,6 +516,7 @@ QSize BottomInfo::countCurrentSize(int newWidth) {
 void BottomInfo::layout() {
 	layoutDateText();
 	layoutViewsText();
+	layoutForwardsText();
 	layoutRepliesText();
 	layoutEffectText();
 	initDimensions();
@@ -569,6 +605,21 @@ void BottomInfo::layoutViewsText() {
 		Ui::NameTextOptions());
 }
 
+void BottomInfo::layoutForwardsText() {
+	if (!EnhancedSettings::Get(
+			EnhancedSettings::Option::ShowMessageForwardCount)
+		|| !_data.forwardsCount
+		|| *_data.forwardsCount <= 0
+		|| (_data.flags & Data::Flag::Sending)) {
+		_forwards.clear();
+		return;
+	}
+	_forwards.setText(
+		st::msgDateTextStyle,
+		Lang::FormatCountToShort(*_data.forwardsCount).string,
+		Ui::NameTextOptions());
+}
+
 void BottomInfo::layoutRepliesText() {
 	if (!_data.replies
 		|| !*_data.replies
@@ -605,6 +656,11 @@ QSize BottomInfo::countOptimalSize() {
 		width += st::historyViewsSpace
 			+ _views.maxWidth()
 			+ st::historyViewsWidth;
+	}
+	if (!_forwards.isEmpty()) {
+		width += st::historyViewsSpace
+			+ _forwards.maxWidth()
+			+ st::historyForwardsWidth;
 	}
 	if (!_replies.isEmpty()) {
 		width += st::historyViewsSpace

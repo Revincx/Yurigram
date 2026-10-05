@@ -37,6 +37,7 @@ namespace EnhancedSettings {
 
 enum class OptionId {
 	ShowMessagesId,
+	ShowMessageForwardCount,
 	ExtraContextMenuOptions,
 	ShowEmojiButtonAsText,
 	ShowPhoneNumber,
@@ -99,6 +100,8 @@ struct Key {
 
 namespace Option {
 inline constexpr auto ShowMessagesId = Key<bool>{ OptionId::ShowMessagesId };
+inline constexpr auto ShowMessageForwardCount
+	= Key<bool>{ OptionId::ShowMessageForwardCount };
 inline constexpr auto ExtraContextMenuOptions
 	= Key<QList<int>>{ OptionId::ExtraContextMenuOptions };
 inline constexpr auto ShowEmojiButtonAsText

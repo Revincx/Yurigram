@@ -85,6 +85,9 @@ const DescriptorList &DescriptorData() {
 		Bool(OptionId::ShowMessagesId, "show_messages_id",
 			&tr::lng_settings_show_message_id,
 			"enhanced/show-message-id", {}, true),
+		Bool(OptionId::ShowMessageForwardCount, "show_message_forward_count",
+			&tr::lng_settings_show_message_forward_count,
+			"enhanced/show-message-forward-count", {}, true),
 		Descriptor{
 			.id = OptionId::ExtraContextMenuOptions,
 			.storageKey = "extra_context_menu_options",

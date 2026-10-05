@@ -157,6 +157,22 @@ struct DecodeEnhancedSettingsResult {
 
 	builder.add(nullptr, [] {
 		return Builder::SearchEntry{
+			.id = u"enhanced/show-message-forward-count"_q,
+			.title = tr::lng_settings_show_message_forward_count(tr::now),
+			.keywords = {
+				u"message"_q,
+				u"forward"_q,
+				u"shares"_q,
+				u"count"_q,
+				u"views"_q,
+			},
+			.deeplink
+				= u"tg://settings/enhanced/show-message-forward-count"_q,
+		};
+	});
+
+	builder.add(nullptr, [] {
+		return Builder::SearchEntry{
 			.id = u"enhanced/rich-message-blocks-limit"_q,
 			.title = tr::lng_settings_rich_message_preview_blocks(tr::now),
 			.keywords = {
@@ -737,6 +753,9 @@ struct DecodeEnhancedSettingsResult {
 
 	void Enhanced::setupMessages(not_null<Ui::VerticalLayout*> content) {
 		addToggleOption(content, EnhancedSettings::Option::ShowMessagesId);
+		addToggleOption(
+			content,
+			EnhancedSettings::Option::ShowMessageForwardCount);
 		addToggleOption(
 			content,
 			EnhancedSettings::Option::ForceShowWebPagePreview);

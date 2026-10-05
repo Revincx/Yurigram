@@ -41,6 +41,7 @@
     "lng_media_metadata_average_bitrate": "{bitrate} kbps",
     "lng_media_metadata_silent": "Silent",
     "lng_settings_show_message_id": "Show message ID",
+    "lng_settings_show_message_forward_count": "Show message forward count",
     "lng_settings_interface": "Interface",
     "lng_settings_behavior": "Behavior",
     "lng_settings_translation": "Translation",
