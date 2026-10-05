@@ -1623,7 +1623,11 @@ QSize OverlayWidget::videoSize() const {
 bool OverlayWidget::streamingRequiresControls() const {
 	return !_stories
 		&& _document
-		&& (!_document->isAnimation() || _document->isVideoMessage());
+		&& (!_document->isAnimation()
+			|| _document->isVideoMessage()
+			|| (_document->isGifv()
+				&& EnhancedSettings::Get(
+					EnhancedSettings::Option::ShowGifMediaControls)));
 }
 
 QImage OverlayWidget::videoFrame() const {

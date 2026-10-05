@@ -8856,6 +8856,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_settings_enhanced_import_unsupported" = "Enhanced settings code is valid, but its data format is not supported.";
 "lng_settings_enhanced_import_done" = "Enhanced settings imported from code in clipboard.";
 "lng_settings_show_media_metadata" = "Show metadata info in media viewer";
+"lng_settings_show_gif_media_controls" = "Show GIF media controls";
 "lng_media_metadata_average_bitrate" = "{bitrate} kbps";
 "lng_media_metadata_silent" = "Silent";
 "lng_chat_enhanced_settings" = "Chat Enhanced Settings";

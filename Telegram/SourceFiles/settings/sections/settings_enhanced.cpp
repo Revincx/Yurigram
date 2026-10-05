@@ -364,6 +364,21 @@ struct DecodeEnhancedSettingsResult {
 
 	builder.add(nullptr, [] {
 		return Builder::SearchEntry{
+			.id = u"enhanced/show-gif-media-controls"_q,
+			.title = tr::lng_settings_show_gif_media_controls(tr::now),
+			.keywords = {
+				u"gif"_q,
+				u"animation"_q,
+				u"media"_q,
+				u"playback"_q,
+				u"controls"_q,
+			},
+			.deeplink = u"tg://settings/enhanced/show-gif-media-controls"_q,
+		};
+	});
+
+	builder.add(nullptr, [] {
+		return Builder::SearchEntry{
 			.id = u"enhanced/show-group-sender-avatar"_q,
 			.title = tr::lng_settings_show_group_sender_avatar(tr::now),
 			.keywords = { u"group"_q, u"sender"_q, u"avatar"_q },
@@ -730,6 +745,7 @@ struct DecodeEnhancedSettingsResult {
 			EnhancedSettings::Option::DisableAutoFetchWebPagePreview);
 		addToggleOption(content, EnhancedSettings::Option::RemoveMediaSpoiler);
 		addToggleOption(content, EnhancedSettings::Option::ShowMediaMetadata);
+		addToggleOption(content, EnhancedSettings::Option::ShowGifMediaControls);
 		addToggleOption(content, EnhancedSettings::Option::HideBlockedMessages);
 
 		auto richMessagePreviewBlocksValue = rpl::combine(

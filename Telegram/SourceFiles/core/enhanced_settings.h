@@ -58,6 +58,7 @@ enum class OptionId {
 	DisablePremiumAnimation,
 	DisableGlobalSearch,
 	ShowMediaMetadata,
+	ShowGifMediaControls,
 	CommunityChatClick,
 	ShowGroupSenderAvatar,
 	ShowGroupSenderOnlineStatus,
@@ -134,6 +135,8 @@ inline constexpr auto DisableGlobalSearch
 	= Key<bool>{ OptionId::DisableGlobalSearch };
 inline constexpr auto ShowMediaMetadata
 	= Key<bool>{ OptionId::ShowMediaMetadata };
+inline constexpr auto ShowGifMediaControls
+	= Key<bool>{ OptionId::ShowGifMediaControls };
 inline constexpr auto CommunityChatClick
 	= Key<bool>{ OptionId::CommunityChatClick };
 inline constexpr auto ShowGroupSenderAvatar
