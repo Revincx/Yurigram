@@ -121,28 +121,6 @@ If NO image was grabbed:
 - **New icon with no image**: Ask the user to provide a screenshot. STOP.
 - **Follow-up with no image**: The existing `source.png` in the icon root carries forward. Copy it to `.ai/icon_{name}/{LETTER}/source.png`. If no source.png exists at all, ask the user for an image.
 
-### Step 0g: Verify renderer
-
-Locate the render tool (`codegen_style` with `--render-svg` mode):
-
-```bash
-if [[ "$OSTYPE" == darwin* ]]; then
-    ls out/Telegram/codegen/codegen/style/Debug/codegen_style
-else
-    ls out/Telegram/codegen/codegen/style/Debug/codegen_style.exe
-fi
-```
-
-If missing, build it: `cmake --build out --config Debug --target codegen_style`
-
-Test on a known good SVG (use the appropriate binary path for the OS):
-```bash
-CODEGEN=$(if [[ "$OSTYPE" == darwin* ]]; then echo out/Telegram/codegen/codegen/style/Debug/codegen_style; else echo out/Telegram/codegen/codegen/style/Debug/codegen_style.exe; fi)
-$CODEGEN --render-svg Telegram/Resources/icons/menu/tag_add.svg .ai/icon_{name}/test_render.png 512
-```
-
-If works → delete test render, set `RENDER_AVAILABLE = true`. If fails → `RENDER_AVAILABLE = false`.
-
 ## Phase 1: Vectorize & Post-process
 
 ### Step 1a: Call vectosolve
@@ -236,18 +214,9 @@ Look at the icon's visual structure and decide how paths should combine:
 
 Write the final SVG to `.ai/icon_{name}/{LETTER}.svg`.
 
-### Step 1c: Render
-
-If `RENDER_AVAILABLE`:
-```bash
-$CODEGEN --render-svg ".ai/icon_{name}/{LETTER}.svg" ".ai/icon_{name}/render_{LETTER}.png" 512
-```
-
-Read the render to visually verify the result.
-
 ## Phase 2: Review
 
-After rendering, assess the result:
+Assess the SVG source against the requested icon:
 
 1. **Recognizable?** The icon should be clearly identifiable as the intended symbol.
 2. **Scale reasonable?** Should fill the space appropriately with ~2-3px padding.
@@ -290,10 +259,9 @@ When a follow-up has no attached image, the user wants to refine the existing SV
 
 1. Skip Phase 1 (no vectosolve call needed).
 2. Read the latest SVG (`.ai/icon_{name}/{prev_letter}.svg`).
-3. Read the latest render if available.
-4. Apply the user's requested changes by editing the SVG directly.
-5. Save as `.ai/icon_{name}/{LETTER}.svg`.
-6. Render, review, and output as normal (Phases 1c → 3).
+3. Apply the user's requested changes by editing the SVG directly.
+4. Save as `.ai/icon_{name}/{LETTER}.svg`.
+5. Review the SVG source and output it as normal.
 
 If the changes are too complex for manual SVG editing, suggest the user provide a new screenshot instead.
 
@@ -302,5 +270,4 @@ If the changes are too complex for manual SVG editing, suggest the user provide 
 - If clipboard grab fails → tell user to re-copy and retry.
 - If vectosolve returns an error → report it and suggest a different/cleaner screenshot.
 - If vectosolve returns SVG that can't be parsed → save raw output for debugging, report to user.
-- If the render helper fails → set `RENDER_AVAILABLE = false`, continue with SVG-only review.
 - If post-processing produces a broken SVG → fall back to the raw vectosolve output and do lighter cleanup.

@@ -2,8 +2,8 @@
 
 Apply this adapter only when a command explicitly loads it. The shared
 `.agents/skills/` workflow remains authoritative for task selection, artifacts,
-source changes, builds, testing, commits, resumability, and AI publication.
-This file adapts harness mechanics and removes unnecessary text normalization.
+source changes, non-interactive builds, commits, resumability, and AI publication.
+This file adapts host mechanics and removes unnecessary text normalization.
 
 ## Delegation
 
@@ -113,7 +113,7 @@ artifact, rebuild, or summary in Claude Code. In particular:
 
 Let normal Claude editing preserve the checkout's existing text convention.
 This exception removes only explicit line-ending work; it does not relax any
-content validation, owned-path rule, build, review, test, or publication gate.
+content validation, owned-path rule, build, review, or publication gate.
 
 ## Source lineage and branch routing
 
@@ -135,7 +135,7 @@ leaf:
   switch safely in the parent and resume that Agent id when Claude exposes one.
   If it exposes no resumable id, start one replacement performer only after the
   returned worker and repository checks prove there are no phase artifacts,
-  source refs, overlay, or writes. This is a clean setup retry, not a second
+  source refs or writes. This is a clean setup retry, not a second
   concurrent performer.
 - A lineage mismatch first established after Phase 1 stays inside the
   performer: it restores owned/disposable state and publishes the shared
@@ -147,15 +147,6 @@ leaf:
 disposition for requests whose sole work is moving an existing commit between
 branches. Their initial prompts already require this adapter and the applicable
 shared skill, so do not restate or weaken that routing rule in a leaf prompt.
-
-## UI-driver capability
-
-The shared Computer Use reference describes Codex's driver. In Claude Code,
-treat that particular driver as unavailable unless an equivalent UI-driver
-tool is actually exposed in the current session. Preserve the same policy:
-`auto` uses the already planned overlay fallback, while `required` reports the
-exact unverified interaction. Driver availability never permits skipping the
-selected runtime, overlay, account-safety, evidence, or other safety checks.
 
 ## Concurrent routing lane
 

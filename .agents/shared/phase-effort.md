@@ -9,7 +9,7 @@ evidence loop; it does not create extra delegation or change phase ownership.
 
 | Work | Effort |
 | --- | --- |
-| Routine scheduler bookkeeping, helper-driven setup/publication, running already specified build or test commands, collecting artifacts, and mechanical text normalization | `medium`, only while no design, diagnosis, source repair, or verdict is needed |
+| Routine scheduler bookkeeping, helper-driven setup/publication, running an already specified non-interactive build, collecting artifacts, and mechanical text normalization | `medium`, only while no design, diagnosis, source repair, or verdict is needed |
 | Context and planning, visual design, independent assessment, implementation, all review lenses and synthesis, fixes, evidence design/authoring/assessment, failure diagnosis, and convergence or rescoping | Default to `xhigh` |
 | Inbox planning, split/discovery routing, pending-task consolidation, and a stateful performer that owns the whole implementation/evidence campaign | Default to `xhigh` |
 

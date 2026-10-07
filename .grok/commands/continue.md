@@ -16,7 +16,7 @@ only its routed tasks. Never add unrelated tasks observed later in the
 run. Append and implement only new follow-up tasks routed from results
 produced by this invocation, including their transitive discovered
 follow-ups. Preserve the shared skill's source-project inheritance rule;
-detaching a follow-up requires its affirmative independence test. Continue
+detaching a follow-up requires its affirmative independence criterion. Continue
 until that frozen-and-derived batch reaches the scheduler's normal stop
 condition or a global hard stop. Do not stop on your own because a compact
 is approaching.

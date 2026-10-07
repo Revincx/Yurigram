@@ -9,11 +9,11 @@ Read `.claude/ai-workflow-adapter.md` and
 `.agents/skills/process-inbox/SKILL.md` completely. Follow the shared skill
 with the Claude adapter's delegation and text-handling substitutions. Process
 the ignored inbox associated with the current Telegram Desktop checkout. Route
-and plan tasks only; do not implement, build, or test them.
+and plan tasks only; do not implement, build, or perform local validation.
 
 Preserve the shared skill's project-continuity bias. A request derived from
 existing project work stays in that project unless it passes the skill's
-affirmative independence test; shared or cross-surface files alone do not make
+affirmative independence criterion; shared or cross-surface files alone do not make
 it standalone.
 
 Apply the shared receipt-only disposition to requests whose sole purpose is

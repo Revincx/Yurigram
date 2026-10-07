@@ -3,7 +3,7 @@
 Run this only from the `continue` scheduler for one task already published as
 `status: split-required`. It is a deep task-routing transaction, not task
 implementation. Inspect Telegram source and the retained implementation, but
-do not edit, reset, stash, commit, build, or test Telegram source.
+do not edit, reset, stash, commit, build, launch Telegram, or create tests.
 
 ## Read the retained task
 
@@ -12,7 +12,7 @@ Read the source task's complete `task.md`, project context, dependencies,
 and `work/carried-work.json`. Inspect the complete retained source diff and
 the relevant adjacent code. The proposal is input, not a set of titles to copy
 blindly: refine it into the smallest independently shippable and independently
-testable product boundaries.
+independently reviewable product boundaries.
 
 Each replacement must have one useful outcome, a direct acceptance oracle, and
 enough self-contained context to run without this routing session. Split at
@@ -22,7 +22,7 @@ their only callers together. Add a final integration task only when integration
 has behavior not already proved by the component tasks.
 
 Preserve the source task's project by default. A replacement may leave that
-project only when it remains coherent, implementable, and testable with the
+project only when it remains coherent, implementable, and reviewable with the
 project changes absent. Preserve the source task's existing dependencies where
 their code is still required. Order replacement dependencies by actual shipped
 code or behavior, not by the order in which the plan happened to mention them.
@@ -33,7 +33,7 @@ code or behavior, not by the order in which the plan happened to mention them.
 the owned working diff. When it says `implementation: retained`, designate
 exactly one first replacement as the implementation carrier. Shape that task so
 the whole retained diff is inside a coherent boundary it can inspect, correct,
-review, build, and test. If the diff spans the future slices, a real first task
+review and build. If the diff spans the future slices, a real first task
 that stabilizes and proves the shared foundation is appropriate; an unreviewed
 checkpoint or a task whose only result is storing the patch is not.
 

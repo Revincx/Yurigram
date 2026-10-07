@@ -2,8 +2,8 @@
 
 Apply this adapter only when a command or shared skill explicitly loads it.
 The shared `.agents/skills/` workflow remains authoritative for task
-selection, artifacts, source changes, builds, testing, commits,
-resumability, and AI publication. This file adapts harness mechanics.
+selection, artifacts, source changes, non-interactive builds, commits,
+resumability, and AI publication. This file adapts host mechanics.
 
 ## Delegation
 
@@ -105,22 +105,8 @@ phase, artifact, rebuild, or summary. In particular:
 
 Let normal Grok editing preserve the checkout's existing text convention.
 This exception removes only explicit line-ending work; it does not relax
-any content validation, owned-path rule, build, review, test, or
+any content validation, owned-path rule, build, review, or
 publication gate.
-
-## UI-driver capability
-
-The shared Computer Use reference describes Codex's driver. In Grok,
-treat that driver as unavailable unless an equivalent UI-driver tool is
-actually exposed in the current session. Preserve the same policy: `auto`
-uses the already planned overlay fallback, while `required` reports the
-exact unverified interaction. Driver availability never permits skipping
-selected runtime, overlay, account-safety, evidence, or other safety checks.
-
-Judge overlay screenshots and supplied mockups by reading the image files
-with `read_file`. Saved PNG/JPG artifacts are visual input. A missing
-desktop driver is not missing evidence when the overlay captured the
-widget or window.
 
 ## Compaction
 

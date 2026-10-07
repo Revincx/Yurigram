@@ -1,6 +1,6 @@
 ---
 name: process-inbox
-description: Process the local ignored ai-tdesktop inbox into durable, independently testable Telegram Desktop task records while task execution worktrees remain active. Use when the user invokes $process-inbox or /process-inbox, asks to triage or process ai-tdesktop/inbox/inbox.md, or wants inbox notes and pasted images routed into new or existing AI projects and dated tasks without implementing them.
+description: Process the local ignored ai-tdesktop inbox into durable, independently reviewable Telegram Desktop task records while task execution worktrees remain active. Use when the user invokes $process-inbox or /process-inbox, asks to triage or process ai-tdesktop/inbox/inbox.md, or wants inbox notes and pasted images routed into new or existing AI projects and dated tasks without implementing them.
 ---
 
 # Process Inbox
@@ -12,7 +12,8 @@ Before assigning workers, read [phase effort](../../shared/phase-effort.md)
 and apply its scope-based effort selection and host mappings.
 
 Turn the human-written ignored inbox into tracked planning artifacts. Route and
-plan only: do not edit Telegram source, build, test, claim, or implement tasks.
+plan only: do not edit Telegram source, build, create or run tests, launch a
+GUI, claim, or implement tasks.
 
 ## Workspace
 
@@ -113,7 +114,7 @@ record feature and code lineage, not exclusive ownership of every touched
 file.
 
 Route a derived request to another project or to `project: null` only when it
-remains coherent, implementable, and independently testable in a checkout
+remains coherent, implementable, and independently reviewable in a checkout
 where the originating project's changes are absent or reverted. Record that
 concrete independence evidence in the receipt; "cross-cutting", "cleanup", or
 "broader than the source task" is not enough. For a request without a source
@@ -123,7 +124,7 @@ essential context, and use a standalone task only when no project does.
 Do not create generic holding projects such as `fixes`. A release batch of
 unrelated regressions normally becomes standalone tasks or tasks in existing
 domain projects. Group requests into one task only when they form one cohesive,
-independently testable behavior that can be implemented, reviewed, and tested
+independently reviewable behavior that can be implemented and reviewed
 as one normal pass.
 
 Split at product boundaries, not arbitrary file or line-count boundaries. A
@@ -134,7 +135,7 @@ failure analysis, or evidence setup. New network, persistence, concurrency or
 ownership machinery plus application lifecycle/UI integration are especially
 strong split signals when each can be exercised independently. Shared project
 context, overlapping files, or one eventual feature does not by itself justify
-paying one review and test loop over their combined implementation.
+paying one review pass over their combined implementation.
 
 Do not over-split inseparable changes: keep a small API and its only caller
 together when neither has a meaningful standalone result, and keep one atomic
@@ -149,7 +150,7 @@ request plus light source inspection and deliberately does not construct the
 implementation plan. The later independent perform-task assessment sees exact
 files, APIs, phases, ownership boundaries, and evidence design; it may veto the
 single-task shape when that richer proof exposes independently shippable and
-testable boundaries. That veto does not mean task sizing is based on elapsed
+reviewable boundaries. That veto does not mean task sizing is based on elapsed
 time or diff length, and it does not authorize the performer to mutate the
 queue itself. The performer publishes `split-required`; the checkout scheduler
 then launches a dedicated deep split transaction that creates replacements,
@@ -168,7 +169,7 @@ The helper moves the project back to `projects/<slug>`, rewrites its relative
 links, and leaves the restored files staged for this transaction's commit.
 Never point a task at a path under `projects/archive/`.
 
-Briefly inspect Telegram source when needed to understand scope and testable
+Briefly inspect Telegram source when needed to understand scope and reviewable
 seams. Do not plan implementation internals and do not modify the source tree.
 
 ## Assign task paths
@@ -215,28 +216,10 @@ Omit `Inputs` when none are used. For visual work, include the design basis and
 the exact visual/layout evidence expected. Copy every pertinent supplied file
 into `input/`; never reference the ignored inbox or its backup from a task.
 
-Keep acceptance criteria to what actually proves the requested behavior. Never
-write a test-data integrity criterion: the live `TelegramForcePortable` folder
-is a disposable copy, so a task must not ask a performer to hash, back up,
-compare, or restore the account, to verify any setting or folder is unchanged,
-or to leave the account as it was found. A run may leave templates, theme,
-wallpaper, window geometry and interface scale mutated. State needs restoring
-only where a later measurement in the same run depends on it, never as an
-end-of-run obligation. The test-loop's SETUP owns the folder — it requires the
-golden `test_TelegramForcePortable`, reuses a live folder carrying the `testing`
-marker, and otherwise prepares a fresh copy — and its `test-run` command already
-launches with `-testagent -noupdate`, so no task needs to require either flag.
-Every such criterion costs a performer real time and proves nothing about the
-product.
-
-Never write an acceptance criterion that can only be satisfied by adding
-debug machinery to production code — `#ifdef _DEBUG` blocks, debug-only
-types, observation structs, counters, or hooks in product translation units.
-Observability belongs to the disposable overlay and the permanent
-`Telegram/SourceFiles/test/` helpers (see "Debug-Only Code" in the source
-checkout's `AGENTS.md`). A request whose proof seems to demand production
-instrumentation is misdesigned: route the product behavior, and let the
-performer's harness own how it is observed.
+Keep acceptance criteria focused on the requested behavior and reviewable from
+the source change. Do not specify local test data, tests, probes, application
+launches, GUI interaction, screenshots, or debug instrumentation. If a request
+depends on runtime behavior, record that behavior as a user verification item.
 
 Create `state.yaml` in this exact field order:
 
@@ -271,12 +254,10 @@ processing never reserves work: new tasks always remain
 The checkout tag belongs in the receipt only.
 
 Every new task uses `type: implement`. Do not predict a cheap or expensive
-execution profile while routing: the performer selects review specialists and
-evidence instruments after inspecting the real code and risks. Keep acceptance
-criteria outcome-focused. Name a required build, probe, app run, interaction,
-or screenshot only when that instrument is itself part of the requested result
-or no other instrument could decide the claim from the facts already known to
-the planner.
+execution profile while routing: the performer selects review specialists after
+inspecting the real code and risks. Keep acceptance criteria outcome-focused.
+Name a non-interactive build only when it is part of the requested result;
+runtime behavior belongs in the user handoff.
 
 For a new project, create `projects/<slug>/project.md` with a concise durable
 scope and `projects/<slug>/tasks.md` with task links. For an existing project,

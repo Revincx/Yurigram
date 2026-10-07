@@ -26,8 +26,11 @@ not plan or implement Telegram changes in this scheduler session.
 This is the default development command and the successor to the old `task`
 and `implement` workflows. Inbox processing may bootstrap an otherwise idle
 invocation exactly once and owns request splitting and project routing;
-`perform-task` owns context, planning, implementation, review, Debug build,
-test-loop, evidence, and final publication.
+`perform-task` owns context, planning, implementation, review, any authorized
+non-interactive Debug build, and final publication.
+
+The checkout's agent-validation boundary applies to every worker in this
+workflow: do not write or execute tests, and do not launch or drive a GUI.
 
 ## Resolve the workspace
 
@@ -280,10 +283,9 @@ succeeds. The one exception is the checkout-owned first replacement whose
 carrier: start it
 with the retained source state intact, and let the helper revalidate the sealed
 worktree before transferring task refs. Do not require a Telegram executable,
-portable account, desktop, Docker daemon, or
-other instrument before assessment selects it. The performer gates every
-selected instrument before using it and records an unavailable platform or
-stage precisely instead of preventing unrelated task work from starting.
+desktop, Docker daemon, or other runtime instrument before assessment. The
+performer records runtime-dependent behavior precisely under `Unverified:`
+instead of preventing unrelated task work from starting.
 
 ### 1. Resume active batch work
 
@@ -315,15 +317,15 @@ python3 .agents/skills/process-inbox/scripts/workspace.py retry \
   --task <YYYY/MM/DD/slug> [--require <explicit-source-task-id> ...]
 ```
 
-This preserves its ownership, source recovery refs, plans, reviews, tests,
-result, and evidence while changing the slot worktree back to local
+This preserves its ownership, source recovery refs, plans, reviews, and result
+while changing the slot worktree back to local
 `in-progress`. It publishes no `Resume` commit. Spawn its performer at the
 first incomplete validated boundary.
 
 Add the id to `attempted_blocked` only if the performer later publishes a
-genuine new `Block` boundary under the validation below. A test-campaign cap,
-`TEST_FLAW`, blank/missing evidence, or another recoverable harness failure is
-not genuine and does not consume this invocation's blocked retry.
+genuine new `Block` boundary under the validation below. A missing local
+runtime check is not a task blocker and does not consume this invocation's
+blocked retry.
 
 ### 4. Start recorded reserved work
 
@@ -427,8 +429,8 @@ split worker with `fork_turns: "none"`. Give it `source_root`, `slot_worktree`,
 to delegate and to read
 `.agents/skills/continue/references/split-required-task.md` completely. It may
 inspect Telegram source and edit/publish AI task, project, dependency, and
-receipt state; it must not edit, reset, stash, commit, build, or test Telegram
-source.
+receipt state; it must not edit, reset, stash, commit, build, launch Telegram,
+or create tests.
 
 Validate its canonical `Split <source-id>` result and refreshed queue. Replace
 the source id in `batch_task_ids` at its existing position with the ordered
@@ -445,18 +447,10 @@ unclaimed `todo`. A split publication race is retried normally. A semantic
 conflict, unavailable remote, changed worktree seal, or incoherent carrier is a
 global hard stop with the source result and implementation left recoverable.
 
-Before accepting a canonical test block, read `work/result.md` and
-`work/test.md`. It is genuine only when the verdict is not `TEST_FLAW`, does
-not cite `MAX_TEST_RUNS` or a missing/blank capture as the blocker, and
-`work/test.md` contains `## Recovery exhaustion`; the separately documented
-Computer Use infrastructure-unavailable verdict is the only exception to the
-section requirement. If an older or concurrently finishing performer
-published a boundary that fails this check, immediately `retry` it in this
-same invocation, keep it out of `attempted_blocked`, and spawn one fresh
-performer at the focused test-recovery boundary. Preserve all positive
-evidence and rerun only unmet checks. New performers cannot normally publish
-such a boundary because `workspace.py finish` enforces the same rule; this is
-defense for legacy state.
+Before accepting a canonical block, read `work/result.md`. A missing local
+runtime check does not establish a block. If an older performer published a
+block based only on unavailable local execution, immediately `retry` it in this
+invocation and resume the normal non-interactive workflow.
 
 An interruption or environment stop never becomes a convenience `Block`.
 After a genuine `Block`, add the task id to `attempted_blocked` and continue
@@ -464,17 +458,9 @@ with independent work. A source-lineage mismatch first proven after Phase 1 is
 such a genuine task-local Block: continue with batch tasks that do not depend
 on it and whose own lineage gates pass. A pre-Phase-1 lineage stop is not a
 Block or global hard stop; apply the safe mid-queue branch-switch rule above and
-resume the same performer. A dirty source checkout, a file-lock build failure that
-remains after `perform-task` exhausts the shared exact-checkout recovery,
-missing test account, unsafe publication conflict, or comparable global safety
-failure stops the loop. The first lock signature never stops the batch.
-
-The missing `test_TelegramForcePortable` golden account is the only
-portable-folder global stop. All live/real folder combinations must be
-reconciled by `perform-task` according to the shared test-loop protocol.
-Computer Use being unavailable because macOS is locked is never a scheduler
-stop; the performer must continue with the in-binary overlay driver and
-artifact-based assessment.
+resume the same performer. A dirty source checkout, a file-lock build failure,
+an unsafe publication conflict, or a comparable global safety failure stops the
+loop.
 
 ## Route discovered follow-ups
 
@@ -508,7 +494,7 @@ untouched, so an active performer's local phase state never conflicts. After a
 crash, an unpublished routing commit is resumed by rerunning
 `route-publish --source-task <id>` with no paths.
 
-The worker must deduplicate existing tasks, create independently testable
+The worker must deduplicate existing tasks, create independently reviewable
 unclaimed `todo` tasks and justified project updates, write a discovery
 receipt, and write the source task's routing marker. When it creates at least
 one task, it must also write `work/consolidation-pending.md` under the source
@@ -548,7 +534,7 @@ when it is already approved. State that code-lineage requirement in the new
 task so it is not attempted on a branch without the project changes.
 
 Detach a discovered task to another project or to `project: null` only when the
-worker proves it remains coherent, implementable, and independently testable
+worker proves it remains coherent, implementable, and independently reviewable
 with the source project's changes absent or reverted. Touching shared code,
 serving another surface, or having a broader title is not proof: projects
 record feature and code lineage, not exclusive file ownership. The discovery
@@ -557,7 +543,7 @@ is archived, restore it before adding the task. When the source task has no
 project, apply the ordinary project-selection rules from `process-inbox`.
 
 First apply the scope filter, before any disposition. A coverage follow-up
-exists to prove **the source task's own change**, so run the revert test on each entry: if
+exists to prove **the source task's own change**, so apply the revert criterion to each entry: if
 reverting that task's diff could not change the outcome, the entry is about
 pre-existing behavior and no coverage task is created for it.
 
@@ -594,23 +580,10 @@ generating coverage work without end.
 Entries that survive the filter get exactly one of two dispositions, and the
 receipt records which and why:
 
-- **Routable** when an available checkout or capable host can close the gap.
+- **Routable** when an available checkout or capable host can address the gap.
   Create an ordinary `type: implement` task naming the exact behavior to
-  establish. It first measures the claim with the adaptive evidence loop. If
-  the behavior deviates, it repairs and re-tests it in the same task. If the
-  behavior already holds and no permanent change is warranted, it may approve
-  as `Outcome: already-satisfied` with no source commit and with the measurement
-  evidence retained.
-
-  This disposition should be rare. `pipeline.md` requires a performer to
-  close any gap its own checkout can measure by adding a test run while it still
-  holds the context, the branch, the overlay and the build, rather than deferring
-  it — so a routable entry means that bar slipped. Route it anyway, because the
-  coverage is genuinely missing and the source run's context is gone, but state
-  plainly in the receipt that the source run could have closed it in context.
-  That sentence is the measurable signal that the pipeline is exporting its own
-  test coverage into the queue; read a run of them as a defect to fix upstream,
-  never as normal throughput.
+  establish. The performer reviews the relevant code and repairs it when
+  needed. Runtime-dependent outcomes remain an explicit user handoff.
 - **Infrastructure-limited** when closing it needs something the project does
   not have — a second account, funded external value, real server-backed cloud
   state. Record it in the receipt only. Do not create a task that would be
@@ -625,7 +598,7 @@ question — whether this task is the one that owes the measurement at all.
 Every discovered task uses `type: implement`; assessment, not routing, chooses
 its review and evidence depth. For a coverage follow-up, write the source
 task's diff into it as its scope boundary, naming that task and what it changed.
-Its acceptance criteria must all pass the revert test against that boundary and
+Its acceptance criteria must all meet the revert criterion against that boundary and
 must not enumerate a parameter range the source task never named. If a prior
 coverage task already measured a deviation, route only the repair with the
 measured expected and actual values; do not create another measurement of the
@@ -657,7 +630,7 @@ Tell it to read
 `.agents/skills/continue/references/consolidate-pending-tasks.md` completely and
 own exactly one queue-wide consolidation pass. The worker may edit and publish
 AI task, project, and receipt state, but must not touch Telegram source, build,
-test, claim, start, approve, or block work. Wait and validate it like the routing
+perform local validation, claim, start, approve, or block work. Wait and validate it like the routing
 worker; keep its task-description scan and merge reasoning out of the scheduler
 context.
 

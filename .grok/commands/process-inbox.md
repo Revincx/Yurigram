@@ -9,11 +9,11 @@ Read `.grok/ai-workflow-adapter.md` and
 `.agents/skills/process-inbox/SKILL.md` completely. Follow the shared skill
 with the Grok adapter's delegation, depth, and text-handling substitutions.
 Process the ignored inbox associated with the current Telegram Desktop
-checkout. Route and plan tasks only; do not implement, build, or test them.
+checkout. Route and plan tasks only; do not implement, build, or perform local validation.
 
 Preserve the shared skill's project-continuity bias. A request derived from
 existing project work stays in that project unless it passes the skill's
-affirmative independence test; shared or cross-surface files alone do not
+affirmative independence criterion; shared or cross-surface files alone do not
 make it standalone.
 
 Parallel task work is expected. Use the shared skill's `inbox_worktree`,
