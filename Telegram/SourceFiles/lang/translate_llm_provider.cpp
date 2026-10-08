@@ -268,7 +268,7 @@ private:
 				_replies.erase(ranges::remove_if(
 					_replies,
 					[=](const QPointer<QNetworkReply> &entry) {
-						return entry.get() == reply;
+						return entry.data() == reply;
 					}), _replies.end());
 				reply->deleteLater();
 				--_active;
