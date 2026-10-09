@@ -39,6 +39,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/components/promo_suggestions.h"
 #include "data/components/recent_forward_targets.h"
 #include "data/components/recent_inline_bots.h"
+#include "data/components/recent_money_recipients.h"
 #include "data/components/recent_peers.h"
 #include "data/components/recent_shared_media_gifts.h"
 #include "data/components/scheduled_messages.h"
@@ -52,6 +53,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_user.h"
 #include "data/data_download_manager.h"
 #include "data/stickers/data_stickers.h"
+#include "wallet/wallet_session.h"
 #include "window/window_session_controller.h"
 #include "window/window_controller.h"
 #include "window/window_lock_widgets.h"
@@ -122,6 +124,7 @@ Session::Session(
 , _attachWebView(std::make_unique<InlineBots::AttachWebView>(this))
 , _recentPeers(std::make_unique<Data::RecentPeers>(this))
 , _recentForwardTargets(std::make_unique<Data::RecentForwardTargets>(this))
+, _recentMoneyRecipients(std::make_unique<Data::RecentMoneyRecipients>(this))
 , _recentSharedGifts(std::make_unique<Data::RecentSharedMediaGifts>(this))
 , _giftAuctions(std::make_unique<Data::GiftAuctions>(this))
 , _scheduledMessages(std::make_unique<Data::ScheduledMessages>(this))
@@ -138,6 +141,7 @@ Session::Session(
 , _factchecks(std::make_unique<Data::Factchecks>(this))
 , _locationPickers(std::make_unique<Data::LocationPickers>())
 , _credits(std::make_unique<Data::Credits>(this))
+, _wallet(std::make_unique<Wallet::Session>(this))
 , _promoSuggestions(std::make_unique<Data::PromoSuggestions>(this, [=] {
 	using State = Data::SetupEmailState;
 	if (_promoSuggestions->setupEmailState() == State::Setup

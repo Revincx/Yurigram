@@ -161,6 +161,9 @@ public:
 	[[nodiscard]] virtual rpl::producer<QString> subtitle() {
 		return nullptr;
 	}
+	[[nodiscard]] virtual rpl::producer<QString> titleBadge() {
+		return nullptr;
+	}
 	[[nodiscard]] virtual auto titleStories()
 		-> rpl::producer<Dialogs::Stories::Content>;
 

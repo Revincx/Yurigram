@@ -286,6 +286,7 @@ Before committing, verify:
 - every new task has `task.md`, valid `state.yaml`, and a falsifiable
   acceptance result;
 - every task link, dependency, and copied input exists;
+- no supplied video and no full frame extraction is tracked;
 - no task or project reference points into `projects/archive/`;
 - no raw inbox path, `.local/`, browser profile, portable account, credential,
   complete run directory, or complete build log is tracked;

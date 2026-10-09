@@ -436,6 +436,30 @@ rpl::producer<bool> AmPremiumValue(not_null<Main::Session*> session) {
 	return PeerPremiumValue(session->user());
 }
 
+QString BotStatusText(not_null<UserData*> user) {
+	struct Suffix {
+		QStringView text;
+		tr::phrase<> phrase;
+	};
+	static constexpr auto kSuffixes = std::array{
+		Suffix{ u"app", tr::lng_status_bot_app },
+		Suffix{ u"agent", tr::lng_status_bot_agent },
+		Suffix{ u"ai", tr::lng_status_bot_ai },
+		Suffix{ u"game", tr::lng_status_bot_game },
+		Suffix{ u"gay", tr::lng_status_bot_gay },
+	};
+	const auto &usernames = user->usernames();
+	if (!usernames.empty()) {
+		const auto &username = usernames.front();
+		for (const auto &suffix : kSuffixes) {
+			if (username.endsWith(suffix.text, Qt::CaseInsensitive)) {
+				return suffix.phrase(tr::now);
+			}
+		}
+	}
+	return tr::lng_status_bot(tr::now);
+}
+
 TimeId SortByOnlineValue(not_null<UserData*> user, TimeId now) {
 	if (user->isServiceUser() || user->isBot()) {
 		return -1;

@@ -739,7 +739,11 @@ LottieIcon CreateLottieIcon(
 
 	}, raw->lifetime());
 
-	return { .widget = std::move(object), .animate = std::move(animate) };
+	return {
+		.widget = std::move(object),
+		.animate = std::move(animate),
+		.animating = [=] { return icon->animating(); },
+	};
 }
 
 SliderWithLabel MakeSliderWithLabel(
