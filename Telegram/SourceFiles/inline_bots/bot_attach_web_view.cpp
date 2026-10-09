@@ -17,6 +17,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/random.h"
 #include "base/timer_rpl.h"
 #include "base/unixtime.h"
+#include "bot_use/bot_use_sending.h"
 #include "boxes/music_attach_box.h"
 #include "boxes/peers/choose_peer_box.h"
 #include "boxes/peers/create_managed_bot_box.h"
@@ -245,18 +246,6 @@ constexpr auto kPopularAppBotsLimit = 100;
 	}, [&](const MTPDjoinChatBotResultWebView &) {
 		return QString();
 	});
-}
-
-[[nodiscard]] Ui::LocationPickerConfig ResolveMapsConfig(
-		not_null<Main::Session*> session) {
-	//const auto &appConfig = session->appConfig();
-	//auto map = appConfig.get<base::flat_map<QString, QString>>(
-	//	u"tdesktop_config_map"_q,
-	//	base::flat_map<QString, QString>());
-	return {
-		.mapsToken = u"pk.eyJ1Ijoiam9obi1wcmVzdG9uIiwiYSI6ImNseTVod2Y3MDBiczMyanM3d3E3NXloM3kifQ.K12vn1eHYqFAoqVWvnMXiA"_q,
-		.geoToken = u"pk.eyJ1Ijoiam9obi1wcmVzdG9uIiwiYSI6ImNseWg0OWpvNTAwa3AycnF5ZDM3a2dkYmUifQ.n12eA4c3AygrB9yinAp2Ww"_q,
-	};
 }
 
 [[nodiscard]] Window::SessionController *WindowForThread(
@@ -2959,7 +2948,7 @@ void ChooseAndSendLocation(
 		const auto strong = weak.get();
 		const auto ephemeralReply = session->ephemeralMessages()
 			.isEphemeralBotReply(action.replyTo.messageId);
-		if (strong && !ephemeralReply) {
+		if (strong && !ephemeralReply && !BotUse::Selected(action.history)) {
 			const auto withPaymentApproved = [=](int stars) {
 				if (const auto onstack = state->send) {
 					auto copy = action;
@@ -3112,7 +3101,7 @@ std::unique_ptr<Ui::DropdownMenu> MakeAttachBotsMenu(
 	}
 	const auto session = &controller->session();
 	const auto locationType = ChatRestriction::SendOther;
-	const auto config = ResolveMapsConfig(session);
+	const auto config = Ui::LocationPicker::Config(session);
 	if (Data::CanSendAnyOf(peer, locationType, false)
 		&& Ui::LocationPicker::Available(config)) {
 		raw->addAction(tr::lng_maps_point(tr::now), [=] {

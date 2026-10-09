@@ -23,6 +23,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "lottie/lottie_icon.h"
 #include "main/session/session_show.h"
+#include "main/main_app_config.h"
 #include "main/main_session.h"
 #include "mtproto/mtproto_config.h"
 #include "ui/chat/attach/attach_bot_webview.h"
@@ -776,6 +777,23 @@ LocationPicker::LocationPicker(Descriptor &&descriptor)
 
 std::shared_ptr<Main::SessionShow> LocationPicker::uiShow() {
 	return Main::MakeSessionShow(nullptr, _session);
+}
+
+LocationPickerConfig LocationPicker::Config(not_null<Main::Session*> session) {
+	auto map = session->appConfig().get<base::flat_map<QString, QString>>(
+		u"tdesktop_config_map"_q,
+		base::flat_map<QString, QString>());
+	auto result = LocationPickerConfig{
+		.mapsToken = map[u"maps"_q],
+		.geoToken = map[u"geo"_q],
+	};
+	if (result.mapsToken.isEmpty()) {
+		result.mapsToken = u"pk.eyJ1Ijoiam9obi1wcmVzdG9uIiwiYSI6ImNseTVod2Y3MDBiczMyanM3d3E3NXloM3kifQ.K12vn1eHYqFAoqVWvnMXiA"_q;
+	}
+	if (result.geoToken.isEmpty()) {
+		result.geoToken = u"pk.eyJ1Ijoiam9obi1wcmVzdG9uIiwiYSI6ImNseWg0OWpvNTAwa3AycnF5ZDM3a2dkYmUifQ.n12eA4c3AygrB9yinAp2Ww"_q;
+	}
+	return result;
 }
 
 bool LocationPicker::Available(const LocationPickerConfig &config) {

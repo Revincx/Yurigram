@@ -972,8 +972,10 @@ bool SendDice(MessageToSend &message) {
 }
 
 void SendLocation(SendAction action, float64 lat, float64 lon) {
-	if (BotUse::Selected(action.history)) {
-		BotUse::ShowSendError(action.history, { u"UNSUPPORTED_MEDIA"_q });
+	if (const auto bot = BotUse::Selected(action.history)) {
+		if (!BotUse::SendLocation(bot, action, { .lat = lat, .lon = lon })) {
+			return;
+		}
 		return;
 	}
 	SendSimpleMedia(
@@ -987,8 +989,10 @@ void SendLocation(SendAction action, float64 lat, float64 lon) {
 }
 
 void SendVenue(SendAction action, Data::InputVenue venue) {
-	if (BotUse::Selected(action.history)) {
-		BotUse::ShowSendError(action.history, { u"UNSUPPORTED_MEDIA"_q });
+	if (const auto bot = BotUse::Selected(action.history)) {
+		if (!BotUse::SendLocation(bot, action, venue)) {
+			return;
+		}
 		return;
 	}
 	SendSimpleMedia(

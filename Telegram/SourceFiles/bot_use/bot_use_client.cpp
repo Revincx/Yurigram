@@ -727,7 +727,9 @@ void Client::sendMedia(const Op &operation) {
 	}
 	using Flag = MTPmessages_SendMedia::Flag;
 	const auto webpage = operation->kind == Kind::Text;
-	const auto caption = webpage ? operation->text.value_or(TextWithEntities()) : operation->media.front().caption;
+	const auto caption = operation->media.empty()
+		? operation->text.value_or(TextWithEntities())
+		: operation->media.front().caption;
 	const auto entities = EntitiesToMTP(caption.entities, _record.info.userId);
 	operation->submitted = true;
 	rpc(operation, MTPmessages_SendMedia(

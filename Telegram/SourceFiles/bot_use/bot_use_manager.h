@@ -8,6 +8,10 @@ namespace Storage {
 class Domain;
 } // namespace Storage
 
+namespace Data {
+struct InputVenue;
+} // namespace Data
+
 namespace BotUse {
 
 struct Operation;
@@ -97,6 +101,11 @@ public:
 		const std::shared_ptr<FilePrepareResult> &file,
 		Completion done = {},
 		UploadCallback progress = {});
+	[[nodiscard]] OperationId sendLocation(
+		BotId bot,
+		const Api::SendAction &action,
+		const Data::InputVenue &venue,
+		Completion done = {});
 	[[nodiscard]] OperationId sendSticker(
 		BotId bot,
 		const Api::MessageToSend &message,

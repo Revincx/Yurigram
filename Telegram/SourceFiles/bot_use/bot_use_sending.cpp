@@ -9,8 +9,9 @@
 #include "data/data_changes.h"
 #include "data/data_document.h"
 #include "data/data_document_media.h"
-#include "data/data_media_types.h"
 #include "data/data_file_origin.h"
+#include "data/data_location.h"
+#include "data/data_media_types.h"
 #include "data/data_photo.h"
 #include "data/data_photo_media.h"
 #include "data/data_premium_limits.h"
@@ -795,6 +796,51 @@ bool SendText(BotId bot, Api::MessageToSend message, std::optional<MsgId> localI
 	if (!locals.empty()) {
 		NotifySent(history);
 	}
+	return true;
+}
+
+bool SendLocation(
+		BotId bot,
+		Api::SendAction action,
+		const Data::InputVenue &venue) {
+	action.clearDraft = false;
+	const auto history = action.history;
+	if (const auto error = ValidateSend(bot, action)) {
+		ShowSendError(history, error);
+		return false;
+	}
+	const auto info = FindBot(history, bot);
+	const auto id = FullMsgId(
+		history->peer->id,
+		history->owner().nextLocalMessageId());
+	const auto point = Data::LocationPoint(
+		venue.lat,
+		venue.lon,
+		Data::LocationPoint::NoAccessHash).toMTP();
+	const auto media = venue.justLocation()
+		? MTPMessageMedia(MTP_messageMediaGeo(point))
+		: MTPMessageMedia(MTP_messageMediaVenue(
+			point,
+			MTP_string(venue.title),
+			MTP_string(venue.address),
+			MTP_string(venue.provider),
+			MTP_string(venue.id),
+			MTP_string(venue.venueType)));
+	history->addNewLocalMessage(
+		LocalFields(action, info.userId, id.msg),
+		TextWithEntities(),
+		media);
+	history->session().botUseChats().beginSend(id, info.userId);
+	history->session().api().sendAction(action);
+	const auto operation = history->session().domain().botUse().sendLocation(
+		bot,
+		action,
+		venue,
+		CompletionFor(history, { id }));
+	if (!operation) {
+		return false;
+	}
+	NotifySent(history);
 	return true;
 }
 

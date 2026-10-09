@@ -7,6 +7,7 @@ class HistoryItem;
 class DocumentData;
 class PhotoData;
 namespace Main { class Session; }
+namespace Data { struct InputVenue; }
 
 namespace BotUse {
 
@@ -70,6 +71,10 @@ void FailLocalMediaUpload(
 	Api::SendAction action,
 	const std::vector<RichMediaSource> &sources = {},
 	Completion done = {});
+[[nodiscard]] bool SendLocation(
+	BotId bot,
+	Api::SendAction action,
+	const Data::InputVenue &venue);
 [[nodiscard]] bool SendPrepared(
 	BotId bot,
 	not_null<Main::Session*> session,

@@ -2,6 +2,7 @@
 
 #include "bot_use/bot_use_adapter.h"
 #include "bot_use/bot_use_client.h"
+#include "data/data_location.h"
 #include "storage/localimageloader.h"
 #include "storage/storage_domain.h"
 
@@ -571,6 +572,31 @@ OperationId Manager::sendMedia(
 		op->validation = error;
 	}
 	op->media.back().caption = SnapshotText(message.textWithTags);
+	return submit(std::move(op));
+}
+
+OperationId Manager::sendLocation(
+		BotId bot,
+		const Api::SendAction &action,
+		const Data::InputVenue &venue,
+		Completion done) {
+	auto op = makeOperation(bot, std::move(done));
+	op->kind = Kind::Media;
+	op->validation = SnapshotAction(action, op->action);
+	const auto point = MTP_inputGeoPoint(
+		MTP_flags(0),
+		MTP_double(venue.lat),
+		MTP_double(venue.lon),
+		MTPint());
+	op->prepared.push_back(venue.justLocation()
+		? MTPInputMedia(MTP_inputMediaGeoPoint(point))
+		: MTPInputMedia(MTP_inputMediaVenue(
+			point,
+			MTP_string(venue.title),
+			MTP_string(venue.address),
+			MTP_string(venue.provider),
+			MTP_string(venue.id),
+			MTP_string(venue.venueType))));
 	return submit(std::move(op));
 }
 

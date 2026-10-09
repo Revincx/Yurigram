@@ -91,6 +91,8 @@ public:
 		rpl::producer<> closeRequests;
 	};
 
+	[[nodiscard]] static LocationPickerConfig Config(
+		not_null<Main::Session*> session);
 	[[nodiscard]] static bool Available(const LocationPickerConfig &config);
 	static not_null<LocationPicker*> Show(Descriptor &&descriptor);
 
