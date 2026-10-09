@@ -3004,6 +3004,7 @@ std::unique_ptr<Ui::DropdownMenu> MakeAttachBotsMenu(
 		parent,
 		st::dropdownMenuWithIcons);
 	const auto bots = &peer->session().attachWebView();
+	const auto botUse = BotUse::Selected(peer->owner().history(peer->id));
 	const auto raw = result.get();
 	auto minimal = 0;
 	if (Data::CanSend(peer, ChatRestriction::SendPhotos, false)) {
@@ -3050,7 +3051,7 @@ std::unique_ptr<Ui::DropdownMenu> MakeAttachBotsMenu(
 		}, &st::menuIconLinks);
 	}
 	const auto moneyIndex = int(raw->actions().size());
-	if (peer->canCreatePolls(false)) {
+	if (!botUse && peer->canCreatePolls(false)) {
 		++minimal;
 		raw->addAction(tr::lng_polls_menu_item(tr::now), [=] {
 			const auto action = actionFactory();
@@ -3109,7 +3110,7 @@ std::unique_ptr<Ui::DropdownMenu> MakeAttachBotsMenu(
 			ChooseAndSendLocation(controller, config, actionFactory());
 		}, &st::menuIconAddress);
 	}
-	if (Data::CanSend(peer, ChatRestriction::SendMusic, false)) {
+	if (!botUse && Data::CanSend(peer, ChatRestriction::SendMusic, false)) {
 		++minimal;
 		raw->addAction(tr::lng_all_music(tr::now), [=] {
 			const auto box = controller->show(
@@ -3121,7 +3122,8 @@ std::unique_ptr<Ui::DropdownMenu> MakeAttachBotsMenu(
 			}
 		}, &st::menuIconSoundOn);
 	}
-	const auto addBots = Data::CanSend(peer, ChatRestriction::SendInline, false)
+	const auto addBots = !botUse
+		&& Data::CanSend(peer, ChatRestriction::SendInline, false)
 		&& !peer->starsPerMessageChecked();
 	for (const auto &bot : bots->attachBots()) {
 		if (!addBots

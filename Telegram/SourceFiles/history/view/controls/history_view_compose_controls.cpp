@@ -1566,6 +1566,7 @@ void ComposeControls::setHistory(SetHistoryArgs &&args) {
 	) | rpl::filter([=](PeerId changed) {
 		return _history && _history->peer->id == changed;
 	}) | rpl::on_next([=] {
+		updateAttachBotsMenu();
 		if (updateBotUseButton()) {
 			updateControlsVisibility();
 			updateControlsGeometry(_wrap->size());

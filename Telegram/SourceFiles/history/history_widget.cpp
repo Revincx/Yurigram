@@ -4366,6 +4366,7 @@ void HistoryWidget::setupBotUseToggle() {
 		return _peer && _peer->id == peer;
 	}) | rpl::on_next([=] {
 		refreshBotUseToggle();
+		refreshAttachBotsMenu();
 		updateControlsVisibility();
 		updateControlsGeometry();
 		orderWidgets();
