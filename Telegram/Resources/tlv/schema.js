@@ -2197,6 +2197,38 @@ window.TL_SCHEMA_FULL = {
     result.communityId = e.long();
     return result;
   },
+  2468997683: function (e) {
+    var result = { _: `messageActionGramTransfer` };
+    var t = e.uint();
+    result.flags = t;
+    result.commentEncrypted = !!(t & 2);
+    result.amount = e.long();
+    result.peerAddress = e.string();
+    result.transactionId = e.string();
+    if (t & 1) {
+      result.comment = e.string();
+    }
+    return result;
+  },
+  1773716671: function (e) {
+    var result = { _: `messageActionWalletTonConnectRequest` };
+    var t = e.uint();
+    result.flags = t;
+    result.accepted = !!(t & 4);
+    result.declined = !!(t & 8);
+    result.sessionId = e.long();
+    result.expires = e.int();
+    if (t & 1) {
+      result.topic = e.string();
+    }
+    if (t & 2) {
+      result.traceId = e.string();
+    }
+    if (t & 16) {
+      result.dappName = e.string();
+    }
+    return result;
+  },
   4236900339: function (e) {
     var result = { _: `dialog` };
     var t = e.uint();
@@ -4288,6 +4320,43 @@ window.TL_SCHEMA_FULL = {
     result.qts = e.int();
     return result;
   },
+  1791226538: function (e) {
+    var result = { _: `updateWalletState` };
+    result.state = e.object();
+    return result;
+  },
+  2973977930: function (e) {
+    var result = { _: `updateSentWalletTransaction` };
+    var t = e.uint();
+    result.flags = t;
+    result.gasless = !!(t & 1);
+    result.msgHash = e.string();
+    if (t & 2) {
+      result.transaction = e.object();
+    }
+    return result;
+  },
+  2829982892: function (e) {
+    var result = { _: `updateWalletGaslessInfo` };
+    var t = e.uint();
+    result.flags = t;
+    result.available = !!(t & 1);
+    result.left = e.int();
+    result.resetAt = e.int();
+    result.minAmount = e.long();
+    result.relayerAddress = e.string();
+    return result;
+  },
+  1352896014: function (e) {
+    var result = { _: `updateWalletTonConnectSession` };
+    result.session = e.object();
+    return result;
+  },
+  3522068889: function (e) {
+    var result = { _: `updateWalletTonConnectPendingDisconnect` };
+    result.sessionIds = e.vector(e.long);
+    return result;
+  },
   2775329342: function (e) {
     var result = { _: `updates.state` };
     result.pts = e.int();
@@ -5913,6 +5982,12 @@ window.TL_SCHEMA_FULL = {
     result.length = e.int();
     return result;
   },
+  4255891405: function (e) {
+    var result = { _: `messageEntityTonAddress` };
+    result.offset = e.int();
+    result.length = e.int();
+    return result;
+  },
   4002160262: function (e) {
     var result = { _: `inputChannelEmpty` };
     return result;
@@ -7155,6 +7230,11 @@ window.TL_SCHEMA_FULL = {
     if (t & 1) {
       result.style = e.object();
     }
+    return result;
+  },
+  1020437354: function (e) {
+    var result = { _: `textTonAddress` };
+    result.text = e.object();
     return result;
   },
   324435594: function (e) {
@@ -11237,6 +11317,8 @@ window.TL_SCHEMA_FULL = {
     result.flags = t;
     result.editable = !!(t & 1);
     result.active = !!(t & 2);
+    result.deletable = !!(t & 4);
+    result.expired = !!(t & 8);
     result.username = e.string();
     return result;
   },
@@ -13504,7 +13586,7 @@ window.TL_SCHEMA_FULL = {
     result.stickers = e.vector(e.object);
     return result;
   },
-  2966251031: function (e) {
+  2703945727: function (e) {
     var result = { _: `botVerifierSettings` };
     var t = e.uint();
     result.flags = t;
@@ -13512,15 +13594,15 @@ window.TL_SCHEMA_FULL = {
     result.icon = e.long();
     result.company = e.string();
     if (t & 1) {
-      result.customDescription = e.string();
+      result.customDescription = e.object();
     }
     return result;
   },
-  4181513308: function (e) {
+  4146990809: function (e) {
     var result = { _: `botVerification` };
     result.botId = e.long();
     result.icon = e.long();
-    result.description = e.string();
+    result.description = e.object();
     return result;
   },
   1448235490: function (e) {
@@ -14282,11 +14364,6 @@ window.TL_SCHEMA_FULL = {
     result.response = e.object();
     return result;
   },
-  1528613672: function (e) {
-    var result = { _: `inputPasskeyCredentialFirebasePNV` };
-    result.pnvToken = e.string();
-    return result;
-  },
   2952094616: function (e) {
     var result = { _: `starGiftBackground` };
     result.centerColor = e.int();
@@ -14876,10 +14953,408 @@ window.TL_SCHEMA_FULL = {
     result.messages = e.vector(e.object);
     return result;
   },
+  819557436: function (e) {
+    var result = { _: `currencyRate` };
+    result.currency = e.string();
+    result.rate = e.double();
+    return result;
+  },
+  3150767298: function (e) {
+    var result = { _: `payments.currencyRates` };
+    result.rates = e.vector(e.object);
+    return result;
+  },
+  2894986777: function (e) {
+    var result = { _: `toncenter.apiResponse` };
+    result.response = e.object();
+    return result;
+  },
+  428373505: function (e) {
+    var result = { _: `toncenter.streamingUrl` };
+    result.url = e.string();
+    result.expires = e.int();
+    return result;
+  },
+  2663958184: function (e) {
+    var result = { _: `onrampMethodAvailability` };
+    var t = e.uint();
+    result.flags = t;
+    result.available = !!(t & 1);
+    result.paymentMethod = e.string();
+    return result;
+  },
+  230847874: function (e) {
+    var result = { _: `onrampProviderInfo` };
+    var t = e.uint();
+    result.flags = t;
+    result.supportsBaseCurrencies = !!(t & 1);
+    result.supportsLimits = !!(t & 2);
+    result.supportsQuote = !!(t & 4);
+    result.id = e.string();
+    result.name = e.string();
+    result.cryptoCurrencies = e.vector(e.string);
+    return result;
+  },
+  4190652787: function (e) {
+    var result = { _: `onrampAvailability` };
+    var t = e.uint();
+    result.flags = t;
+    result.allowed = !!(t & 1);
+    result.buyAllowed = !!(t & 2);
+    result.countryCode = e.string();
+    if (t & 4) {
+      result.state = e.string();
+    }
+    result.methods = e.vector(e.object);
+    return result;
+  },
+  2078435198: function (e) {
+    var result = { _: `onrampLimits` };
+    result.baseCurrency = e.string();
+    result.baseMinAmount = e.string();
+    result.baseMaxAmount = e.string();
+    result.cryptoMinAmount = e.string();
+    result.cryptoMaxAmount = e.string();
+    result.paymentMethod = e.string();
+    return result;
+  },
+  2055213545: function (e) {
+    var result = { _: `onrampQuote` };
+    result.baseCurrency = e.string();
+    result.baseAmount = e.string();
+    result.cryptoCurrency = e.string();
+    result.cryptoAmount = e.string();
+    result.cryptoPrice = e.string();
+    result.feeAmount = e.string();
+    result.extraFeeAmount = e.string();
+    result.networkFeeAmount = e.string();
+    result.totalAmount = e.string();
+    result.paymentMethod = e.string();
+    result.expiresDate = e.int();
+    return result;
+  },
+  3521392164: function (e) {
+    var result = { _: `onrampSession` };
+    result.provider = e.string();
+    result.sessionId = e.string();
+    result.url = e.string();
+    result.expiresDate = e.int();
+    return result;
+  },
+  2629415660: function (e) {
+    var result = { _: `walletStateEmpty` };
+    var t = e.uint();
+    result.flags = t;
+    result.creating = !!(t & 1);
+    return result;
+  },
+  2512729195: function (e) {
+    var result = { _: `walletState` };
+    var t = e.uint();
+    result.flags = t;
+    result.backupEnabled = !!(t & 1);
+    result.canExportPhrase = !!(t & 2);
+    result.canEnableBackup = !!(t & 4);
+    result.address = e.string();
+    result.publicKey = e.bytes();
+    result.balance = e.long();
+    return result;
+  },
+  4269338316: function (e) {
+    var result = { _: `walletUserAddress` };
+    var t = e.uint();
+    result.flags = t;
+    if (t & 1) {
+      result.userId = e.long();
+    }
+    result.address = e.string();
+    result.publicKey = e.bytes();
+    return result;
+  },
+  2458811221: function (e) {
+    var result = { _: `wallet.userAddresses` };
+    result.addresses = e.vector(e.object);
+    result.users = e.vector(e.object);
+    return result;
+  },
+  3572133997: function (e) {
+    var result = { _: `walletTransactionPeerUser` };
+    var t = e.uint();
+    result.flags = t;
+    result.userId = e.long();
+    result.address = e.string();
+    if (t & 1) {
+      result.domain = e.string();
+    }
+    return result;
+  },
+  103596476: function (e) {
+    var result = { _: `walletTransactionPeerAddress` };
+    var t = e.uint();
+    result.flags = t;
+    result.address = e.string();
+    if (t & 1) {
+      result.domain = e.string();
+    }
+    return result;
+  },
+  3851753582: function (e) {
+    var result = { _: `walletTransactionPeerOnramp` };
+    var t = e.uint();
+    result.flags = t;
+    result.address = e.string();
+    if (t & 1) {
+      result.domain = e.string();
+    }
+    result.providerName = e.string();
+    return result;
+  },
+  1921772890: function (e) {
+    var result = { _: `walletTransactionPeerUnsupported` };
+    return result;
+  },
+  2502803779: function (e) {
+    var result = { _: `walletTransaction` };
+    var t = e.uint();
+    result.flags = t;
+    result.incoming = !!(t & 1);
+    result.gasless = !!(t & 2);
+    result.failed = !!(t & 4);
+    result.keyChange = !!(t & 32);
+    result.commentEncrypted = !!(t & 64);
+    result.id = e.string();
+    result.amount = e.long();
+    result.fee = e.long();
+    result.date = e.int();
+    result.peer = e.object();
+    if (t & 8) {
+      result.comment = e.string();
+    }
+    if (t & 16) {
+      result.txHash = e.string();
+    }
+    if (t & 128) {
+      result.nft = e.object();
+    }
+    return result;
+  },
+  1126356389: function (e) {
+    var result = { _: `wallet.transactions` };
+    var t = e.uint();
+    result.flags = t;
+    result.balance = e.long();
+    result.transactions = e.vector(e.object);
+    if (t & 1) {
+      result.nextOffset = e.string();
+    }
+    result.chats = e.vector(e.object);
+    result.users = e.vector(e.object);
+    return result;
+  },
+  3872452353: function (e) {
+    var result = { _: `wallet.secretPhraseParts` };
+    result.token = e.string();
+    result.dcs = e.vector(e.int);
+    return result;
+  },
+  417867063: function (e) {
+    var result = { _: `wallet.encryptedSecretPhrasePart` };
+    result.data = e.bytes();
+    return result;
+  },
+  4191556335: function (e) {
+    var result = { _: `wallet.holderDc` };
+    result.dc = e.int();
+    result.publicKey = e.bytes();
+    return result;
+  },
+  2581862151: function (e) {
+    var result = { _: `wallet.proofChallenge` };
+    result.payload = e.string();
+    result.expires = e.int();
+    result.domain = e.string();
+    return result;
+  },
+  1622985485: function (e) {
+    var result = { _: `walletOwnershipProof` };
+    result.timestamp = e.int();
+    result.signature = e.bytes();
+    return result;
+  },
+  1671708892: function (e) {
+    var result = { _: `inputWalletNew` };
+    return result;
+  },
+  1722182203: function (e) {
+    var result = { _: `inputWalletImported` };
+    var t = e.uint();
+    result.flags = t;
+    result.publicKey = e.bytes();
+    if (t & 1) {
+      result.anchorPublicKey = e.bytes();
+    }
+    result.proof = e.object();
+    return result;
+  },
+  304255588: function (e) {
+    var result = { _: `tonConnectManifest` };
+    var t = e.uint();
+    result.flags = t;
+    result.url = e.string();
+    result.name = e.string();
+    if (t & 1) {
+      result.icon = e.object();
+    }
+    return result;
+  },
+  308631238: function (e) {
+    var result = { _: `tonConnectSession` };
+    var t = e.uint();
+    result.flags = t;
+    result.pending = !!(t & 1);
+    result.closing = !!(t & 2);
+    result.closed = !!(t & 4);
+    result.id = e.long();
+    result.dappClientId = e.string();
+    if (t & 8) {
+      result.clientId = e.string();
+    }
+    result.nonce = e.bytes();
+    if (t & 16) {
+      result.manifest = e.object();
+    }
+    if (t & 32) {
+      result.manifestError = e.int();
+    }
+    result.date = e.int();
+    return result;
+  },
+  1271436947: function (e) {
+    var result = { _: `wallet.tonConnectChallenge` };
+    result.challenge = e.bytes();
+    result.eventId = e.long();
+    return result;
+  },
+  1478780131: function (e) {
+    var result = { _: `tonConnectNextEventId` };
+    result.eventId = e.long();
+    return result;
+  },
+  2707391763: function (e) {
+    var result = { _: `tonConnectRequest` };
+    var t = e.uint();
+    result.flags = t;
+    result.sessionId = e.long();
+    result.msgId = e.int();
+    result.body = e.bytes();
+    result.expires = e.int();
+    if (t & 1) {
+      result.topic = e.string();
+    }
+    if (t & 2) {
+      result.traceId = e.string();
+    }
+    return result;
+  },
+  2244014372: function (e) {
+    var result = { _: `wallet.tonConnectPending` };
+    result.session = e.object();
+    result.requests = e.vector(e.object);
+    return result;
+  },
+  236939414: function (e) {
+    var result = { _: `wallet.tonConnectSessions` };
+    result.sessions = e.vector(e.object);
+    return result;
+  },
+  3186166413: function (e) {
+    var result = { _: `wallet.existingBalance` };
+    var t = e.uint();
+    result.flags = t;
+    result.hasBalance = !!(t & 1);
+    result.url = e.string();
+    return result;
+  },
+  1277096206: function (e) {
+    var result = { _: `wallet.nftAttribute` };
+    result.traitType = e.string();
+    result.value = e.string();
+    return result;
+  },
+  876739868: function (e) {
+    var result = { _: `wallet.nftItem` };
+    var t = e.uint();
+    result.flags = t;
+    if (t & 1) {
+      result.collectionAddress = e.string();
+    }
+    result.address = e.string();
+    result.ownerAddress = e.string();
+    result.index = e.string();
+    if (t & 2) {
+      result.name = e.string();
+    }
+    if (t & 4) {
+      result.description = e.string();
+    }
+    if (t & 8) {
+      result.image = e.object();
+    }
+    if (t & 16) {
+      result.imageSmall = e.object();
+    }
+    if (t & 32) {
+      result.contentUrl = e.object();
+    }
+    if (t & 64) {
+      result.lottie = e.object();
+    }
+    if (t & 128) {
+      result.attributes = e.vector(e.object);
+    }
+    if (t & 256) {
+      result.extra = e.object();
+    }
+    return result;
+  },
+  2035107951: function (e) {
+    var result = { _: `wallet.nftItems` };
+    var t = e.uint();
+    result.flags = t;
+    result.items = e.vector(e.object);
+    if (t & 1) {
+      result.nextOffset = e.string();
+    }
+    return result;
+  },
   3747266572: function (e) {
     var result = { _: `auth.firebasePnvIntent` };
     result.nonce = e.string();
     result.digitalCredentialPayload = e.string();
+    return result;
+  },
+  2966251031: function (e) {
+    var result = { _: `botVerifierSettings` };
+    var t = e.uint();
+    result.flags = t;
+    result.canModifyCustomDescription = !!(t & 2);
+    result.icon = e.long();
+    result.company = e.string();
+    if (t & 1) {
+      result.customDescription = e.string();
+    }
+    return result;
+  },
+  4181513308: function (e) {
+    var result = { _: `botVerification` };
+    result.botId = e.long();
+    result.icon = e.long();
+    result.description = e.string();
+    return result;
+  },
+  1528613672: function (e) {
+    var result = { _: `inputPasskeyCredentialFirebasePNV` };
+    result.pnvToken = e.string();
     return result;
   },
   3871544610: function (e) {
