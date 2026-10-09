@@ -7,13 +7,28 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "info/requests_list/info_requests_list_widget.h"
 
+#include "api/api_invite_links.h"
+#include "apiwrap.h"
+#include "base/weak_ptr.h"
 #include "boxes/peers/edit_peer_requests_box.h"
+#include "data/data_channel.h"
+#include "data/data_chat.h"
+#include "data/data_peer.h"
+#include "data/data_session.h"
 #include "info/info_controller.h"
-#include "ui/widgets/scroll_area.h"
+#include "info/info_wrap_widget.h"
+#include "lang/lang_keys.h"
+#include "main/main_session.h"
+#include "ui/boxes/confirm_box.h"
 #include "ui/search_field_controller.h"
 #include "ui/ui_utility.h"
-#include "lang/lang_keys.h"
+#include "ui/widgets/buttons.h"
+#include "ui/widgets/scroll_area.h"
+#include "ui/wrap/vertical_layout.h"
+#include "styles/style_boxes.h"
 #include "styles/style_info.h"
+#include "styles/style_info_community_requests_widget.h"
+#include "styles/style_layers.h"
 
 namespace Info::RequestsList {
 namespace {
@@ -221,10 +236,140 @@ Widget::Widget(
 : ContentWidget(parent, controller) {
 	controller->setSearchEnabledByContent(true);
 	_inner = setInnerWidget(object_ptr<InnerWidget>(this, controller, peer));
+	_bottom = setupBottomBar();
+}
+
+Widget::~Widget() = default;
+
+std::unique_ptr<Ui::RpWidget> Widget::setupBottomBar() {
+	auto result = std::make_unique<Ui::VerticalLayout>(this);
+	const auto wrap = result.get();
+
+	const auto row = wrap->add(
+		object_ptr<Ui::RpWidget>(wrap),
+		st::requestsSectionBottomMargin);
+	const auto dismissAll = Ui::CreateChild<Ui::RoundButton>(
+		row,
+		tr::lng_community_requests_decline_all(),
+		st::requestsDeclineAllButton);
+	const auto addAll = Ui::CreateChild<Ui::RoundButton>(
+		row,
+		tr::lng_community_requests_add_all(),
+		st::requestsAddAllButton);
+	dismissAll->setClickedCallback([=] { processAll(false); });
+	addAll->setClickedCallback([=] { processAll(true); });
+	dismissAll->setFullRadius(true);
+	addAll->setFullRadius(true);
+
+	row->resize(row->width(), st::requestsAddAllButton.height);
+	rpl::combine(
+		row->widthValue(),
+		dismissAll->widthValue(),
+		addAll->widthValue()
+	) | rpl::on_next([=](int width, int, int) {
+		dismissAll->moveToLeft(0, 0, width);
+		addAll->moveToRight(0, 0, width);
+	}, row->lifetime());
+
+	widthValue() | rpl::on_next([=](int width) {
+		wrap->resizeToWidth(width);
+	}, wrap->lifetime());
+
+	rpl::combine(
+		wrap->heightValue(),
+		heightValue()
+	) | rpl::on_next([=] {
+		updateBottomBarGeometry();
+	}, wrap->lifetime());
+
+	return result;
+}
+
+void Widget::updateBottomBarGeometry() {
+	if (!_bottom) {
+		return;
+	}
+	const auto height = _bottom->height();
+	const auto fullHeight = this->height();
+	setScrollBottomSkip(height - st::boxRadius);
+	_bottom->move(0, fullHeight - height + st::boxRadius);
+}
+
+void Widget::processAll(bool approved) {
+	if (_processingAll) {
+		return;
+	}
+	const auto target = peer();
+	const auto pending = [&] {
+		if (const auto chat = target->asChat()) {
+			return chat->pendingRequestsCount();
+		}
+		return target->asChannel()->pendingRequestsCount();
+	}();
+	const auto count = std::max(pending, 1);
+	const auto navigation = controller();
+	const auto show = navigation->uiShow();
+	const auto sure = crl::guard(this, [=](Fn<void()> &&close) {
+		close();
+		_processingAll = true;
+		target->session().api().inviteLinks().processAllRequests(
+			target,
+			approved,
+			crl::guard(this, [=] {
+				_processingAll = false;
+				if (navigation->hasBackButton()) {
+					navigation->showBackFromStack();
+				} else if (navigation->wrap() == Wrap::Layer) {
+					const auto parent = navigation->parentController();
+					parent->hideLayer();
+					parent->hideSpecialLayer();
+				} else if (navigation->wrap() == Wrap::Side) {
+					navigation->parentController()->closeThirdSection();
+				} else {
+					navigation->showBackFromStack();
+				}
+				show->showToast((approved
+					? tr::lng_group_requests_added_all
+					: tr::lng_group_requests_dismissed_all)(
+						tr::now,
+						lt_count,
+						count));
+			}),
+			crl::guard(this, [=](QString error) {
+				_processingAll = false;
+				if (!error.isEmpty()) {
+					show->showToast(error);
+				}
+			}));
+	});
+	show->showBox(Ui::MakeConfirmBox({
+		.text = (approved
+			? tr::lng_group_requests_add_all_sure(
+				tr::now,
+				lt_count,
+				count)
+			: tr::lng_group_requests_dismiss_all_sure(
+				tr::now,
+				lt_count,
+				count)),
+		.confirmed = sure,
+		.confirmText = (approved
+			? tr::lng_community_requests_add_all()
+			: tr::lng_community_requests_decline_all()),
+		.confirmStyle = approved ? nullptr : &st::attentionBoxButton,
+		.title = (approved
+			? tr::lng_community_requests_add_all()
+			: tr::lng_community_requests_decline_all()),
+	}));
 }
 
 rpl::producer<QString> Widget::title() {
 	return tr::lng_manage_peer_requests();
+}
+
+void Widget::showFinished() {
+	ContentWidget::showFinished();
+	updateBottomBarGeometry();
 }
 
 not_null<PeerData*> Widget::peer() const {

@@ -15,6 +15,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_session.h"
 #include "data/data_user.h"
 #include "main/main_session.h"
+#include "mtproto/mtproto_response.h"
 #include "base/unixtime.h"
 #include "apiwrap.h"
 
@@ -515,6 +516,56 @@ void InviteLinks::processRequest(
 			if (const auto &fail = callbacks->fail) {
 				fail();
 			}
+		}
+	}).send();
+}
+
+void InviteLinks::processAllRequests(
+		not_null<PeerData*> peer,
+		bool approved,
+		Fn<void()> done,
+		Fn<void(QString)> fail) {
+	using Flag = MTPmessages_HideAllChatJoinRequests::Flag;
+	_api->request(MTPmessages_HideAllChatJoinRequests(
+		MTP_flags(approved ? Flag::f_approved : Flag(0)),
+		peer->input(),
+		MTPstring()
+	)).done([=](const MTPUpdates &result) {
+		if (const auto requestId = _firstSliceRequests.take(peer)) {
+			_api->request(*requestId).cancel();
+		}
+		_firstSlices.remove(peer);
+
+		auto joinedRequests = std::vector<mtpRequestId>();
+		for (auto i = begin(_firstJoinedRequests)
+			; i != end(_firstJoinedRequests);) {
+			if (i->first.peer == peer) {
+				joinedRequests.push_back(i->second);
+				i = _firstJoinedRequests.erase(i);
+			} else {
+				++i;
+			}
+		}
+		for (const auto requestId : joinedRequests) {
+			_api->request(requestId).cancel();
+		}
+		for (auto i = begin(_firstJoined); i != end(_firstJoined);) {
+			if (i->first.peer == peer) {
+				i = _firstJoined.erase(i);
+			} else {
+				++i;
+			}
+		}
+
+		_api->applyUpdates(result);
+		peer->updateFullForced();
+		notify(peer);
+		if (done) {
+			done();
+		}
+	}).fail([=](const MTP::Error &error) {
+		if (fail) {
+			fail(MTP::IgnoreError(error) ? QString() : error.type());
 		}
 	}).send();
 }

@@ -12,6 +12,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 class PeerData;
 struct PeerListState;
 
+namespace Ui {
+class RpWidget;
+} // namespace Ui
+
 namespace Info::RequestsList {
 
 class InnerWidget;
@@ -43,6 +47,7 @@ public:
 		QWidget *parent,
 		not_null<Controller*> controller,
 		not_null<PeerData*> peer);
+	~Widget();
 
 	[[nodiscard]] not_null<PeerData*> peer() const;
 
@@ -54,14 +59,21 @@ public:
 		not_null<Memento*> memento);
 
 	rpl::producer<QString> title() override;
+	void showFinished() override;
 
 private:
 	void saveState(not_null<Memento*> memento);
 	void restoreState(not_null<Memento*> memento);
+	std::unique_ptr<Ui::RpWidget> setupBottomBar();
+	void updateBottomBarGeometry();
+	void processAll(bool approved);
 
 	std::shared_ptr<ContentMemento> doCreateMemento() override;
 
 	InnerWidget *_inner = nullptr;
+	std::unique_ptr<Ui::RpWidget> _bottom;
+	bool _processingAll = false;
+
 };
 
 } // namespace Info::RequestsList

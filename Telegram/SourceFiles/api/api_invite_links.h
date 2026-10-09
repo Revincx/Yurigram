@@ -125,6 +125,11 @@ public:
 		bool approved,
 		Fn<void()> done,
 		Fn<void()> fail);
+	void processAllRequests(
+		not_null<PeerData*> peer,
+		bool approved,
+		Fn<void()> done,
+		Fn<void(QString)> fail);
 	void applyExternalUpdate(not_null<PeerData*> peer, InviteLink updated);
 
 	[[nodiscard]] rpl::producer<JoinedByLinkSlice> joinedFirstSliceValue(

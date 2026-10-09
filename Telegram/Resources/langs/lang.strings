@@ -3117,6 +3117,14 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_group_requests_add" = "Add to Group";
 "lng_group_requests_add_channel" = "Add to Channel";
 "lng_group_requests_dismiss" = "Dismiss";
+"lng_group_requests_add_all_sure#one" = "Do you want to approve {count} join request?";
+"lng_group_requests_add_all_sure#other" = "Do you want to approve all {count} join requests?";
+"lng_group_requests_dismiss_all_sure#one" = "Do you want to dismiss {count} join request?";
+"lng_group_requests_dismiss_all_sure#other" = "Do you want to dismiss all {count} join requests?";
+"lng_group_requests_added_all#one" = "{count} join request was approved.";
+"lng_group_requests_added_all#other" = "{count} join requests were approved.";
+"lng_group_requests_dismissed_all#one" = "{count} join request was dismissed.";
+"lng_group_requests_dismissed_all#other" = "{count} join requests were dismissed.";
 "lng_group_requests_was_added" = "{user} has been added to the group.";
 "lng_group_requests_was_added_channel" = "{user} has been added to the channel.";
 "lng_group_requests_none" = "There are no pending join requests.";
