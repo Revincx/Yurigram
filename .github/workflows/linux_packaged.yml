@@ -37,7 +37,14 @@ jobs:
             USERFLAGS=$(id -u):$(id -g)
           fi
 
-          VERSION=$(grep 'AppVersionStr' Telegram/SourceFiles/core/version.h | cut -d '"' -f 2)
+          VERSION=$(sed -n \
+            's/^AppVersionStr[[:space:]]\+\([^[:space:]]\+\).*$/\1/p' \
+            Telegram/build/version)
+          if [ -z "$VERSION" ]; then
+            echo "Could not read AppVersionStr from Telegram/build/version."
+            exit 1
+          fi
+          echo "Resolved application version $VERSION."
 
           echo USERFLAGS=$USERFLAGS >> $GITHUB_ENV
           echo ARCH="$(uname -m)" >> $GITHUB_ENV
