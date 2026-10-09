@@ -42,8 +42,11 @@ namespace {
 
 [[nodiscard]] not_null<Ui::VerticalLayout*> AddGroup(
 		not_null<Ui::VerticalLayout*> page,
-		rpl::producer<QString> title) {
-	AddDivider(page);
+		rpl::producer<QString> title,
+		bool divider = true) {
+	if (divider) {
+		AddDivider(page);
+	}
 	AddSkip(page);
 	AddSubsectionTitle(page, std::move(title));
 	const auto wrap = page->add(
@@ -246,7 +249,17 @@ rpl::producer<QString> BotUseSettings::title() {
 
 void BotUseSettings::setupContent() {
 	const auto page = Ui::CreateChild<Ui::VerticalLayout>(this);
-	const auto api = AddGroup(page, tr::lng_bot_use_api_settings());
+	Ui::AddDividerText(
+		page,
+		tr::lng_bot_use_about(
+			lt_link,
+			tr::lng_bot_use_about_link(tr::url(
+				u"https://github.com/Revincx/Yurigram/wiki/BotUse-Description"_q)),
+			tr::marked),
+		st::defaultBoxDividerLabelPadding,
+		st::defaultDividerLabel,
+		RectPart::Bottom);
+	const auto api = AddGroup(page, tr::lng_bot_use_api_settings(), false);
 	const auto configure = AddButtonWithIcon(
 		api,
 		tr::lng_bot_use_api_credentials(),

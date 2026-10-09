@@ -9215,6 +9215,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_settings_mpris_call_hangup" = "Use media controls to accept or hangup";
 "lng_settings_enhanced" = "Enhanced Settings";
 "lng_bot_use_settings" = "BotUse Settings";
+"lng_bot_use_about" = "We recommend reading the {link} before using BotUse.";
+"lng_bot_use_about_link" = "usage guide";
 "lng_bot_use_api_settings" = "API Settings";
 "lng_bot_use_api_credentials" = "Configure API credentials";
 "lng_bot_use_api_id" = "API ID";
