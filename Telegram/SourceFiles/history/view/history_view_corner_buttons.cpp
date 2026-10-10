@@ -722,7 +722,11 @@ void CornerButtons::updatePositions() {
 			+ anim::interpolate(
 				0,
 				_pollVotes.widget->height() + skip,
-				unreadPollVotesShown);
+				unreadPollVotesShown)
+			+ anim::interpolate(
+				0,
+				_showHidden.widget->height() + skip,
+				showHiddenShown);
 		const auto top = _parent->height()
 			- _stash.widget->height()
 			- st::historyToDownPosition.y()
