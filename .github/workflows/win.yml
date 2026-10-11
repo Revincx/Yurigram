@@ -126,8 +126,8 @@ jobs:
             !${{ env.LibrariesPath }}\[qQ]t[_-]*
             ${{ env.LibrariesPath }}\cache_keys\*
             !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
-          key: ${{ runner.OS }}-${{ matrix.arch }}-libs-v2-${{ env.CACHE_KEY }}
-          restore-keys: ${{ runner.OS }}-${{ matrix.arch }}-libs-v2-
+          key: ${{ runner.OS }}-${{ matrix.arch }}-libs-v3-${{ env.CACHE_KEY }}
+          restore-keys: ${{ runner.OS }}-${{ matrix.arch }}-libs-v3-
 
       - name: Restore Qt cache.
         id: cache-qt
@@ -184,10 +184,11 @@ jobs:
           echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV
           echo "TDESKTOP_BUILD_API=$API" >> $GITHUB_ENV
 
+      # Cached Rust sources and generated bindings are needed by later builds.
       - name: Free up some disk space.
         shell: pwsh
         run: |
-          bash -lc 'find "$LibrariesPath" \( \( ! \( -name "*.lib" -o -name "*.a" -o -name "*.exe" -o -name "*.h" -o -name "*.hpp" -o -name "*.inc" -o -name "*.cmake" -o -path "*/include/*" -o -path "*/gas-preprocessor/*" -o -path "*/local/lib/pkgconfig/*" -o -path "*/nv-codec-headers/*" -o -path "*/objects-*" -o -path "*/cache_keys/*" -o -path "*/patches/*" \) -type f \) -o -empty \) -delete'
+          bash -lc 'find "$LibrariesPath" \( \( ! \( -name "*.lib" -o -name "*.a" -o -name "*.exe" -o -name "*.h" -o -name "*.hpp" -o -name "*.inc" -o -name "*.cmake" -o -path "*/include/*" -o -path "*/gas-preprocessor/*" -o -path "*/local/lib/pkgconfig/*" -o -path "*/nv-codec-headers/*" -o -path "*/objects-*" -o -path "*/cache_keys/*" -o -path "*/patches/*" -o -path "*/src/wallet_engine/*" -o \( \( -path "*/tlottie/*" -o -path "*/wallet-engine/*" \) ! -path "*/target/*" \) \) -type f \) -o \( -empty ! -path "*/tlottie/*" ! -path "*/wallet-engine/*" \) \) -delete'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           $cacheDirectories = @(
