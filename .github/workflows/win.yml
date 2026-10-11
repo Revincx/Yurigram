@@ -251,6 +251,59 @@ jobs:
           path: artifact\
           retention-days: 1
 
+      - name: Pack and sign update.
+        if: env.UPLOAD_ARTIFACT == 'true' && env.ONLY_CACHE == 'false'
+        shell: pwsh
+        env:
+          UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.UPDATE_SIGNING_PRIVATE_KEY }}
+          UPDATE_SIGNING_KEY_ID: yurigram-release-20261011
+          UPDATE_TARGET: ${{ matrix.arch == 'arm64' && 'winarm' || 'win64' }}
+          UPDATE_ARCH: ${{ matrix.arch == 'arm64' && 'arm' || 'x64' }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:UPDATE_SIGNING_PRIVATE_KEY)) {
+            throw 'The UPDATE_SIGNING_PRIVATE_KEY secret must contain the release Ed25519 private key in PEM format.'
+          }
+          $repo = Join-Path $env:TBUILD $env:REPO_NAME
+          $header = Get-Content -LiteralPath "$repo\Telegram\SourceFiles\core\version.h" -Raw
+          $version = [regex]::Match($header, '(?m)^constexpr auto AppVersion = ([0-9]+);').Groups[1].Value
+          if (!$version) { throw 'Could not read AppVersion from core/version.h.' }
+
+          $payload = Join-Path $env:RUNNER_TEMP 'yurigram-update-payload'
+          $artifact = Join-Path $env:GITHUB_WORKSPACE 'update-artifact'
+          New-Item -ItemType Directory -Path $payload, $artifact | Out-Null
+          Copy-Item -LiteralPath 'artifact\Yurigram.exe' -Destination "$payload\Telegram.exe"
+          Copy-Item -LiteralPath 'artifact\Updater.exe' -Destination "$payload\Updater.exe"
+
+          $keyFile = Join-Path $env:RUNNER_TEMP 'yurigram-update-release-private.pem'
+          try {
+            [System.IO.File]::WriteAllText($keyFile, $env:UPDATE_SIGNING_PRIVATE_KEY, [System.Text.UTF8Encoding]::new($false))
+            Remove-Item Env:UPDATE_SIGNING_PRIVATE_KEY
+            Push-Location $payload
+            try {
+              & "$repo\out\Release\Packer.exe" `
+                -path Telegram.exe -path Updater.exe `
+                -target $env:UPDATE_TARGET -version $version `
+                -channel stable -keys-loc "$repo\Telegram\Resources\update" `
+                -local-key $keyFile -local-key-id $env:UPDATE_SIGNING_KEY_ID
+              if ($LASTEXITCODE -ne 0) { throw "Packer failed with exit code $LASTEXITCODE." }
+              Move-Item -LiteralPath "td-update-win-$($env:UPDATE_ARCH)-$version" -Destination $artifact
+            } finally {
+              Pop-Location
+            }
+          } finally {
+            Remove-Item -LiteralPath $keyFile -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Upload update artifact.
+        if: env.UPLOAD_ARTIFACT == 'true' && env.ONLY_CACHE == 'false'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ARTIFACT_NAME }}_Update
+          path: update-artifact/td-update-*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
       - name: Package release artifact.
         id: package-release
         if: github.event_name == 'release' && env.UPLOAD_ARTIFACT == 'true'

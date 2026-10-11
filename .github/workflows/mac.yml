@@ -157,6 +157,47 @@ jobs:
           name: ${{ steps.prepare-artifact.outputs.name }}
           path: ${{ env.REPO_NAME }}/out/Release/artifact/
 
+      - name: Pack and sign update.
+        if: env.UPLOAD_ARTIFACT == 'true' && env.ONLY_CACHE == 'false'
+        env:
+          UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.UPDATE_SIGNING_PRIVATE_KEY }}
+          UPDATE_SIGNING_KEY_ID: yurigram-release-20261011
+        run: |
+          set -euo pipefail
+          if [ -z "$UPDATE_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::The UPDATE_SIGNING_PRIVATE_KEY secret must contain the release Ed25519 private key in PEM format."
+            exit 1
+          fi
+          REPO="$GITHUB_WORKSPACE/$REPO_NAME"
+          VERSION=$(sed -nE 's/^constexpr auto AppVersion = ([0-9]+);$/\1/p' "$REPO/Telegram/SourceFiles/core/version.h")
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not read AppVersion from core/version.h."
+            exit 1
+          fi
+
+          umask 077
+          KEY_FILE=$(mktemp "$RUNNER_TEMP/yurigram-update-key.XXXXXX")
+          trap 'rm -f "$KEY_FILE"' EXIT
+          printf '%s\n' "$UPDATE_SIGNING_PRIVATE_KEY" > "$KEY_FILE"
+          unset UPDATE_SIGNING_PRIVATE_KEY
+
+          cd "$REPO/out/Release"
+          mkdir update-artifact
+          cd update-artifact
+          ../Packer -path ../artifact/Yurigram.app \
+            -arch "${{ matrix.arch }}" -version "$VERSION" \
+            -channel stable -keys-loc "$REPO/Telegram/Resources/update" \
+            -local-key "$KEY_FILE" -local-key-id "$UPDATE_SIGNING_KEY_ID"
+
+      - name: Upload update artifact.
+        if: env.UPLOAD_ARTIFACT == 'true' && env.ONLY_CACHE == 'false'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.prepare-artifact.outputs.name }}_Update
+          path: ${{ env.REPO_NAME }}/out/Release/update-artifact/td-update-*
+          if-no-files-found: error
+          compression-level: 0
+
       - name: Package release artifact.
         id: package-release
         if: github.event_name == 'release' && env.UPLOAD_ARTIFACT == 'true'
