@@ -1,4 +1,4 @@
-﻿# Yurigram — Yet Another Third-Party [Telegram Desktop](https://github.com/telegramdesktop/tdesktop) Client
+﻿# Yurigram — Yet another 3rd-party [tdesktop](https://github.com/telegramdesktop/tdesktop) client
 
 Yurigram was formerly forked from [64Gram](https://github.com/TDesktop-x64/tdesktop) and [Yukigram](https://github.com/yukigram/yukigram-legacy), but now it is a standalone client with some exclusive new features and directly follows official Telegram Desktop updates.
 
@@ -6,36 +6,74 @@ The source code is published under GPLv3 with OpenSSL exception, the license is 
 
 ## Features
 
-Yurigram includes [most features from 64Gram](https://github.com/TDesktop-x64/tdesktop/blob/dev/features.md), as it was originally forked from 64Gram.
+Yurigram includes [most features from 64Gram](https://github.com/TDesktop-x64/tdesktop/blob/dev/features.md), as it was originally forked from 64Gram. It also adds the following features.
 
-In addition, Yurigram includes the following features, listed in the order they were added:
+### Chat Enhanced Settings
 
- 1. Show mutual contact label
- 2. Directly send message in a group linked to a channel
- 3. Translate messages with Google Translate
- 4. Allow non-premium users to save custom emoji sets freely
- 5. Ability to hide user stars rating
- 6. **Additional Fluent Emoji Packs (Flat & Color)**
- 7. **Add new menu option to temporarily hide any messages and restore them easily**
- 8. **Ability to add or edit webpage previews with custom URLs (with shortcut Ctrl+Shift+K)**
- 9. Quickly create or edit inline user mentions with shortcuts (click with Ctrl/Ctrl+Shift)
- 10. Ability to set a custom render limit for rich message blocks
- 11. **Remember message forwarding targets in forward dialog**
- 12. Add options to force regrouping or separating photos on media group forwarding
- 13. Add option to adjust sticker size in chat
- 14. Allow to open the same chat in multiple new windows
- 15. Ability to force generate webpage preview of incoming messages
- 16. Ability to disable auto fetch webpage preview of outgoing messages
- 17. **Chat Enhanced Settings: Override global enhanced setting options on chat level**
- 18. Add new shortcut keys to quickly edit self-editable messages (Alt+Shift+Up/Down)
- 19. Add new option to show detailed media metadata information in media viewer
- 20. **Ability to search messages with both user and message type filters enabled in groups**
- 21. Add new forward option to add spoiler to forwarded media
- 22. Show online indicator on user avatar in group chats
- 23. Add option to send the comment message after forwarding messages
- 24. Add option to disable syncing local message drafts to cloud.
- 25. **Ability to replace link preview domains with custom regex rules.**
- 26. **Import/Export/Share any enhanced setting value with deep links.**
+- Override global enhanced-setting options for an individual chat.
+- Import, export, and share any enhanced-setting value through deep links.
+
+### BotUse
+
+Log in with a bot account and send messages as that bot. See the [BotUse wiki](https://github.com/Revincx/Yurigram/wiki/BotUse-Description) for details.
+
+### More features
+
+<details>
+<summary><b>Messages and chats</b></summary>
+
+- Send a message directly in a group linked to a channel.
+- Temporarily hide messages and restore them easily.
+- Create or edit inline user mentions with Ctrl/Ctrl+Shift-click.
+- Set a custom render limit for rich message blocks.
+- Open the same chat in multiple new windows.
+- Quickly edit self-editable messages with Alt+Shift+Up/Down.
+- Disable syncing local message drafts to the cloud.
+- Show forward counts below channel messages.
+
+</details>
+
+<details>
+<summary><b>Forwarding</b></summary>
+
+- Remember message-forwarding targets in the forward dialog.
+- Force regrouping or separating photos when forwarding media groups.
+- Add spoilers to forwarded media.
+- Send a comment after forwarding messages.
+
+</details>
+
+<details>
+<summary><b>Media and emoji</b></summary>
+
+- Use additional Fluent Emoji packs (Flat and Color).
+- Save custom emoji sets without Premium.
+- Adjust sticker size in chats.
+- View detailed media metadata in the media viewer.
+- Show controls for silent GIF videos.
+
+</details>
+
+<details>
+<summary><b>Translation and link previews</b></summary>
+
+- Translate messages with Google Translate or an LLM translation provider.
+- Add or edit webpage previews with custom URLs using Ctrl+Shift+K.
+- Force generation of webpage previews for incoming messages.
+- Disable automatic webpage-preview fetching for outgoing messages.
+- Replace link-preview domains with custom regular-expression rules.
+
+</details>
+
+<details>
+<summary><b>People and groups</b></summary>
+
+- Show mutual-contact labels and online indicators in group chats.
+- Hide user Stars ratings.
+- Search group messages with both user and message-type filters.
+- Approve or decline all join requests at once.
+
+</details>
 
 And more new features will ~~(may)~~ be added in the future.
 
