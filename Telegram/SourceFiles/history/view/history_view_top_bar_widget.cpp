@@ -1,4 +1,4 @@
-﻿/*
+/*
 This file is part of Telegram Desktop,
 the official desktop application for the Telegram messaging service.
 
@@ -1231,6 +1231,8 @@ void TopBarWidget::updateControlsGeometry() {
 			: st::buttonRadius;
 		const auto buttons = std::array{
 			_forward.data(),
+			_forwardNoQuote.data(),
+			_savedMessages.data(),
 			_sendNow.data(),
 			_delete.data(),
 		};
