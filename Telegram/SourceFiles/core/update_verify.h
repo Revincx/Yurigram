@@ -61,7 +61,7 @@ struct Target {
 [[nodiscard]] QByteArray ArchName(Arch arch);
 
 // The feed key of Platform::AutoUpdateKey(): win / win64 / winarm / mac
-// / armac / linux. It names the package a client should RECEIVE, which is
+// / armac / linux / linuxarm. The package a client should RECEIVE is
 // not always the client's own build (an x64 build under Rosetta asks for
 // armac), so clients compute the expected target from it, never from
 // compile-time macros.

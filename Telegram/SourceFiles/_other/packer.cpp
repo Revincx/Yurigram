@@ -1,4 +1,4 @@
-﻿/*
+/*
 This file is part of Telegram Desktop,
 the official desktop application for the Telegram messaging service.
 
@@ -664,7 +664,14 @@ int main(int argc, char *argv[])
 		V2Target.arch = targetarmac ? Arch::Arm : Arch::X64;
 #else
 		V2Target.os = Os::Linux;
+#ifdef Q_PROCESSOR_ARM_64
+		V2Target.arch = Arch::Arm;
+#elif defined Q_PROCESSOR_X86_64
 		V2Target.arch = Arch::X64;
+#else
+		cout << "Unsupported update target architecture.\n";
+		return -1;
+#endif // Q_PROCESSOR_ARM_64 || Q_PROCESSOR_X86_64
 #endif
 	}
 

@@ -227,7 +227,8 @@ jobs:
           -D CMAKE_C_FLAGS="/WX" ^
           -D CMAKE_CXX_FLAGS="/WX" ^
           -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT:STRING= ^
-          -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON ^
+          -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF ^
+          -D YURIGRAM_BUILD_UPDATE_TOOLS=ON ^
           -D DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF ^
           -D DESKTOP_APP_NO_PDB=ON -U DESKTOP_APP_DISABLE_X11_INTEGRATION
 
@@ -239,6 +240,8 @@ jobs:
           set OUT=%TBUILD%\%REPO_NAME%\out\Release
           mkdir artifact
           move %OUT%\Yurigram.exe artifact/
+          copy /Y "%OUT%\Updater.exe" artifact\
+          if errorlevel 1 exit /b 1
 
       - uses: actions/upload-artifact@v7
         name: Upload artifact.
@@ -254,7 +257,7 @@ jobs:
         shell: pwsh
         run: |
           $archive = "$env:ARTIFACT_NAME.zip"
-          Compress-Archive -LiteralPath "artifact\Yurigram.exe" -DestinationPath $archive
+          Compress-Archive -Path "artifact\*" -DestinationPath $archive
           Add-Content -Path $env:GITHUB_OUTPUT -Value "archive=$archive"
 
       - name: Upload release package.

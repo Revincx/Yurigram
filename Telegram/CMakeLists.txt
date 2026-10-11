@@ -2805,7 +2805,7 @@ if (NOT DESKTOP_APP_DISABLE_AUTOUPDATE AND NOT build_macstore AND NOT build_wins
         )
     endif()
 
-    if (DESKTOP_APP_SPECIAL_TARGET)
+    if (DESKTOP_APP_SPECIAL_TARGET OR YURIGRAM_BUILD_UPDATE_TOOLS)
         add_executable(Packer)
         init_target(Packer)
 
@@ -2820,6 +2820,10 @@ if (NOT DESKTOP_APP_DISABLE_AUTOUPDATE AND NOT build_macstore AND NOT build_wins
         )
 
         target_include_directories(Packer PRIVATE ${src_loc})
+
+        if (YURIGRAM_BUILD_UPDATE_TOOLS)
+            target_compile_definitions(Packer PRIVATE PACKER_DISABLE_PRIVATE)
+        endif()
 
         target_link_libraries(Packer
         PRIVATE

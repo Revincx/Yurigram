@@ -117,7 +117,8 @@ jobs:
           -D TDESKTOP_API_ID=${{ secrets.API_ID }} \
           -D TDESKTOP_API_HASH=${{ secrets.API_HASH }} \
           -D DESKTOP_APP_MAC_ARCH=${{ matrix.arch }} \
-          -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON \
+          -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF \
+          -D YURIGRAM_BUILD_UPDATE_TOOLS=ON \
           -D CMAKE_EXE_LINKER_FLAGS="-Wl,-x"
 
       - name: Telegram Desktop build.
@@ -137,9 +138,11 @@ jobs:
             VERSION="v$(grep 'AppVersionStr' Telegram/SourceFiles/core/version.h | cut -d '"' -f 2)"
           fi
           cd out/Release
+          mkdir -p Yurigram.app/Contents/Frameworks
+          cp Updater Yurigram.app/Contents/Frameworks/Updater
+          chmod 755 Yurigram.app/Contents/Frameworks/Updater
           mkdir artifact
           mv Yurigram.app artifact/
-          mv Updater artifact/
           if [ "${{ matrix.arch }}" == "arm64" ]; then
           	PLATFORM="AppleSilicon"
           else
@@ -161,7 +164,7 @@ jobs:
           ARCHIVE="$REPO_NAME/out/Release/${{ steps.prepare-artifact.outputs.name }}.zip"
           (
             cd "$REPO_NAME/out/Release/artifact"
-            zip -r -y "../${{ steps.prepare-artifact.outputs.name }}.zip" Yurigram.app Updater
+            zip -r -y "../${{ steps.prepare-artifact.outputs.name }}.zip" Yurigram.app
           )
           echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
 

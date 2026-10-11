@@ -8,7 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #import <Cocoa/Cocoa.h>
 #include <sys/xattr.h>
 
-NSString *appName = @"Telegram.app";
+NSString *appName = @"Yurigram.app";
 NSString *appDir = nil;
 NSString *workDir = nil;
 
@@ -56,7 +56,10 @@ void RemoveQuarantineAttribute(NSString *path) {
 
 void RemoveQuarantineFromBundle(NSString *path) {
 	RemoveQuarantineAttribute(path);
-	RemoveQuarantineAttribute([path stringByAppendingString:@"/Contents/MacOS/Telegram"]);
+	NSString *executable = [[NSBundle bundleWithPath:path] executablePath];
+	if (executable) {
+		RemoveQuarantineAttribute(executable);
+	}
 	RemoveQuarantineAttribute([path stringByAppendingString:@"/Contents/Helpers/crashpad_handler"]);
 	RemoveQuarantineAttribute([path stringByAppendingString:@"/Contents/Frameworks/Updater"]);
 }
@@ -165,7 +168,7 @@ int main(int argc, const char * argv[]) {
 
 		// Take the Updater (this currently running binary) from the place where it was placed by Telegram
 		// and copy it to the folder with the new version of the app (ready),
-		// so it won't be deleted when we will clear the "Telegram.app/Contents" folder.
+		// so it won't be deleted when we will clear the "Yurigram.app/Contents" folder.
 		NSString *oldVersionUpdaterPath = [appDirFull stringByAppendingString: @"/Contents/Frameworks/Updater" ];
 		NSString *newVersionUpdaterPath = [srcEnum stringByAppendingString:[[NSArray arrayWithObjects:@"/", appName, @"/Contents/Frameworks/Updater", nil] componentsJoinedByString:@""]];
 		writeLog([[NSArray arrayWithObjects: @"Copying Updater from old path ", oldVersionUpdaterPath, @" to new path ", newVersionUpdaterPath, nil] componentsJoinedByString:@""]);

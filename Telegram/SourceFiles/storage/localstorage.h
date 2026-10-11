@@ -57,9 +57,6 @@ void finish();
 void writeSettings();
 void rewriteSettingsIfNeeded();
 
-void writeAutoupdatePrefix(const QString &prefix);
-QString readAutoupdatePrefix();
-
 void writeUpdateManifest(
 	const QByteArray &manifest,
 	const QByteArray &signature);
