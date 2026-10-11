@@ -813,6 +813,9 @@ struct DecodeEnhancedSettingsResult {
 		addToggleOption(content, EnhancedSettings::Option::ForceMobile);
 		addToggleOption(
 			content,
+			EnhancedSettings::Option::ShowRecentForwardTargets);
+		addToggleOption(
+			content,
 			EnhancedSettings::Option::HideDeleteForOthersCheckbox);
 	}
 

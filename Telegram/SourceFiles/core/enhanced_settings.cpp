@@ -285,6 +285,11 @@ const DescriptorList &DescriptorData() {
 			.title = &tr::lng_translate_llm_extra_parameters,
 			.defaultValue = QString(),
 		},
+		Bool(
+			OptionId::ShowRecentForwardTargets,
+			"show_recent_forward_targets",
+			&tr::lng_settings_show_recent_forward_targets,
+			"enhanced/show-recent-forward-targets"),
 	};
 	return result;
 }

@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/call_delayed.h"
 #include "base/random.h"
 #include "boxes/premium_limits_box.h"
+#include "core/enhanced_settings.h"
 #include "core/shortcuts.h"
 #include "core/ui_integration.h"
 #include "lang/lang_keys.h"
@@ -629,7 +630,9 @@ void ShareBox::prepare() {
 	{
 		const auto &recent = _descriptor.session
 			->recentForwardTargets().list();
-		const auto hasRecent = !recent.empty();
+		const auto hasRecent = EnhancedSettings::Get(
+			EnhancedSettings::Option::ShowRecentForwardTargets)
+			&& !recent.empty();
 		const auto chooseFilter = [this](FilterId id) {
 			_inner->applyChatFilter(id);
 			searchByUsername(true);

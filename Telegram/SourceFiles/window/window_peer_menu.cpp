@@ -132,6 +132,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_peer_values.h"
 #include "dialogs/dialogs_key.h"
 #include "core/application.h"
+#include "core/enhanced_settings.h"
 #include "core/ui_integration.h"
 #include "export/export_manager.h"
 #include "boxes/peers/edit_participants_box.h"
@@ -3339,7 +3340,9 @@ base::weak_qptr<Ui::BoxContent> ShowForwardMessagesBox(
 	const auto showForwardOptions = !hasOnlyForcedForwardedInfo
 		&& (!hasRichPage
 			|| HistoryView::Controls::CanHideForwardAuthor(session, itemsList));
-	const auto hasRecent = !session->recentForwardTargets().list().empty();
+	const auto hasRecent = EnhancedSettings::Get(
+		EnhancedSettings::Option::ShowRecentForwardTargets)
+		&& !session->recentForwardTargets().list().empty();
 	draft.options = HistoryView::Controls::NormalizeForwardOptions(
 		session,
 		itemsList,

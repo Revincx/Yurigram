@@ -56,6 +56,7 @@
     "lng_settings_disable_cloud_draft_sync": "Stop syncing drafts from cloud",
     "lng_settings_disable_sync_draft_to_cloud": "Stop syncing local drafts to cloud",
     "lng_settings_show_scheduled_button": "Always show scheduled button",
+    "lng_settings_show_recent_forward_targets": "Show recent forward targets",
     "lng_settings_voice_chat": "Voice Chat",
     "lng_settings_stereo_mode": "Enable Stereo Mode",
     "lng_settings_pin_voice_chat": "Pin To Top",

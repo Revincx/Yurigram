@@ -88,6 +88,7 @@ enum class OptionId {
 	LlmTranslateModel,
 	LlmTranslateContext,
 	LlmTranslateExtraParameters,
+	ShowRecentForwardTargets,
 	Count,
 };
 
@@ -187,6 +188,8 @@ inline constexpr auto LlmTranslateContext
 	= Key<bool>{ OptionId::LlmTranslateContext };
 inline constexpr auto LlmTranslateExtraParameters
 	= Key<QString>{ OptionId::LlmTranslateExtraParameters };
+inline constexpr auto ShowRecentForwardTargets
+	= Key<bool>{ OptionId::ShowRecentForwardTargets };
 } // namespace Option
 
 enum class ExtraContextMenuOption : int {
