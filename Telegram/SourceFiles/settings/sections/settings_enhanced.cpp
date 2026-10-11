@@ -801,8 +801,12 @@ struct DecodeEnhancedSettingsResult {
 			content,
 			EnhancedSettings::Option::ShowEmojiButtonAsText,
 			tr::lng_show_emoji_button_as_text_desc());
+		addToggleOption(
+			content,
+			EnhancedSettings::Option::MoreRightActionComments);
 		addToggleOption(content, EnhancedSettings::Option::ShowScheduledButton);
 		addToggleOption(content, EnhancedSettings::Option::HideAllChats);
+		addToggleOption(content, EnhancedSettings::Option::ReplaceEditButton);
 		addToggleOption(content, EnhancedSettings::Option::HideCounter);
 		addToggleOption(content, EnhancedSettings::Option::HideStories);
 		addToggleOption(content, EnhancedSettings::Option::HideStarRatings);
@@ -814,9 +818,6 @@ struct DecodeEnhancedSettingsResult {
 
 	void Enhanced::setupBehavior(not_null<Ui::VerticalLayout*> content) {
 		addToggleOption(content, EnhancedSettings::Option::ShowSimilarOnJoined);
-		addToggleOption(
-			content,
-			EnhancedSettings::Option::MoreRightActionComments);
 		addToggleOption(
 			content,
 			EnhancedSettings::Option::SendCommentAfterForwarding);
@@ -849,7 +850,6 @@ struct DecodeEnhancedSettingsResult {
 		addToggleOption(
 			repeaterContent,
 			EnhancedSettings::Option::RepeaterReplyToOriginal);
-		addToggleOption(content, EnhancedSettings::Option::ReplaceEditButton);
 		addToggleOption(
 			content,
 			EnhancedSettings::Option::SkipToNext,
