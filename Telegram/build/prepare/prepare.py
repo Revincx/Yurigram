@@ -646,7 +646,7 @@ winarm:
     SET "ToolsetProp=/property:PlatformToolset=v145"
 win_debug:
     msbuild -m LzmaLib.sln /property:Configuration=Debug /property:Platform="$X8664" %ToolsetProp%
-release:
+win_release:
     msbuild -m LzmaLib.sln /property:Configuration=Release /property:Platform="$X8664" %ToolsetProp%
 """)
 
