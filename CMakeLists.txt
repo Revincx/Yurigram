@@ -63,4 +63,10 @@ set(desktop_app_skip_libs
 )
 
 add_subdirectory(cmake)
+
+if (WIN32 AND NOT DESKTOP_APP_USE_PACKAGED AND QT_VERSION_MAJOR GREATER_EQUAL 6)
+    # The bundled Qt wrapper omits Qt Network's transitive DNS dependency.
+    target_link_libraries(external_qt INTERFACE Dnsapi)
+endif()
+
 add_subdirectory(Telegram)
