@@ -231,6 +231,7 @@ jobs:
           -D YURIGRAM_BUILD_UPDATE_TOOLS=ON ^
           -D DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF ^
           -D DESKTOP_APP_NO_PDB=ON -U DESKTOP_APP_DISABLE_X11_INTEGRATION
+          if errorlevel 1 exit /b 1
 
           cmake --build ..\out --config Release --parallel
 
