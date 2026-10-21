@@ -222,12 +222,18 @@ MTPVector<MTPMessageEntity> EntitiesToMTP(
 
 MTPInputReplyTo ReplyToMTP(const Action &action, UserId bot) {
 	const auto &reply = action.reply;
+	const auto rich = reply.messageId ? reply.richQuote.get() : nullptr;
 	using Flag = MTPDinputReplyToMessage::Flag;
 	auto flags = MTPDinputReplyToMessage::Flags();
 	if (reply.topicRootId) {
 		flags |= Flag::f_top_msg_id;
 	}
-	if (!reply.quote.empty()) {
+	if (rich) {
+		flags |= Flag::f_quote_rich;
+		if (rich->offset) {
+			flags |= Flag::f_quote_offset;
+		}
+	} else if (!reply.quote.empty()) {
 		flags |= Flag::f_quote_text | Flag::f_quote_offset;
 		if (!reply.quote.entities.empty()) {
 			flags |= Flag::f_quote_entities;
@@ -239,11 +245,14 @@ MTPInputReplyTo ReplyToMTP(const Action &action, UserId bot) {
 		MTP_int(reply.topicRootId.bare),
 		MTPInputPeer(),
 		MTP_string(reply.quote.text),
-		EntitiesToMTP(reply.quote.entities, bot),
-		MTP_int(reply.quoteOffset),
+		(rich
+			? MTPVector<MTPMessageEntity>()
+			: EntitiesToMTP(reply.quote.entities, bot)),
+		MTP_int(rich ? rich->offset.value_or(0) : reply.quoteOffset),
 		MTPInputPeer(),
 		MTPint(),
-		MTPbytes());
+		MTPbytes(),
+		(rich ? rich->fragments : MTPVector<MTPRichText>()));
 }
 
 MTPInputMedia WebPageToMTP(const Data::WebPageDraft &page) {

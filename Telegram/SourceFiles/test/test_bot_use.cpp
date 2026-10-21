@@ -155,7 +155,8 @@ MTPMessageReplyHeader MessageReply(int message, int top = 0) {
 			| (top ? Flag::f_reply_to_top_id | Flag::f_forum_topic : Flag())),
 		MTP_int(message), MTPPeer(), MTPMessageFwdHeader(), MTPMessageMedia(),
 		MTP_int(top), MTPstring(), MTPVector<MTPMessageEntity>(), MTPint(),
-		MTPint(), MTPbytes());
+		MTPint(), MTPbytes(),
+		MTPVector<MTPRichText>());
 }
 
 MTPMessageFwdHeader ForwardHeader(uint64 author) {
