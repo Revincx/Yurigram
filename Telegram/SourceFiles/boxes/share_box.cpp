@@ -2845,7 +2845,9 @@ base::weak_qptr<Ui::BoxContent> FastShareImage(
 			Fn<bool()> checkPaid,
 			TextWithTags &&comment,
 			Api::SendOptions options,
-			::Data::ForwardOptions) {
+			::Data::ForwardOptions,
+			::Data::GroupingOptions,
+			bool) {
 		if (*sending || result.empty()) {
 			return;
 		}

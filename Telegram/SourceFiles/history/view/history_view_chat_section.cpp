@@ -2544,7 +2544,7 @@ void ChatWidget::sendRichDraft(
 		}
 		_composeControls->clear();
 		_composeControls->applyCloudDraft();
-		finishSending();
+		finishSending(options);
 		return;
 	}
 	const auto serialized = Iv::SerializeInputRichMessage(
