@@ -1554,7 +1554,9 @@ void Controller::fillManageSection() {
 		? channel->canEditPreHistoryHidden()
 		: chat->canEditPreHistoryHidden();
 	const auto canEditForum = isChannel
-		? (channel->isMegagroup() && channel->amCreator())
+		? (channel->isMegagroup()
+			&& !channel->isGigagroup()
+			&& channel->amCreator())
 		: chat->amCreator();
 	const auto canEditPermissions = isChannel
 		? channel->canEditPermissions()

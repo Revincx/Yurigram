@@ -75,9 +75,11 @@ auto PlainPrimaryUsernameValue(not_null<PeerData*> peer) {
 	}) | rpl::flatten_latest();
 }
 
-void StripExternalLinks(TextWithEntities &text) {
-	const auto local = [](const QString &url) {
-		return !UrlRequiresConfirmation(QUrl::fromUserInput(url));
+void StripExternalLinks(
+		not_null<Main::Session*> session,
+		TextWithEntities &text) {
+	const auto local = [&](const QString &url) {
+		return !UrlRequiresConfirmation(session, QUrl::fromUserInput(url));
 	};
 	const auto notLocal = [&](const EntityInText &entity) {
 		if (entity.type() == EntityType::CustomUrl) {
@@ -139,6 +141,10 @@ rpl::producer<TextWithEntities> PhoneValue(not_null<UserData*> user) {
 	) | rpl::map([=] {
 		return tr::marked(Ui::FormatPhone(user->phone()));
 	});
+}
+
+QString PublicLinkByPhone(not_null<UserData*> user) {
+	return user->session().createInternalLinkFull('+' + user->phone());
 }
 
 rpl::producer<TextWithEntities> PhoneOrHiddenValue(not_null<UserData*> user) {

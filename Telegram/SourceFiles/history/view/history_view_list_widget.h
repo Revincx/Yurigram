@@ -26,6 +26,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_view_top_toast.h"
 
 struct ClickHandlerContext;
+struct HistorySelectedTextParts;
 
 namespace Main {
 class Session;
@@ -376,7 +377,7 @@ public:
 
 	[[nodiscard]] TextForMimeData getSelectedText() const;
 	[[nodiscard]] Iv::RichPageBlocksSlice getSelectedRichBlocks() const;
-	void copySelectedText();
+	void copySelectedText(bool withImageText = false);
 	[[nodiscard]] MessageIdsList getSelectedIds() const;
 	[[nodiscard]] SelectedItems getSelectedItems() const;
 	[[nodiscard]] TextSelection getSelectedTextRange(
@@ -481,7 +482,6 @@ public:
 	void replyToMessageRequestNotify(
 		FullReplyTo to,
 		bool forceAnotherChat = false);
-	[[nodiscard]] rpl::producer<FullMsgId> readMessageRequested() const;
 	[[nodiscard]] rpl::producer<FullMsgId> showMessageRequested() const;
 	void setInsertTextCallback(Fn<void(QString)> callback);
 	void insertTextAtCursor(const QString &text);
@@ -816,6 +816,7 @@ private:
 		const SelectedMap::const_iterator &i);
 	bool hasSelectedText() const;
 	bool hasSelectedItems() const;
+	[[nodiscard]] HistorySelectedTextParts getSelectedTextParts() const;
 	SelectionModeResult inSelectionMode() const;
 	bool overSelectedItems() const;
 	void clearTextSelection();
@@ -961,8 +962,6 @@ private:
 	// if it returns false the enumeration stops immediately.
 	template <typename Method>
 	void enumerateForumThreadBars(Method method);
-
-	void setGeometryCrashAnnotations(not_null<Element*> view);
 
 	static constexpr auto kMinimalIdsLimit = 24;
 
@@ -1128,7 +1127,6 @@ private:
 
 	rpl::event_stream<EditMessageRequest> _requestedToEditMessage;
 	rpl::event_stream<ReplyToMessageRequest> _requestedToReplyToMessage;
-	rpl::event_stream<FullMsgId> _requestedToReadMessage;
 	rpl::event_stream<FullMsgId> _requestedToShowMessage;
 	Fn<void(QString)> _insertTextCallback;
 	rpl::event_stream<not_null<QKeyEvent*>> _scrollKeyEvents;

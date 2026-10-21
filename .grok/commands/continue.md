@@ -1,6 +1,6 @@
 ---
 name: continue
-description: Continue work from the shared ai-tdesktop queue. Use when the user invokes /continue or $continue in Grok Build, or asks to resume the active task and drain the frozen startup batch.
+description: Continue a specified batch from the shared ai-tdesktop queue. Use when the user invokes /continue or $continue in Grok Build with a batch specification, or asks to resume the active task and run a specified batch.
 ---
 
 # Continue AI Work
@@ -46,9 +46,8 @@ workers. A continue-spawned performer is at depth 1 and must run every
 phase leaf as a same-session checklist. Do not start Grok subprocesses
 through Bash.
 
-Arguments, when present, are natural-language hints for new shared work;
-their wording decides whether they merely prioritize or strictly restrict
-selection:
+The arguments are the batch specification. They always restrict the batch
+to the tasks they select; ordering words only order those tasks:
 
 ```text
 $ARGUMENTS
