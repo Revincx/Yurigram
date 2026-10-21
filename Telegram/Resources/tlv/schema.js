@@ -726,7 +726,7 @@ window.TL_SCHEMA_FULL = {
     result.title = e.string();
     return result;
   },
-  3567203526: function (e) {
+  2060538432: function (e) {
     var result = { _: `channel` };
     var t = e.uint();
     result.flags = t;
@@ -760,6 +760,7 @@ window.TL_SCHEMA_FULL = {
     result.broadcastMessagesAllowed = !!(n & 65536);
     result.monoforum = !!(n & 131072);
     result.forumTabs = !!(n & 524288);
+    result.inNews = !!(n & 2097152);
     result.id = e.long();
     if (t & 8192) {
       result.accessHash = e.long();
@@ -817,6 +818,9 @@ window.TL_SCHEMA_FULL = {
     }
     if (n & 1048576) {
       result.linkedCommunityId = e.long();
+    }
+    if (n & 4194304) {
+      result.pinnedMsgId = e.int();
     }
     return result;
   },
@@ -924,7 +928,7 @@ window.TL_SCHEMA_FULL = {
     }
     return result;
   },
-  2689502522: function (e) {
+  3301236032: function (e) {
     var result = { _: `channelFull` };
     var t = e.uint();
     result.flags = t;
@@ -1071,6 +1075,9 @@ window.TL_SCHEMA_FULL = {
     }
     if (n & 8388608) {
       result.guardBotId = e.long();
+    }
+    if (n & 33554432) {
+      result.shareTheme = e.object();
     }
     return result;
   },
@@ -2229,6 +2236,10 @@ window.TL_SCHEMA_FULL = {
     }
     return result;
   },
+  3251827142: function (e) {
+    var result = { _: `messageActionNoPaidMessagesTokenUsed` };
+    return result;
+  },
   4236900339: function (e) {
     var result = { _: `dialog` };
     var t = e.uint();
@@ -2632,7 +2643,7 @@ window.TL_SCHEMA_FULL = {
     var result = { _: `inputReportReasonPersonalDetails` };
     return result;
   },
-  114026053: function (e) {
+  3104582397: function (e) {
     var result = { _: `userFull` };
     var t = e.uint();
     result.flags = t;
@@ -2763,6 +2774,12 @@ window.TL_SCHEMA_FULL = {
     }
     if (n & 33554432) {
       result.botManagerId = e.long();
+    }
+    if (n & 524288) {
+      result.walletCard = e.object();
+    }
+    if (n & 134217728) {
+      result.shareTheme = e.object();
     }
     return result;
   },
@@ -9459,7 +9476,7 @@ window.TL_SCHEMA_FULL = {
     result.count = e.int();
     return result;
   },
-  1020666860: function (e) {
+  3184157031: function (e) {
     var result = { _: `urlAuthResultRequest` };
     var t = e.uint();
     result.flags = t;
@@ -9467,6 +9484,7 @@ window.TL_SCHEMA_FULL = {
     result.requestPhoneNumber = !!(t & 2);
     result.matchCodesFirst = !!(t & 32);
     result.isApp = !!(t & 64);
+    result.requestWallet = !!(t & 256);
     result.bot = e.object();
     result.domain = e.string();
     if (t & 4) {
@@ -9489,6 +9507,12 @@ window.TL_SCHEMA_FULL = {
     }
     if (t & 128) {
       result.verifiedAppName = e.string();
+    }
+    if (t & 512) {
+      result.tcSessionId = e.long();
+    }
+    if (t & 1024) {
+      result.tcClientId = e.string();
     }
     return result;
   },
@@ -10059,7 +10083,7 @@ window.TL_SCHEMA_FULL = {
     result.users = e.vector(e.object);
     return result;
   },
-  462937446: function (e) {
+  3719670645: function (e) {
     var result = { _: `messageReplyHeader` };
     var t = e.uint();
     result.flags = t;
@@ -10096,6 +10120,9 @@ window.TL_SCHEMA_FULL = {
     }
     if (t & 4096) {
       result.pollOption = e.bytes();
+    }
+    if (t & 16384) {
+      result.quoteRich = e.vector(e.object);
     }
     return result;
   },
@@ -11843,7 +11870,7 @@ window.TL_SCHEMA_FULL = {
     result.users = e.vector(e.object);
     return result;
   },
-  1003796418: function (e) {
+  1975627120: function (e) {
     var result = { _: `inputReplyToMessage` };
     var t = e.uint();
     result.flags = t;
@@ -11871,6 +11898,9 @@ window.TL_SCHEMA_FULL = {
     }
     if (t & 128) {
       result.pollOption = e.bytes();
+    }
+    if (t & 256) {
+      result.quoteRich = e.vector(e.object);
     }
     return result;
   },
@@ -15113,6 +15143,24 @@ window.TL_SCHEMA_FULL = {
     var result = { _: `walletTransactionPeerUnsupported` };
     return result;
   },
+  1424428081: function (e) {
+    var result = { _: `walletTransactionPeerChannel` };
+    var t = e.uint();
+    result.flags = t;
+    result.channelId = e.long();
+    result.address = e.string();
+    if (t & 1) {
+      result.domain = e.string();
+    }
+    return result;
+  },
+  4101149849: function (e) {
+    var result = { _: `walletTransactionPeerTelegramGift` };
+    var t = e.uint();
+    result.flags = t;
+    result.ownProfile = !!(t & 1);
+    return result;
+  },
   2502803779: function (e) {
     var result = { _: `walletTransaction` };
     var t = e.uint();
@@ -15281,6 +15329,641 @@ window.TL_SCHEMA_FULL = {
     result.value = e.string();
     return result;
   },
+  389937907: function (e) {
+    var result = { _: `wallet.nftItem` };
+    var t = e.uint();
+    result.flags = t;
+    if (t & 1) {
+      result.collectionAddress = e.string();
+    }
+    result.address = e.string();
+    result.ownerAddress = e.string();
+    result.index = e.string();
+    if (t & 2) {
+      result.name = e.string();
+    }
+    if (t & 4) {
+      result.description = e.string();
+    }
+    if (t & 8) {
+      result.image = e.object();
+    }
+    if (t & 16) {
+      result.imageSmall = e.object();
+    }
+    if (t & 32) {
+      result.contentUrl = e.object();
+    }
+    if (t & 64) {
+      result.lottie = e.object();
+    }
+    if (t & 128) {
+      result.attributes = e.vector(e.object);
+    }
+    if (t & 256) {
+      result.extra = e.object();
+    }
+    if (t & 512) {
+      result.gift = e.object();
+    }
+    return result;
+  },
+  2035107951: function (e) {
+    var result = { _: `wallet.nftItems` };
+    var t = e.uint();
+    result.flags = t;
+    result.items = e.vector(e.object);
+    if (t & 1) {
+      result.nextOffset = e.string();
+    }
+    return result;
+  },
+  3747266572: function (e) {
+    var result = { _: `auth.firebasePnvIntent` };
+    result.nonce = e.string();
+    result.digitalCredentialPayload = e.string();
+    return result;
+  },
+  1654613710: function (e) {
+    var result = { _: `inputTonConnectOauthSession` };
+    result.sessionId = e.long();
+    result.challengeAnswer = e.bytes();
+    result.body = e.bytes();
+    result.proof = e.object();
+    return result;
+  },
+  1767755842: function (e) {
+    var result = { _: `exportedNoPaidMessagesToken` };
+    var t = e.uint();
+    result.flags = t;
+    result.token = e.string();
+    result.url = e.string();
+    if (t & 1) {
+      result.expires = e.int();
+    }
+    return result;
+  },
+  2511136847: function (e) {
+    var result = { _: `shareThemeDefault` };
+    return result;
+  },
+  1689466081: function (e) {
+    var result = { _: `shareThemeEmojiBackdrop` };
+    var t = e.uint();
+    result.flags = t;
+    if (t & 1) {
+      result.backdropId = e.int();
+    }
+    if (t & 2) {
+      result.emojis = e.vector(e.object);
+    }
+    return result;
+  },
+  3958171245: function (e) {
+    var result = { _: `shareThemeGift` };
+    result.stargift = e.object();
+    return result;
+  },
+  1069099867: function (e) {
+    var result = { _: `inputShareThemeGift` };
+    result.stargift = e.object();
+    return result;
+  },
+  1170331218: function (e) {
+    var result = { _: `shareThemeBackdropOption` };
+    result.backdropId = e.int();
+    result.name = e.string();
+    result.centerColor = e.int();
+    result.edgeColor = e.int();
+    result.patternColor = e.int();
+    result.textColor = e.int();
+    return result;
+  },
+  2050977279: function (e) {
+    var result = { _: `shareThemeBackdropsNotModified` };
+    return result;
+  },
+  2867518688: function (e) {
+    var result = { _: `shareThemeBackdrops` };
+    result.hash = e.int();
+    result.backdrops = e.vector(e.object);
+    return result;
+  },
+  1474250151: function (e) {
+    var result = { _: `inputWalletCardSticker` };
+    result.coordinates = e.object();
+    result.nftAddress = e.string();
+    return result;
+  },
+  4076932282: function (e) {
+    var result = { _: `wallet.cardSticker` };
+    result.coordinates = e.object();
+    result.nft = e.object();
+    return result;
+  },
+  2396013489: function (e) {
+    var result = { _: `wallet.card` };
+    var t = e.uint();
+    result.flags = t;
+    if (t & 1) {
+      result.stickers = e.vector(e.object);
+    }
+    if (t & 2) {
+      result.bgNftItem = e.object();
+    }
+    result.address = e.string();
+    result.balance = e.long();
+    return result;
+  },
+  1918612715: function (e) {
+    var result = { _: `payments.starGiftDepositPayload` };
+    result.nftAddress = e.string();
+    result.payload = e.bytes();
+    result.amount = e.long();
+    return result;
+  },
+  3567203526: function (e) {
+    var result = { _: `channel` };
+    var t = e.uint();
+    result.flags = t;
+    result.creator = !!(t & 1);
+    result.left = !!(t & 4);
+    result.broadcast = !!(t & 32);
+    result.verified = !!(t & 128);
+    result.megagroup = !!(t & 256);
+    result.restricted = !!(t & 512);
+    result.signatures = !!(t & 2048);
+    result.min = !!(t & 4096);
+    result.scam = !!(t & 524288);
+    result.hasLink = !!(t & 1048576);
+    result.hasGeo = !!(t & 2097152);
+    result.slowmodeEnabled = !!(t & 4194304);
+    result.callActive = !!(t & 8388608);
+    result.callNotEmpty = !!(t & 16777216);
+    result.fake = !!(t & 33554432);
+    result.gigagroup = !!(t & 67108864);
+    result.noforwards = !!(t & 134217728);
+    result.joinToSend = !!(t & 268435456);
+    result.joinRequest = !!(t & 536870912);
+    result.forum = !!(t & 1073741824);
+    var n = e.uint();
+    result.flags2 = n;
+    result.storiesHidden = !!(n & 2);
+    result.storiesHiddenMin = !!(n & 4);
+    result.storiesUnavailable = !!(n & 8);
+    result.signatureProfiles = !!(n & 4096);
+    result.autotranslation = !!(n & 32768);
+    result.broadcastMessagesAllowed = !!(n & 65536);
+    result.monoforum = !!(n & 131072);
+    result.forumTabs = !!(n & 524288);
+    result.id = e.long();
+    if (t & 8192) {
+      result.accessHash = e.long();
+    }
+    result.title = e.string();
+    if (t & 64) {
+      result.username = e.string();
+    }
+    result.photo = e.object();
+    result.date = e.int();
+    if (t & 512) {
+      result.restrictionReason = e.vector(e.object);
+    }
+    if (t & 16384) {
+      result.adminRights = e.object();
+    }
+    if (t & 32768) {
+      result.bannedRights = e.object();
+    }
+    if (t & 262144) {
+      result.defaultBannedRights = e.object();
+    }
+    if (t & 131072) {
+      result.participantsCount = e.int();
+    }
+    if (n & 1) {
+      result.usernames = e.vector(e.object);
+    }
+    if (n & 16) {
+      result.storiesMaxId = e.object();
+    }
+    if (n & 128) {
+      result.color = e.object();
+    }
+    if (n & 256) {
+      result.profileColor = e.object();
+    }
+    if (n & 512) {
+      result.emojiStatus = e.object();
+    }
+    if (n & 1024) {
+      result.level = e.int();
+    }
+    if (n & 2048) {
+      result.subscriptionUntilDate = e.int();
+    }
+    if (n & 8192) {
+      result.botVerificationIcon = e.long();
+    }
+    if (n & 16384) {
+      result.sendPaidMessagesStars = e.long();
+    }
+    if (n & 262144) {
+      result.linkedMonoforumId = e.long();
+    }
+    if (n & 1048576) {
+      result.linkedCommunityId = e.long();
+    }
+    return result;
+  },
+  2689502522: function (e) {
+    var result = { _: `channelFull` };
+    var t = e.uint();
+    result.flags = t;
+    result.canViewParticipants = !!(t & 8);
+    result.canSetUsername = !!(t & 64);
+    result.canSetStickers = !!(t & 128);
+    result.hiddenPrehistory = !!(t & 1024);
+    result.canSetLocation = !!(t & 65536);
+    result.hasScheduled = !!(t & 524288);
+    result.canViewStats = !!(t & 1048576);
+    result.blocked = !!(t & 4194304);
+    var n = e.uint();
+    result.flags2 = n;
+    result.canDeleteChannel = !!(n & 1);
+    result.antispam = !!(n & 2);
+    result.participantsHidden = !!(n & 4);
+    result.translationsDisabled = !!(n & 8);
+    result.storiesPinnedAvailable = !!(n & 32);
+    result.viewForumAsMessages = !!(n & 64);
+    result.restrictedSponsored = !!(n & 2048);
+    result.canViewRevenue = !!(n & 4096);
+    result.paidMediaAllowed = !!(n & 16384);
+    result.canViewStarsRevenue = !!(n & 32768);
+    result.paidReactionsAvailable = !!(n & 65536);
+    result.stargiftsAvailable = !!(n & 524288);
+    result.paidMessagesAvailable = !!(n & 1048576);
+    result.hasWelcomeMessages = !!(n & 16777216);
+    result.id = e.long();
+    result.about = e.string();
+    if (t & 1) {
+      result.participantsCount = e.int();
+    }
+    if (t & 2) {
+      result.adminsCount = e.int();
+    }
+    if (t & 4) {
+      result.kickedCount = e.int();
+    }
+    if (t & 4) {
+      result.bannedCount = e.int();
+    }
+    if (t & 8192) {
+      result.onlineCount = e.int();
+    }
+    result.readInboxMaxId = e.int();
+    result.readOutboxMaxId = e.int();
+    result.unreadCount = e.int();
+    result.chatPhoto = e.object();
+    result.notifySettings = e.object();
+    if (t & 8388608) {
+      result.exportedInvite = e.object();
+    }
+    result.botInfo = e.vector(e.object);
+    if (t & 16) {
+      result.migratedFromChatId = e.long();
+    }
+    if (t & 16) {
+      result.migratedFromMaxId = e.int();
+    }
+    if (t & 32) {
+      result.pinnedMsgId = e.int();
+    }
+    if (t & 256) {
+      result.stickerset = e.object();
+    }
+    if (t & 512) {
+      result.availableMinId = e.int();
+    }
+    if (t & 2048) {
+      result.folderId = e.int();
+    }
+    if (t & 16384) {
+      result.linkedChatId = e.long();
+    }
+    if (t & 32768) {
+      result.location = e.object();
+    }
+    if (t & 131072) {
+      result.slowmodeSeconds = e.int();
+    }
+    if (t & 262144) {
+      result.slowmodeNextSendDate = e.int();
+    }
+    if (t & 4096) {
+      result.statsDc = e.int();
+    }
+    result.pts = e.int();
+    if (t & 2097152) {
+      result.call = e.object();
+    }
+    if (t & 16777216) {
+      result.ttlPeriod = e.int();
+    }
+    if (t & 33554432) {
+      result.pendingSuggestions = e.vector(e.string);
+    }
+    if (t & 67108864) {
+      result.groupcallDefaultJoinAs = e.object();
+    }
+    if (t & 134217728) {
+      result.themeEmoticon = e.string();
+    }
+    if (t & 268435456) {
+      result.requestsPending = e.int();
+    }
+    if (t & 268435456) {
+      result.recentRequesters = e.vector(e.long);
+    }
+    if (t & 536870912) {
+      result.defaultSendAs = e.object();
+    }
+    if (t & 1073741824) {
+      result.availableReactions = e.object();
+    }
+    if (n & 8192) {
+      result.reactionsLimit = e.int();
+    }
+    if (n & 16) {
+      result.stories = e.object();
+    }
+    if (n & 128) {
+      result.wallpaper = e.object();
+    }
+    if (n & 256) {
+      result.boostsApplied = e.int();
+    }
+    if (n & 512) {
+      result.boostsUnrestrict = e.int();
+    }
+    if (n & 1024) {
+      result.emojiset = e.object();
+    }
+    if (n & 131072) {
+      result.botVerification = e.object();
+    }
+    if (n & 262144) {
+      result.stargiftsCount = e.int();
+    }
+    if (n & 2097152) {
+      result.sendPaidMessagesStars = e.long();
+    }
+    if (n & 4194304) {
+      result.mainTab = e.object();
+    }
+    if (n & 8388608) {
+      result.guardBotId = e.long();
+    }
+    return result;
+  },
+  114026053: function (e) {
+    var result = { _: `userFull` };
+    var t = e.uint();
+    result.flags = t;
+    result.blocked = !!(t & 1);
+    result.phoneCallsAvailable = !!(t & 16);
+    result.phoneCallsPrivate = !!(t & 32);
+    result.canPinMessage = !!(t & 128);
+    result.hasScheduled = !!(t & 4096);
+    result.videoCallsAvailable = !!(t & 8192);
+    result.voiceMessagesForbidden = !!(t & 1048576);
+    result.translationsDisabled = !!(t & 8388608);
+    result.storiesPinnedAvailable = !!(t & 67108864);
+    result.blockedMyStoriesFrom = !!(t & 134217728);
+    result.wallpaperOverridden = !!(t & 268435456);
+    result.contactRequirePremium = !!(t & 536870912);
+    result.readDatesPrivate = !!(t & 1073741824);
+    var n = e.uint();
+    result.flags2 = n;
+    result.sponsoredEnabled = !!(n & 128);
+    result.canViewRevenue = !!(n & 512);
+    result.botCanManageEmojiStatus = !!(n & 1024);
+    result.displayGiftsButton = !!(n & 65536);
+    result.noforwardsMyEnabled = !!(n & 8388608);
+    result.noforwardsPeerEnabled = !!(n & 16777216);
+    result.unofficialSecurityRisk = !!(n & 67108864);
+    result.id = e.long();
+    if (t & 2) {
+      result.about = e.string();
+    }
+    result.settings = e.object();
+    if (t & 2097152) {
+      result.personalPhoto = e.object();
+    }
+    if (t & 4) {
+      result.profilePhoto = e.object();
+    }
+    if (t & 4194304) {
+      result.fallbackPhoto = e.object();
+    }
+    result.notifySettings = e.object();
+    if (t & 8) {
+      result.botInfo = e.object();
+    }
+    if (t & 64) {
+      result.pinnedMsgId = e.int();
+    }
+    result.commonChatsCount = e.int();
+    if (t & 2048) {
+      result.folderId = e.int();
+    }
+    if (t & 16384) {
+      result.ttlPeriod = e.int();
+    }
+    if (t & 32768) {
+      result.theme = e.object();
+    }
+    if (t & 65536) {
+      result.privateForwardName = e.string();
+    }
+    if (t & 131072) {
+      result.botGroupAdminRights = e.object();
+    }
+    if (t & 262144) {
+      result.botBroadcastAdminRights = e.object();
+    }
+    if (t & 16777216) {
+      result.wallpaper = e.object();
+    }
+    if (t & 33554432) {
+      result.stories = e.object();
+    }
+    if (n & 1) {
+      result.businessWorkHours = e.object();
+    }
+    if (n & 2) {
+      result.businessLocation = e.object();
+    }
+    if (n & 4) {
+      result.businessGreetingMessage = e.object();
+    }
+    if (n & 8) {
+      result.businessAwayMessage = e.object();
+    }
+    if (n & 16) {
+      result.businessIntro = e.object();
+    }
+    if (n & 32) {
+      result.birthday = e.object();
+    }
+    if (n & 64) {
+      result.personalChannelId = e.long();
+    }
+    if (n & 64) {
+      result.personalChannelMessage = e.int();
+    }
+    if (n & 256) {
+      result.stargiftsCount = e.int();
+    }
+    if (n & 2048) {
+      result.starrefProgram = e.object();
+    }
+    if (n & 4096) {
+      result.botVerification = e.object();
+    }
+    if (n & 16384) {
+      result.sendPaidMessagesStars = e.long();
+    }
+    if (n & 32768) {
+      result.disallowedGifts = e.object();
+    }
+    if (n & 131072) {
+      result.starsRating = e.object();
+    }
+    if (n & 262144) {
+      result.starsMyPendingRating = e.object();
+    }
+    if (n & 262144) {
+      result.starsMyPendingRatingDate = e.int();
+    }
+    if (n & 1048576) {
+      result.mainTab = e.object();
+    }
+    if (n & 2097152) {
+      result.savedMusic = e.object();
+    }
+    if (n & 4194304) {
+      result.note = e.object();
+    }
+    if (n & 33554432) {
+      result.botManagerId = e.long();
+    }
+    return result;
+  },
+  1020666860: function (e) {
+    var result = { _: `urlAuthResultRequest` };
+    var t = e.uint();
+    result.flags = t;
+    result.requestWriteAccess = !!(t & 1);
+    result.requestPhoneNumber = !!(t & 2);
+    result.matchCodesFirst = !!(t & 32);
+    result.isApp = !!(t & 64);
+    result.bot = e.object();
+    result.domain = e.string();
+    if (t & 4) {
+      result.browser = e.string();
+    }
+    if (t & 4) {
+      result.platform = e.string();
+    }
+    if (t & 4) {
+      result.ip = e.string();
+    }
+    if (t & 4) {
+      result.region = e.string();
+    }
+    if (t & 8) {
+      result.matchCodes = e.vector(e.string);
+    }
+    if (t & 16) {
+      result.userIdHint = e.long();
+    }
+    if (t & 128) {
+      result.verifiedAppName = e.string();
+    }
+    return result;
+  },
+  462937446: function (e) {
+    var result = { _: `messageReplyHeader` };
+    var t = e.uint();
+    result.flags = t;
+    result.replyToScheduled = !!(t & 4);
+    result.forumTopic = !!(t & 8);
+    result.quote = !!(t & 512);
+    result.replyToEphemeral = !!(t & 8192);
+    if (t & 16) {
+      result.replyToMsgId = e.int();
+    }
+    if (t & 1) {
+      result.replyToPeerId = e.object();
+    }
+    if (t & 32) {
+      result.replyFrom = e.object();
+    }
+    if (t & 256) {
+      result.replyMedia = e.object();
+    }
+    if (t & 2) {
+      result.replyToTopId = e.int();
+    }
+    if (t & 64) {
+      result.quoteText = e.string();
+    }
+    if (t & 128) {
+      result.quoteEntities = e.vector(e.object);
+    }
+    if (t & 1024) {
+      result.quoteOffset = e.int();
+    }
+    if (t & 2048) {
+      result.todoItemId = e.int();
+    }
+    if (t & 4096) {
+      result.pollOption = e.bytes();
+    }
+    return result;
+  },
+  1003796418: function (e) {
+    var result = { _: `inputReplyToMessage` };
+    var t = e.uint();
+    result.flags = t;
+    result.replyToMsgId = e.int();
+    if (t & 1) {
+      result.topMsgId = e.int();
+    }
+    if (t & 2) {
+      result.replyToPeerId = e.object();
+    }
+    if (t & 4) {
+      result.quoteText = e.string();
+    }
+    if (t & 8) {
+      result.quoteEntities = e.vector(e.object);
+    }
+    if (t & 16) {
+      result.quoteOffset = e.int();
+    }
+    if (t & 32) {
+      result.monoforumPeerId = e.object();
+    }
+    if (t & 64) {
+      result.todoItemId = e.int();
+    }
+    if (t & 128) {
+      result.pollOption = e.bytes();
+    }
+    return result;
+  },
   876739868: function (e) {
     var result = { _: `wallet.nftItem` };
     var t = e.uint();
@@ -15315,22 +15998,6 @@ window.TL_SCHEMA_FULL = {
     if (t & 256) {
       result.extra = e.object();
     }
-    return result;
-  },
-  2035107951: function (e) {
-    var result = { _: `wallet.nftItems` };
-    var t = e.uint();
-    result.flags = t;
-    result.items = e.vector(e.object);
-    if (t & 1) {
-      result.nextOffset = e.string();
-    }
-    return result;
-  },
-  3747266572: function (e) {
-    var result = { _: `auth.firebasePnvIntent` };
-    result.nonce = e.string();
-    result.digitalCredentialPayload = e.string();
     return result;
   },
   2966251031: function (e) {
