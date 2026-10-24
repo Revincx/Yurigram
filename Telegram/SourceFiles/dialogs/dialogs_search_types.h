@@ -36,4 +36,8 @@ using MessageSearchTypes = uint32;
 	return 1U << static_cast<uint32>(type);
 }
 
+[[nodiscard]] constexpr bool IsStickerOnlySearch(MessageSearchTypes types) {
+	return types == MessageSearchTypeBit(MessageSearchType::Sticker);
+}
+
 } // namespace Dialogs

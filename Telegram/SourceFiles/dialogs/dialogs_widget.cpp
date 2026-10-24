@@ -3181,6 +3181,7 @@ bool Widget::search(bool inCache, SearchRequestDelay delay) {
 	const auto inPeer = searchInPeer();
 	const auto fromPeer = searchFromPeer();
 	const auto messageTypes = _searchState.messageTypes;
+	const auto stickerOnly = IsStickerOnlySearch(messageTypes);
 	const auto nativeMessageType = NativeMessageSearchType(messageTypes);
 	const auto &inTags = searchInTags();
 	const auto tab = _searchState.tab;
@@ -3206,6 +3207,7 @@ bool Widget::search(bool inCache, SearchRequestDelay delay) {
 	if (trimmed.isEmpty()
 		&& !fromPeer
 		&& !nativeMessageType
+		&& !stickerOnly
 		&& inTags.empty()) {
 		cancelSearchRequest();
 
@@ -3232,7 +3234,7 @@ bool Widget::search(bool inCache, SearchRequestDelay delay) {
 			peerSearchReceived({});
 		}
 		return true;
-	} else if (inCache && nativeMessageType) {
+	} else if (inCache && (nativeMessageType || stickerOnly)) {
 		return false;
 	} else if (inCache) {
 		const auto success = messageTypes
@@ -3248,6 +3250,7 @@ bool Widget::search(bool inCache, SearchRequestDelay delay) {
 			_searchQuery = query;
 			_searchQueryFrom = fromPeer;
 			_searchQueryMessageTypes = messageTypes;
+			_searchStickerEmojis.reset();
 			_searchQueryTags = inTags;
 			_searchQueryTab = tab;
 			_searchQueryCommunity = community;
@@ -3280,6 +3283,9 @@ bool Widget::search(bool inCache, SearchRequestDelay delay) {
 		_searchQuery = query;
 		_searchQueryFrom = fromPeer;
 		_searchQueryMessageTypes = messageTypes;
+		_searchStickerEmojis = stickerOnly
+			? ParseStickerSearchEmojis(query)
+			: std::nullopt;
 		_searchQueryTags = inTags;
 		_searchQueryTab = tab;
 		_searchQueryCommunity = community;
@@ -3289,7 +3295,12 @@ bool Widget::search(bool inCache, SearchRequestDelay delay) {
 		process->full = false;
 		_migratedProcess.full = false;
 		cancelSearchRequest();
-		if (inPeer && nativeMessageType
+		if (inPeer && stickerOnly) {
+			requestStickerMessages(
+				session().data().history(inPeer),
+				fromStartType,
+				process);
+		} else if (inPeer && nativeMessageType
 			&& (fromPeer || _searchState.inChat.sublist())) {
 			const auto revision = _searchRevision;
 			const auto topic = searchInTopic();
@@ -3623,6 +3634,27 @@ void Widget::searchMoreNow() {
 	if (process->requestId
 		|| _historiesRequest) {
 		return;
+	} else if (IsStickerOnlySearch(_searchQueryMessageTypes)) {
+		if (!process->full) {
+			if (const auto peer = searchInPeer()) {
+				requestStickerMessages(
+					session().data().history(peer),
+					{
+						.start = !process->lastId,
+						.peer = true,
+					},
+					process);
+			}
+		} else if (_searchInMigrated && !_migratedProcess.full) {
+			requestStickerMessages(
+				_searchInMigrated,
+				{
+					.migrated = true,
+					.start = !_migratedProcess.lastId,
+				},
+				&_migratedProcess);
+		}
+		return;
 	} else if (!process->full) {
 		if (const auto peer = searchInPeer()) {
 			const auto revision = _searchRevision;
@@ -3775,6 +3807,85 @@ void Widget::searchMoreNow() {
 			return _migratedProcess.requestId;
 		});
 	}
+}
+
+void Widget::requestStickerMessages(
+		not_null<History*> history,
+		SearchRequestType type,
+		not_null<SearchProcessState*> process) {
+	const auto revision = _searchRevision;
+	const auto topic = type.migrated ? nullptr : searchInTopic();
+	const auto sublist = (type.migrated || _openedForum)
+		? nullptr
+		: _searchState.inChat.sublist();
+	const auto fromPeer = sublist ? nullptr : _searchQueryFrom;
+	const auto savedPeer = sublist ? sublist->sublistPeer().get() : nullptr;
+	const auto tags = type.migrated
+		? std::vector<Data::ReactionId>()
+		: _searchQueryTags;
+	const auto query = _searchStickerEmojis ? QString() : _searchQuery;
+	const auto offsetId = type.start ? MsgId() : process->lastId;
+	const auto readHistory = _searchStickerEmojis.has_value()
+		&& !topic
+		&& !fromPeer
+		&& !savedPeer
+		&& tags.empty();
+	_historiesRequest = session().data().histories().sendRequest(
+		history,
+		Data::Histories::RequestType::History,
+		[=](Fn<void()> finish) {
+			const auto done = [=](const MTPmessages_Messages &result) {
+				if (revision == _searchRevision) {
+					_historiesRequest = 0;
+					searchReceived(type, result, process, false, revision);
+				}
+				finish();
+			};
+			const auto fail = [=](const MTP::Error &error) {
+				if (revision == _searchRevision) {
+					_historiesRequest = 0;
+					searchFailed(type, error, process);
+				}
+				finish();
+			};
+			if (readHistory) {
+				process->requestId = _api.request(MTPmessages_GetHistory(
+					history->peer->input(),
+					MTP_int(offsetId),
+					MTP_int(0),
+					MTP_int(0),
+					MTP_int(kMessageTypeSearchPerPage),
+					MTP_int(0),
+					MTP_int(0),
+					MTP_long(0)
+				)).done(done).fail(fail).send();
+			} else {
+				using Flag = MTPmessages_Search::Flag;
+				process->requestId = _api.request(MTPmessages_Search(
+					MTP_flags((topic ? Flag::f_top_msg_id : Flag())
+						| (fromPeer ? Flag::f_from_id : Flag())
+						| (savedPeer ? Flag::f_saved_peer_id : Flag())
+						| (tags.empty() ? Flag() : Flag::f_saved_reaction)),
+					history->peer->input(),
+					MTP_string(query),
+					(fromPeer ? fromPeer->input() : MTP_inputPeerEmpty()),
+					(savedPeer ? savedPeer->input() : MTP_inputPeerEmpty()),
+					MTP_vector_from_range(
+						tags | ranges::views::transform(Data::ReactionToMTP)),
+					MTP_int(topic ? topic->rootId() : 0),
+					MTP_inputMessagesFilterEmpty(),
+					MTP_int(0),
+					MTP_int(0),
+					MTP_int(offsetId),
+					MTP_int(0),
+					MTP_int(kMessageTypeSearchPerPage),
+					MTP_int(0),
+					MTP_int(0),
+					MTP_long(0)
+				)).done(done).fail(fail).send();
+			}
+			return process->requestId;
+		});
 }
 
 void Widget::startMessageSearchIntersection(
@@ -3998,7 +4109,9 @@ void Widget::searchReceived(
 	}
 	const auto nativeMessageType = NativeMessageSearchType(
 		_searchQueryMessageTypes);
+	const auto stickerOnly = IsStickerOnlySearch(_searchQueryMessageTypes);
 	const auto processList = [&](const MTPVector<MTPMessage> &messages) {
+		const auto previousId = process->lastId;
 		auto filtered = std::vector<not_null<HistoryItem*>>();
 		for (const auto &message : messages.v) {
 			const auto msgId = IdFromMessage(message);
@@ -4011,10 +4124,16 @@ void Widget::searchReceived(
 						MessageFlags(),
 						NewMessageType::Existing);
 					if (item
+						&& (!stickerOnly || !previousId || msgId < previousId)
 						&& (nativeMessageType
 							|| MatchesMessageSearchTypes(
 								item,
-								_searchQueryMessageTypes))) {
+								_searchQueryMessageTypes))
+						&& (!stickerOnly
+							|| !_searchStickerEmojis
+							|| MatchesStickerSearchEmojis(
+								item,
+								*_searchStickerEmojis))) {
 						filtered.push_back(item);
 						++process->matchedCount;
 					}
@@ -4025,6 +4144,11 @@ void Widget::searchReceived(
 					).arg(peerId.value));
 			}
 			process->lastId = msgId;
+		}
+		if (stickerOnly
+			&& (!process->lastId
+				|| (previousId && process->lastId >= previousId))) {
+			process->full = true;
 		}
 		return filtered;
 	};
@@ -4551,6 +4675,7 @@ bool Widget::applySearchState(SearchState state) {
 		&& (state.inChat.owningHistory() || _openedForum);
 	if (!messageTypesAvailable
 		|| (!state.fromPeer
+			&& !IsStickerOnlySearch(state.messageTypes)
 			&& !NativeMessageSearchType(state.messageTypes))) {
 		state.messageTypes = 0;
 	} else if (peer && !peer->isChat() && !peer->isMegagroup()) {
@@ -4675,7 +4800,8 @@ bool Widget::applySearchState(SearchState state) {
 		|| tagsChanged
 		|| tabChanged) {
 		clearSearchCache(searchCleared);
-	} else if (messageTypesChanged) {
+	} else if (messageTypesChanged
+		|| (queryChanged && IsStickerOnlySearch(state.messageTypes))) {
 		_searchProcess.queries.clear();
 		_migratedProcess.queries.clear();
 		cancelSearchRequest();
@@ -4730,6 +4856,7 @@ void Widget::clearSearchCache(bool clearPosts) {
 	_searchQuery = QString();
 	_searchQueryFrom = nullptr;
 	_searchQueryMessageTypes = 0;
+	_searchStickerEmojis.reset();
 	_searchQueryTags.clear();
 	if (clearPosts) {
 		_postsProcess.cache.clear();

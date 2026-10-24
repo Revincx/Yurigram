@@ -1,4 +1,4 @@
-﻿/*
+/*
 This file is part of Telegram Desktop,
 the official desktop application for the Telegram messaging service.
 
@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #pragma once
 
 #include "api/api_peer_search.h"
+#include "base/flat_set.h"
 #include "base/timer.h"
 #include "dialogs/dialogs_key.h"
 #include "window/section_widget.h"
@@ -16,6 +17,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/userpic_view.h"
 #include "mtproto/sender.h"
 #include "api/api_single_message_search.h"
+
+#include <optional>
 
 class ChannelData;
 
@@ -202,6 +205,10 @@ private:
 	void searchTopics();
 	void searchMore();
 	void searchMoreNow();
+	void requestStickerMessages(
+		not_null<History*> history,
+		SearchRequestType type,
+		not_null<SearchProcessState*> process);
 	void startMessageSearchIntersection(
 		not_null<History*> history,
 		PeerData *fromPeer,
@@ -456,6 +463,7 @@ private:
 	QString _searchQuery;
 	PeerData *_searchQueryFrom = nullptr;
 	MessageSearchTypes _searchQueryMessageTypes = 0;
+	std::optional<base::flat_set<QString>> _searchStickerEmojis;
 	std::vector<Data::ReactionId> _searchQueryTags;
 	ChatSearchTab _searchQueryTab = {};
 	ChannelData *_searchQueryCommunity = nullptr;

@@ -4331,6 +4331,7 @@ void InnerWidget::applySearchState(SearchState state) {
 		_filter = newFilter;
 		if (_filter.isEmpty()
 			&& !_searchState.fromPeer
+			&& !IsStickerOnlySearch(_searchState.messageTypes)
 			&& _searchState.tags.empty()
 			&& _searchState.tab != ChatSearchTab::PublicPosts) {
 			clearFilter(!onlyMessageTypesChanged);

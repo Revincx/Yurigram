@@ -584,10 +584,6 @@ void ChatSearchIn::showMessageTypesMenu() {
 			&& type == MessageSearchType::Mention) {
 			continue;
 		}
-		if (!_multipleMessageTypesAllowed
-			&& type == MessageSearchType::Sticker) {
-			continue;
-		}
 		add(MessageSearchTypeLabel(type), type);
 	}
 	const auto point = mapToGlobal(

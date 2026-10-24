@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #pragma once
 
+#include "base/flat_set.h"
 #include "base/weak_ptr.h"
 #include "data/data_message_reaction_id.h"
 #include "dialogs/dialogs_search_types.h"
@@ -23,6 +24,13 @@ namespace Dialogs {
 [[nodiscard]] bool MatchesMessageSearchTypes(
 	not_null<HistoryItem*> item,
 	MessageSearchTypes selected);
+
+[[nodiscard]] std::optional<base::flat_set<QString>> ParseStickerSearchEmojis(
+	QStringView query);
+
+[[nodiscard]] bool MatchesStickerSearchEmojis(
+	not_null<HistoryItem*> item,
+	const base::flat_set<QString> &emojis);
 
 [[nodiscard]] std::optional<MessageSearchType> NativeMessageSearchType(
 	MessageSearchTypes selected);

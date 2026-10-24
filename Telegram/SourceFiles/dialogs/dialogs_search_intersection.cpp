@@ -19,6 +19,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/history_item.h"
 #include "main/main_session.h"
 #include "storage/storage_shared_media.h"
+#include "ui/emoji_config.h"
 
 namespace Dialogs {
 
@@ -100,6 +101,57 @@ bool MatchesMessageSearchTypes(
 		|| ((selected & MessageSearchTypeBit(MessageSearchType::Location))
 			&& media
 			&& media->location());
+}
+
+std::optional<base::flat_set<QString>> ParseStickerSearchEmojis(
+		QStringView query) {
+	auto normalized = query.toString();
+	normalized.replace(QChar(0xFE0E), QChar(Ui::Emoji::kPostfix));
+	auto result = base::flat_set<QString>();
+	auto ch = normalized.constData();
+	const auto end = ch + normalized.size();
+	while (ch != end) {
+		if (ch->isSpace()) {
+			++ch;
+			continue;
+		}
+		auto length = 0;
+		auto emoji = Ui::Emoji::Find(ch, end, &length);
+		if (!emoji) {
+			const auto codepointLength = (ch->isHighSurrogate()
+				&& ch + 1 != end
+				&& (ch + 1)->isLowSurrogate())
+				? 2
+				: 1;
+			const auto symbol = QString(ch, codepointLength)
+				+ QChar(Ui::Emoji::kPostfix);
+			emoji = Ui::Emoji::Find(symbol);
+			length = codepointLength;
+		}
+		if (!emoji) {
+			return std::nullopt;
+		}
+		result.emplace(emoji->id());
+		ch += length;
+	}
+	return result;
+}
+
+bool MatchesStickerSearchEmojis(
+		not_null<HistoryItem*> item,
+		const base::flat_set<QString> &emojis) {
+	const auto media = item->media();
+	const auto document = media ? media->document() : nullptr;
+	const auto sticker = document ? document->sticker() : nullptr;
+	if (!sticker) {
+		return false;
+	} else if (emojis.empty()) {
+		return true;
+	}
+	const auto alt = ParseStickerSearchEmojis(sticker->alt);
+	return alt && ranges::any_of(*alt, [&](const QString &emoji) {
+		return emojis.contains(emoji);
+	});
 }
 
 std::optional<MessageSearchType> NativeMessageSearchType(
