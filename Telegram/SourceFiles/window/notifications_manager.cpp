@@ -1,4 +1,4 @@
-﻿/*
+/*
 This file is part of Telegram Desktop,
 the official desktop application for the Telegram messaging service.
 
@@ -33,8 +33,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/unixtime.h"
 #include "window/window_controller.h"
 #include "window/window_session_controller.h"
+#include "core/app_name.h"
 #include "core/application.h"
-#include "core/version.h"
 #include "mainwindow.h"
 #include "api/api_reactions_notify_settings.h"
 #include "api/api_updates.h"

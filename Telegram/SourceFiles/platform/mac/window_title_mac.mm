@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "ui/image/image_prepare.h"
 #include "ui/painter.h"
+#include "core/app_name.h"
 #include "core/application.h"
 #include "styles/style_window.h"
 #include "styles/style_media_view.h"
@@ -83,10 +84,10 @@ void PreviewWindowTitle(Painter &p, const style::palette &palette, QRect body, i
 		constexpr auto kTrafficLightsWidth = 8 + 3 * (12 + 8);
 		p.drawText(
 			titleRect.adjusted(kTrafficLightsWidth, 0, 0, 0),
-			u"Yurigram"_q,
+			AppName.utf16(),
 			style::al_left);
 	} else {
-		p.drawText(titleRect, u"Yurigram"_q, style::al_center);
+		p.drawText(titleRect, AppName.utf16(), style::al_center);
 	}
 
 	auto isGraphite = ([NSColor currentControlTint] == NSGraphiteControlTint);

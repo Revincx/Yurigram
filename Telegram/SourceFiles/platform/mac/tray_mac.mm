@@ -8,9 +8,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "platform/mac/tray_mac.h"
 
 #include "base/platform/mac/base_utilities_mac.h"
+#include "core/app_name.h"
 #include "core/application.h"
 #include "core/sandbox.h"
-#include "core/version.h"
 #include "window/window_controller.h"
 #include "window/window_session_controller.h"
 #include "ui/painter.h"

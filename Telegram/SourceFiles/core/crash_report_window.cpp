@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "core/crash_report_window.h"
 
+#include "core/app_name.h"
 #include "core/crash_reports.h"
 #include "core/application.h"
 #include "core/sandbox.h"
@@ -40,7 +41,7 @@ PreLaunchWindow::PreLaunchWindow(QString title) {
 	setWindowIcon(Window::CreateIcon());
 	setWindowFlags(Qt::Dialog | Qt::CustomizeWindowHint | Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
 
-	setWindowTitle(title.isEmpty() ? u"Yurigram"_q : title);
+	setWindowTitle(title.isEmpty() ? AppName.utf16() : title);
 
 	QPalette p(palette());
 	p.setColor(QPalette::Window, QColor(255, 255, 255));
@@ -245,7 +246,8 @@ NotStartedWindow::NotStartedWindow()
 : _label(this)
 , _log(this)
 , _close(this) {
-	_label.setText(u"Could not start Yurigram!\nYou can see complete log below:"_q);
+	_label.setText(u"Could not start %1!\nYou can see complete log below:"_q
+		.arg(AppName.utf16()));
 
 	_log.setPlainText(Logs::full());
 
@@ -391,9 +393,10 @@ LastCrashedWindow::LastCrashedWindow(
 		[=] { networkSettings(); });
 
 	if (_sendingState == SendingNoReport) {
-		_label.setText(u"Last time Yurigram was not closed properly."_q);
+		_label.setText(u"Last time %1 was not closed properly."_q
+			.arg(AppName.utf16()));
 	} else {
-		_label.setText(u"Last time Yurigram crashed :("_q);
+		_label.setText(u"Last time %1 crashed :("_q.arg(AppName.utf16()));
 	}
 
 	if (_updaterData) {
@@ -484,7 +487,8 @@ LastCrashedWindow::LastCrashedWindow(
 	});
 	_saveReport.setText(u"SAVE TO FILE"_q);
 	connect(&_saveReport, &QPushButton::clicked, [=] { saveReport(); });
-	_getApp.setText(u"GET THE LATEST OFFICIAL VERSION OF Yurigram DESKTOP"_q);
+	_getApp.setText(u"GET THE LATEST OFFICIAL VERSION OF %1"_q
+		.arg(AppNameFull.utf16().toUpper()));
 	connect(&_getApp, &QPushButton::clicked, [=] {
 		QDesktopServices::openUrl(u"https://github.com/TDesktop-x64/tdesktop"_q);
 	});
@@ -504,7 +508,12 @@ LastCrashedWindow::LastCrashedWindow(
 }
 
 void LastCrashedWindow::saveReport() {
-	QString to = QFileDialog::getSaveFileName(0, u"Yurigram Crash Report"_q, QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + u"/report.telegramcrash"_q, u"Telegram crash report (*.telegramcrash)"_q);
+	const auto to = QFileDialog::getSaveFileName(
+		nullptr,
+		u"%1 Crash Report"_q.arg(AppName.utf16()),
+		QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
+			+ u"/report.telegramcrash"_q,
+		u"%1 crash report (*.telegramcrash)"_q.arg(AppName.utf16()));
 	if (!to.isEmpty()) {
 		QFile file(to);
 		if (file.open(QIODevice::WriteOnly)) {
@@ -912,7 +921,11 @@ void LastCrashedWindow::updateControls() {
 		h += _networkSettings.height() + padding;
 	}
 
-	QSize s(2 * padding + QFontMetrics(_label.font()).horizontalAdvance(u"Last time Yurigram was not closed properly."_q) + padding + _networkSettings.width(), h);
+	const auto textWidth = QFontMetrics(_label.font()).horizontalAdvance(
+		u"Last time %1 was not closed properly."_q.arg(AppName.utf16()));
+	const auto s = QSize(
+		2 * padding + textWidth + padding + _networkSettings.width(),
+		h);
 	if (s == size()) {
 		resizeEvent(0);
 	} else {

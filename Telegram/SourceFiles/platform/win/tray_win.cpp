@@ -9,8 +9,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "base/invoke_queued.h"
 #include "base/qt_signal_producer.h"
+#include "core/app_name.h"
 #include "core/application.h"
-#include "core/version.h"
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
 #include "storage/localstorage.h"
@@ -272,7 +272,7 @@ void Tray::showTrayMessage() const {
 	if (!cSeenTrayTooltip() && _icon) {
 		_icon->showMessage(
 			AppName.utf16(),
-			tr::lng_tray_icon_text(tr::now),
+			Core::TrayTextWithAppName(tr::lng_tray_icon_text(tr::now)),
 			QIcon(),
 			QPlatformSystemTrayIcon::Information,
 			kTooltipDelay);

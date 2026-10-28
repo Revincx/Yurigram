@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_account.h" // Account::sessionChanges.
 #include "main/main_session.h"
 #include "mainwindow.h"
+#include "core/app_name.h"
 #include "core/application.h"
 #include "core/core_settings.h"
 #include "core/sandbox.h"
@@ -221,7 +222,7 @@ void MainWindow::createGlobalMenu() {
 		});
 
 	auto quit = file->addAction(
-		tr::lng_mac_menu_quit_telegram(tr::now, lt_telegram, u"Yurigram"_q),
+		tr::lng_mac_menu_quit_telegram(tr::now, lt_telegram, AppName.utf16()),
 		this,
 		[=] { quitFromTray(); },
 		QKeySequence::Quit);
@@ -420,7 +421,7 @@ void MainWindow::createGlobalMenu() {
 		tr::lng_mac_menu_about_telegram(
 			tr::now,
 			lt_telegram,
-			u"Yurigram"_q),
+			AppName.utf16()),
 		[=] {
 			ensureWindowShown();
 			controller().show(Box(AboutBox));

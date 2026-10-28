@@ -17,6 +17,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "calls/group/calls_group_common.h"
 #include "calls/calls_box_controller.h"
 #include "calls/calls_instance.h"
+#include "core/app_name.h"
 #include "core/application.h"
 #include "core/click_handler_types.h"
 #include "data/data_changes.h"
@@ -389,7 +390,7 @@ MainMenu::MainMenu(
 	parentResized();
 
 	_telegram->setMarkedText(tr::link(
-		u"Yurigram"_q,
+		AppName.utf16(),
 		u"https://github.com/Revincx/Yurigram"_q));
 	_telegram->setLinksTrusted();
 	// The canary version is too long for the "Version {version}" form.

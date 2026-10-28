@@ -565,6 +565,7 @@ PRIVATE
     chat_helpers/tabbed_selector.h
     chat_helpers/ttl_media_layer_widget.cpp
     chat_helpers/ttl_media_layer_widget.h
+    core/app_name.h
     core/application.cpp
     core/application.h
     core/proxy_rotation_manager.cpp

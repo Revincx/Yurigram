@@ -15,8 +15,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "apiwrap.h"
 #include "base/platform/base_platform_info.h"
 #include "boxes/ringtones_box.h"
+#include "core/app_name.h"
 #include "core/application.h"
-#include "core/version.h"
 #include "data/data_chat_filters.h"
 #include "data/data_session.h"
 #include "data/notify/data_notify_settings.h"
@@ -495,7 +495,9 @@ void NotificationsCount::prepareNotificationSampleLarge() {
 		p.setPen(st::dialogsNameFg);
 		p.setFont(st::msgNameFont);
 
-		auto notifyTitle = st::msgNameFont->elided(u"Yurigram"_q, rectForName.width());
+		auto notifyTitle = st::msgNameFont->elided(
+			AppName.utf16(),
+			rectForName.width());
 		p.drawText(rectForName.left(), rectForName.top() + st::msgNameFont->ascent, notifyTitle);
 
 		st::notifyClose.icon.paint(p, w - st::notifyClosePos.x() - st::notifyClose.width + st::notifyClose.iconPosition.x(), st::notifyClosePos.y() + st::notifyClose.iconPosition.y(), w);

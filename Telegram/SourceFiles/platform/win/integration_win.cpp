@@ -134,8 +134,10 @@ void WindowsIntegration::refreshCustomJumpList() {
 			PropVariantClear(&appIdPropVar);
 		}
 		auto titlePropVar = PROPVARIANT();
+		const auto title = Core::TrayTextWithAppName(
+			tr::lng_quit_from_tray(tr::now)).toStdWString();
 		hr = InitPropVariantFromString(
-			tr::lng_quit_from_tray(tr::now).toStdWString().c_str(),
+			title.c_str(),
 			&titlePropVar);
 		if (SUCCEEDED(hr)) {
 			hr = propertyStore->SetValue(PKEY_Title, titlePropVar);

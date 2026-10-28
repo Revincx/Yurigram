@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "intro/intro_start.h"
 
+#include "core/app_name.h"
 #include "lang/lang_keys.h"
 #include "intro/intro_qr.h"
 #include "intro/intro_phone.h"
@@ -24,7 +25,7 @@ StartWidget::StartWidget(
 	not_null<Data*> data)
 : Step(parent, account, data, true) {
 	setMouseTracking(true);
-	setTitleText(rpl::single(u"Yurigram"_q));
+	setTitleText(rpl::single(AppName.utf16()));
 	setDescriptionText(tr::lng_intro_about2());
 	show();
 }

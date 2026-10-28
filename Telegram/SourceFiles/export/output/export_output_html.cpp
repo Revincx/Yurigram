@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "export/output/export_output_html.h"
 
+#include "core/app_name.h"
 #include "core/utils.h"
 #include "countries/countries_instance.h"
 #include "export/data/export_data_types.h"
@@ -3929,8 +3930,9 @@ auto HtmlWriter::Wrap::pushMessage(
 			message.id,
 			dialog,
 			basePath,
-			"This message is not supported by this version "
-			"of Yurigram. Please update the application.") };
+			"This message is not supported by this version of "
+				+ AppName.utf8()
+				+ ". Please update the application.") };
 	}
 
 	const auto wrapReplyToLink = [&](const QByteArray &text) {

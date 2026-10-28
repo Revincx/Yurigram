@@ -1,4 +1,4 @@
-﻿/*
+/*
 This file is part of Telegram Desktop,
 the official desktop application for the Telegram messaging service.
 
@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #pragma once
 
 #include "base/const_string.h"
+#include "core/app_name.h"
 
 #define TDESKTOP_REQUESTED_ALPHA_VERSION (0ULL)
 
@@ -20,7 +21,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 // used in Updater.cpp and Setup.iss for Windows
 constexpr auto AppId = "{9DB6C981-7FD2-41B5-AEF2-20C933FD3F21}"_cs;
 constexpr auto AppNameOld = "Telegram Win (Unofficial)"_cs;
-constexpr auto AppName = "Yurigram"_cs;
 constexpr auto AppFile = "Yurigram"_cs;
 constexpr auto AppVersion = 7003003;
 constexpr auto AppVersionStr = "7.3.3";

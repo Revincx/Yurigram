@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/about_box.h"
 
 #include "base/platform/base_platform_info.h"
+#include "core/app_name.h"
 #include "core/application.h"
 #include "core/click_handler_types.h"
 #include "core/file_utilities.h"
@@ -66,7 +67,7 @@ rpl::producer<TextWithEntities> Text3() {
 } // namespace
 
 void AboutBox(not_null<Ui::GenericBox*> box) {
-	box->setTitle(u"Yurigram"_q);
+	box->setTitle(AppName.utf16());
 	auto layout = box->verticalLayout();
 
 	const auto version = layout->add(

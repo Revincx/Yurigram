@@ -8,9 +8,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "tray.h"
 #include "tray_accounts_menu.h"
 
+#include "core/app_name.h"
 #include "core/application.h"
 #include "core/core_settings.h"
-#include "core/version.h"
 #include "platform/platform_notifications_manager.h"
 #include "platform/platform_specific.h"
 #include "lang/lang_keys.h"
@@ -24,6 +24,10 @@ QString TrayIconToolTip() {
 	return (counter > 0)
 		? u"%1 (%2)"_q.arg(AppName.utf16()).arg(counter)
 		: AppName.utf16();
+}
+
+QString TrayTextWithAppName(QString text) {
+	return text.replace(u"Telegram"_q, AppName.utf16(), Qt::CaseInsensitive);
 }
 
 Tray::Tray() {
@@ -82,12 +86,14 @@ void Tray::rebuildMenu() {
 	_tray.createMenu();
 
 	{
-		auto minimizeText = _textUpdates.events(
+		auto minimizeText = rpl::merge(
+			_textUpdates.events(),
+			Lang::Updated()
 		) | rpl::map([=] {
 			_activeForTrayIconAction = Core::App().isActiveForTrayMenu();
-			return _activeForTrayIconAction
+			return TrayTextWithAppName(_activeForTrayIconAction
 				? tr::lng_minimize_to_tray(tr::now)
-				: tr::lng_open_from_tray(tr::now);
+				: tr::lng_open_from_tray(tr::now));
 		});
 
 		_tray.addAction(
@@ -96,11 +102,13 @@ void Tray::rebuildMenu() {
 	}
 
 	if (!Core::App().passcodeLocked()) {
-		auto notificationsText = _textUpdates.events(
+		auto notificationsText = rpl::merge(
+			_textUpdates.events(),
+			Lang::Updated()
 		) | rpl::map([=] {
-			return Core::App().settings().desktopNotify()
+			return TrayTextWithAppName(Core::App().settings().desktopNotify()
 				? tr::lng_disable_notifications_from_tray(tr::now)
-				: tr::lng_enable_notifications_from_tray(tr::now);
+				: tr::lng_enable_notifications_from_tray(tr::now));
 		});
 
 		_tray.addAction(
@@ -108,7 +116,9 @@ void Tray::rebuildMenu() {
 			[=] { toggleSoundNotifications(); });
 	}
 
-	_tray.addAction(tr::lng_quit_from_tray(), [] { Core::Quit(); });
+	_tray.addAction(
+		tr::lng_quit_from_tray() | rpl::map(TrayTextWithAppName),
+		[] { Core::Quit(); });
 
 	TrayAccountsMenu::Fill(_tray);
 

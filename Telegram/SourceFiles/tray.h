@@ -41,7 +41,8 @@ private:
 
 // The tray icon paints the unread counter, a screen reader reads the
 // tooltip instead - so the tooltip carries the counter too, in the
-// window title's format: "Telegram Desktop (3)".
+// window title's format: app name followed by the unread count.
 [[nodiscard]] QString TrayIconToolTip();
+[[nodiscard]] QString TrayTextWithAppName(QString text);
 
 } // namespace Core

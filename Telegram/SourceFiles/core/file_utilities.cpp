@@ -7,8 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "core/file_utilities.h"
 
+#include "core/app_name.h"
 #include "core/click_handler_types.h"
-#include "core/version.h"
 #include "storage/localstorage.h"
 #include "storage/storage_account.h"
 #include "base/platform/base_platform_file_utilities.h"

@@ -21,6 +21,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/qt_signal_producer.h"
 #include "base/timer.h"
 #include "base/unixtime.h"
+#include "core/app_name.h"
 #include "core/core_screenshot_protection.h"
 #include "core/core_settings.h"
 #include "core/update_checker.h"
@@ -2101,7 +2102,7 @@ void Application::RegisterUrlScheme() {
 		.arguments = arguments,
 		.protocol = u"tg"_q,
 		.protocolName = u"Telegram Link"_q,
-		.shortAppName = u"Yurigram"_q,
+		.shortAppName = AppName.utf16(),
 		.longAppName = QCoreApplication::applicationName(),
 		.displayAppName = AppName.utf16(),
 		.displayAppDescription = AppName.utf16(),

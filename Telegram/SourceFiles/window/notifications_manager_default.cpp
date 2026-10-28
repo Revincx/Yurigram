@@ -9,6 +9,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "platform/platform_notifications_manager.h"
 #include "platform/platform_specific.h"
+#include "core/app_name.h"
 #include "core/application.h"
 #include "core/ui_integration.h"
 #include "chat_helpers/emoji_suggestions_widget.h"
@@ -1020,7 +1021,7 @@ void Notification::updateNotifyDisplay() {
 				: TextWithEntities{ name };
 		};
 		auto title = options.hideNameAndPhoto
-			? TextWithEntities{ u"Yurigram"_q }
+			? tr::marked(AppName.utf16())
 			: reminder
 			? tr::lng_notification_reminder(tr::now, tr::marked)
 			: topicWithChat();
