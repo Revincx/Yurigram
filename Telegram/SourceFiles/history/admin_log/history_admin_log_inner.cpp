@@ -63,6 +63,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "boxes/peers/edit_participant_box.h"
 #include "boxes/peers/edit_participants_box.h"
+#include "boxes/peers/peer_ban_box.h"
 #include "ui/boxes/confirm_box.h"
 #include "data/data_changes.h"
 #include "data/data_session.h"
@@ -2671,29 +2672,50 @@ void InnerWidget::suggestRestrictParticipant(
 	{
 		const auto lifetime = std::make_shared<rpl::lifetime>();
 		const auto weak = base::make_weak(this);
-		auto handler = [=, this] {
-			participant->session().changes().peerUpdates(
-				_channel,
-				Data::PeerUpdate::Flag::Members
-			) | rpl::on_next_done([=] {
-				lifetime->destroy();
-				if (const auto strong = weak.get()) {
-					strong->_downLoaded = false;
-					strong->preloadMore(Direction::Down);
+		const auto channel = _channel;
+		const auto show = _controller->uiShow();
+		const auto handler = [=](bool report) {
+			show->showBox(MakePeerBanBox({
+				.text = tr::lng_profile_sure_kick(
+					tr::now,
+					lt_user,
+					participant->name()),
+				.confirmText = report
+					? tr::lng_report_and_ban()
+					: tr::lng_context_ban_user(),
+				.confirmStyle = &st::attentionBoxButton,
+			}, [=](TimeId until, Fn<void()> close) {
+				if (report) {
+					Api::ReportSpam(participant, { realId });
+					show->showToast(tr::lng_report_spam_done(tr::now));
 				}
-			}, [=] {
-				lifetime->destroy();
-			}, *lifetime);
-			participant->session().api().chatParticipants().kick(
-				_channel,
-				participant,
-				{ _channel->restrictions(), 0 });
-			setParticipantBanned(participant, true);
+				participant->session().changes().peerUpdates(
+					channel,
+					Data::PeerUpdate::Flag::Members
+				) | rpl::on_next_done([=] {
+					lifetime->destroy();
+					if (const auto strong = weak.get()) {
+						strong->_downLoaded = false;
+						strong->preloadMore(Direction::Down);
+					}
+				}, [=] {
+					lifetime->destroy();
+				}, *lifetime);
+				participant->session().api().chatParticipants().kick(
+					channel,
+					participant,
+					{ channel->restrictions(), 0 },
+					until);
+				if (const auto strong = weak.get()) {
+					strong->setParticipantBanned(participant, true);
+				}
+				close();
+			}));
 		};
 		const auto addAction = Ui::Menu::CreateAddActionCallback(_menu);
 		addAction({
 			.text = tr::lng_context_ban_user(tr::now),
-			.handler = handler,
+			.handler = [=] { handler(false); },
 			.icon = &st::menuIconBlockAttention,
 			.isAttention = true,
 		});
@@ -2701,11 +2723,7 @@ void InnerWidget::suggestRestrictParticipant(
 		if (realId) {
 			addAction({
 				.text = tr::lng_report_and_ban(tr::now),
-				.handler = [=, show = _controller->uiShow()] {
-					Api::ReportSpam(participant, { realId });
-					handler();
-					show->showToast(tr::lng_report_spam_done(tr::now));
-				},
+				.handler = [=] { handler(true); },
 				.icon = &st::menuIconReportAttention,
 				.isAttention = true,
 			});

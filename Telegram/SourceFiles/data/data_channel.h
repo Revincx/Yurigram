@@ -302,7 +302,8 @@ public:
 	[[nodiscard]] bool useSubsectionTabs() const;
 
 	[[nodiscard]] static ChatRestrictionsInfo KickedRestrictedRights(
-		not_null<PeerData*> participant);
+		not_null<PeerData*> participant,
+		TimeId until = 0);
 	static constexpr auto kRestrictUntilForever = TimeId(INT_MAX);
 	[[nodiscard]] static bool IsRestrictedForever(TimeId until) {
 		return !until || (until == kRestrictUntilForever);

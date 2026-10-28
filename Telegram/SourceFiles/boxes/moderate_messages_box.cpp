@@ -18,6 +18,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/delete_messages_box.h"
 #include "boxes/peers/community_box.h"
 #include "boxes/peers/edit_peer_permissions_box.h"
+#include "boxes/peers/peer_ban_box.h"
 #include "core/application.h"
 #include "core/ui_integration.h"
 #include "data/data_channel.h"
@@ -1298,6 +1299,9 @@ void CreateModerateMessagesBox(
 				object_ptr<Ui::VerticalLayout>(inner));
 		auto computeRestrictions = Fn<ChatRestrictions()>();
 		const auto wrap = ownedWrap.data();
+		if (wrap) {
+			wrap->toggle(false, anim::type::instant);
+		}
 
 		Ui::AddSkip(inner);
 		Ui::AddSkip(inner);
@@ -1325,6 +1329,53 @@ void CreateModerateMessagesBox(
 		Ui::AddExpandablePeerList(ban, controller, inner);
 		handleSubmition(ban);
 
+		auto ownedUntilWrap = object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
+			inner,
+			object_ptr<Ui::VerticalLayout>(inner));
+		const auto untilWrap = ownedUntilWrap.data();
+		const auto partialValue = [=] {
+			return wrap
+				? wrap->toggledValue()
+				: rpl::single(false) | rpl::type_erased;
+		};
+		Ui::AddSkip(untilWrap->entity());
+		const auto untilControl = untilWrap->entity()->add(
+			object_ptr<PeerRestrictionUntil>(
+				untilWrap->entity(),
+				box->uiShow(),
+				rpl::conditional(
+					partialValue(),
+					tr::lng_rights_chat_banned_until_header(),
+					tr::lng_peer_ban_until())));
+		Ui::AddSkip(untilWrap->entity());
+		Ui::AddSkip(untilWrap->entity());
+		struct RestrictionState {
+			rpl::lifetime scrollLifetime;
+			bool initialized = false;
+		};
+		const auto state = untilWrap->lifetime().make_state<RestrictionState>();
+		const auto scroll = [=] {
+			state->scrollLifetime.destroy();
+			inner->heightValue() | rpl::on_next([=] {
+				if (!untilWrap->animating() && (!wrap || !wrap->animating())) {
+					state->scrollLifetime.destroy();
+					Ui::PostponeCall(crl::guard(box, [=] {
+						box->scrollToY(std::numeric_limits<int>::max());
+					}));
+				} else {
+					box->scrollToY(std::numeric_limits<int>::max());
+				}
+			}, state->scrollLifetime);
+		};
+		ban->checkedValue() | rpl::on_next([=](bool shown) {
+			untilWrap->toggle(shown, state->initialized
+				? anim::type::normal
+				: anim::type::instant);
+			if (state->initialized) {
+				scroll();
+			}
+			state->initialized = true;
+		}, untilWrap->lifetime());
 		Ui::AddSkip(inner);
 		Ui::AddSkip(inner);
 
@@ -1332,7 +1383,6 @@ void CreateModerateMessagesBox(
 			inner->add(std::move(ownedWrap));
 
 			const auto container = wrap->entity();
-			wrap->toggle(false, anim::type::instant);
 
 			const auto emojiUp = Ui::Text::IconEmoji(
 				&st::moderateBoxExpandIcon);
@@ -1345,8 +1395,6 @@ void CreateModerateMessagesBox(
 				st::moderateBoxDividerLabel);
 			const auto raw = label.data();
 
-			auto &lifetime = wrap->lifetime();
-			const auto scrollLifetime = lifetime.make_state<rpl::lifetime>();
 			label->setClickHandlerFilter([=](
 					const ClickHandlerPtr &handler,
 					Qt::MouseButton button) {
@@ -1354,18 +1402,7 @@ void CreateModerateMessagesBox(
 					return false;
 				}
 				wrap->toggle(!wrap->toggled(), anim::type::normal);
-				{
-					inner->heightValue() | rpl::on_next([=] {
-						if (!wrap->animating()) {
-							scrollLifetime->destroy();
-							Ui::PostponeCall(crl::guard(box, [=] {
-								box->scrollToY(std::numeric_limits<int>::max());
-							}));
-						} else {
-							box->scrollToY(std::numeric_limits<int>::max());
-						}
-					}, *scrollLifetime);
-				}
+				scroll();
 				return true;
 			});
 			wrap->toggledValue(
@@ -1508,10 +1545,12 @@ void CreateModerateMessagesBox(
 				}
 			}, communityBan->lifetime());
 		}
+		inner->add(std::move(ownedUntilWrap));
 
 		// Handle confirmation manually.
 		confirms->events() | rpl::on_next([=] {
 			if (ban->checked() && controller->collectRequests) {
+				const auto until = untilControl->value();
 				const auto kick = !wrap || !wrap->toggled();
 				const auto restrictions = computeRestrictions
 					? computeRestrictions()
@@ -1527,7 +1566,7 @@ void CreateModerateMessagesBox(
 							channel,
 							peer,
 							ChatRestrictionsInfo(), // Unused.
-							ChatRestrictionsInfo(restrictions, 0),
+							ChatRestrictionsInfo(restrictions, until),
 							nullptr,
 							nullptr);
 					} else {
@@ -1538,7 +1577,8 @@ void CreateModerateMessagesBox(
 							block->session().api().chatParticipants().kick(
 								block,
 								peer,
-								{ block->restrictions(), 0 });
+								{ block->restrictions(), 0 },
+								until);
 						}
 					}
 				};

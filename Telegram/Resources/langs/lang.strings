@@ -7018,6 +7018,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_rights_chat_restricted_by" = "Restricted by {user} on {date}.";
 "lng_rights_chat_banned_by" = "Banned by {user} on {date}.";
 "lng_rights_chat_banned_until_header" = "Restricted until";
+"lng_peer_ban_until" = "Ban until";
+"lng_peer_ban_until_confirmation" = "The ban will lift at {date}.";
 "lng_rights_chat_banned_forever" = "Forever";
 "lng_rights_chat_banned_day#one" = "For {count} day";
 "lng_rights_chat_banned_day#other" = "For {count} days";

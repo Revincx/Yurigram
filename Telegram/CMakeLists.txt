@@ -1,4 +1,4 @@
-﻿# This file is part of Telegram Desktop,
+# This file is part of Telegram Desktop,
 # the official desktop application for the Telegram messaging service.
 #
 # For license and copyright information please follow this link:
@@ -277,6 +277,8 @@ PRIVATE
     boxes/peers/edit_tag_control.h
     boxes/peers/edit_participants_box.cpp
     boxes/peers/edit_participants_box.h
+    boxes/peers/peer_ban_box.cpp
+    boxes/peers/peer_ban_box.h
     boxes/peers/edit_peer_color_box.cpp
     boxes/peers/edit_peer_color_box.h
     boxes/peers/edit_peer_common.h

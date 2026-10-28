@@ -1,4 +1,4 @@
-﻿/*
+/*
 This file is part of Telegram Desktop,
 the official desktop application for the Telegram messaging service.
 
@@ -12,6 +12,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/peers/edit_tag_control.h"
 #include "boxes/peers/add_participants_box.h"
 #include "boxes/peers/prepare_short_info_box.h" // PrepareShortInfoBox
+#include "boxes/peers/peer_ban_box.h"
 #include "boxes/peers/edit_members_visible.h"
 #include "ui/boxes/confirm_box.h"
 #include "boxes/max_invite_box.h"
@@ -2182,7 +2183,7 @@ base::unique_qptr<Ui::PopupMenu> ParticipantsBoxController::rowContextMenu(
 				(isGroup
 					? tr::lng_context_remove_from_group
 					: tr::lng_profile_kick)(tr::now),
-				crl::guard(this, [=] { kickParticipant(user); }),
+				crl::guard(this, [=] { kickParticipant(user, true); }),
 				&st::menuIconRemove);
 		}
 	}
@@ -2303,7 +2304,9 @@ void ParticipantsBoxController::editRestrictedDone(
 	refreshRows();
 }
 
-void ParticipantsBoxController::kickParticipant(not_null<PeerData*> participant) {
+void ParticipantsBoxController::kickParticipant(
+		not_null<PeerData*> participant,
+		bool chooseUntil) {
 	const auto user = participant->asUser();
 	const auto kickFrom = _peer;
 	const auto restrictedRights = _additional.restrictedRights(participant);
@@ -2314,7 +2317,7 @@ void ParticipantsBoxController::kickParticipant(not_null<PeerData*> participant)
 			refreshRows();
 		}
 	});
-	const auto kick = [=] {
+	const auto kick = [=](TimeId until) {
 		const auto currentRights = restrictedRights
 			? *restrictedRights
 			: ChatRestrictionsInfo();
@@ -2326,12 +2329,14 @@ void ParticipantsBoxController::kickParticipant(not_null<PeerData*> participant)
 			session.api().chatParticipants().kick(
 				channel,
 				participant,
-				currentRights);
+				currentRights,
+				until);
 		}
 	};
 
-	if (user && user->isInaccessible()) {
-		return kick();
+	const auto withUntil = chooseUntil && kickFrom->isChannel();
+	if (user && user->isInaccessible() && !withUntil) {
+		return kick(0);
 	}
 	const auto text = ((_peer->isChat() || _peer->isMegagroup())
 		? tr::lng_profile_sure_kick
@@ -2339,12 +2344,21 @@ void ParticipantsBoxController::kickParticipant(not_null<PeerData*> participant)
 			tr::now,
 			lt_user,
 			user ? user->firstName : participant->name());
-	showBox(
-		Ui::MakeConfirmBox({
+	if (withUntil) {
+		showBox(MakePeerBanBox({
 			.text = text,
-			.confirmed = [=](Fn<void()> close) { kick(); close(); },
+			.confirmText = tr::lng_box_remove(),
+		}, [=](TimeId until, Fn<void()> close) {
+			kick(until);
+			close();
+		}));
+	} else {
+		showBox(Ui::MakeConfirmBox({
+			.text = text,
+			.confirmed = [=](Fn<void()> close) { kick(0); close(); },
 			.confirmText = tr::lng_box_remove(),
 		}));
+	}
 }
 
 void ParticipantsBoxController::unkickParticipant(not_null<UserData*> user) {

@@ -493,7 +493,8 @@ bool ChannelData::useSubsectionTabs() const {
 }
 
 ChatRestrictionsInfo ChannelData::KickedRestrictedRights(
-		not_null<PeerData*> participant) {
+		not_null<PeerData*> participant,
+		TimeId until) {
 	using Flag = ChatRestriction;
 	const auto flags = Flag::ViewMessages
 		| Flag::SendStickers
@@ -510,7 +511,7 @@ ChatRestrictionsInfo ChannelData::KickedRestrictedRights(
 		| Flag::EmbedLinks;
 	return ChatRestrictionsInfo(
 		(participant->isUser() ? flags : Flag::ViewMessages),
-		std::numeric_limits<int32>::max());
+		until ? until : kRestrictUntilForever);
 }
 
 void ChannelData::applyEditAdmin(

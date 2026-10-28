@@ -306,7 +306,9 @@ private:
 		not_null<PeerData*> participant);
 	void removeKickedWithRow(not_null<PeerData*> participant);
 	void removeKicked(not_null<PeerData*> participant);
-	void kickParticipant(not_null<PeerData*> participant);
+	void kickParticipant(
+		not_null<PeerData*> participant,
+		bool chooseUntil = false);
 	void unkickParticipant(not_null<UserData*> user);
 	void removeAdmin(not_null<UserData*> user);
 	void removeAdminSure(not_null<UserData*> user);

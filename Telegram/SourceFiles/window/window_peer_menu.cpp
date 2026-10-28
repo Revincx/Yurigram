@@ -49,6 +49,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/peers/add_participants_box.h"
 #include "boxes/peers/edit_forum_topic_box.h"
 #include "boxes/peers/edit_contact_box.h"
+#include "boxes/peers/peer_ban_box.h"
 #include "boxes/share_box.h"
 #include "boxes/peers/prepare_short_info_box.h"
 #include "calls/calls_instance.h"
@@ -4899,20 +4900,20 @@ void AddSenderUserpicModerateAction(
 				: ChatRestrictionsInfo();
 		}();
 		controller->show(
-			Ui::MakeConfirmBox({
+			MakePeerBanBox({
 				.text = tr::lng_profile_sure_kick(
 					tr::now,
 					lt_user,
 					participant->name()),
-				.confirmed = [=](Fn<void()> close) {
-					close();
-					channel->session().api().chatParticipants().kick(
-						channel,
-						participant,
-						currentRestrictedRights);
-				},
 				.confirmText = tr::lng_context_ban_user(tr::now),
 				.confirmStyle = &st::attentionBoxButton,
+			}, [=](TimeId until, Fn<void()> close) {
+				close();
+				channel->session().api().chatParticipants().kick(
+					channel,
+					participant,
+					currentRestrictedRights,
+					until);
 			}),
 			Ui::LayerOption::CloseOther);
 	};

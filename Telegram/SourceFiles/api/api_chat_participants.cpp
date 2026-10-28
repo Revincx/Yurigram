@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_chat_participants.h"
 
 #include "apiwrap.h"
+#include "base/unixtime.h"
 #include "boxes/add_contact_box.h" // ShowAddParticipantsError
 #include "boxes/peers/add_participants_box.h" // ChatInviteForbidden
 #include "data/data_changes.h"
@@ -27,6 +28,8 @@ namespace {
 using Members = ChatParticipants::Members;
 
 constexpr auto kSmallDelayMs = crl::time(5);
+constexpr auto kKickedRefreshRetry = crl::time(60 * 1000);
+constexpr auto kKickedRefreshMaxDelay = crl::time(24 * 60 * 60 * 1000);
 
 // 1 second wait before reload members in channel after adding.
 constexpr auto kReloadChannelMembersTimeout = 1000;
@@ -676,6 +679,11 @@ void ChatParticipants::Restrict(
 	)).done([=](const MTPUpdates &result) {
 		channel->session().api().applyUpdates(result);
 		channel->applyEditBanned(participant, oldRights, newRights);
+		channel->session().api().chatParticipants().applyKicked(
+			channel,
+			participant,
+			bool(newRights.flags & ChatRestriction::ViewMessages),
+			newRights.until);
 		if (onDone) {
 			onDone();
 		}
@@ -770,11 +778,12 @@ void ChatParticipants::kick(
 void ChatParticipants::kick(
 		not_null<ChannelData*> channel,
 		not_null<PeerData*> participant,
-		ChatRestrictionsInfo currentRights) {
+		ChatRestrictionsInfo currentRights,
+		TimeId until) {
 	const auto kick = KickRequest(channel, participant);
 	if (_kickRequests.contains(kick)) return;
 
-	const auto rights = ChannelData::KickedRestrictedRights(participant);
+	const auto rights = ChannelData::KickedRestrictedRights(participant, until);
 	const auto requestId = _api.request(MTPchannels_EditBanned(
 		channel->inputChannel(),
 		participant->input(),
@@ -784,7 +793,7 @@ void ChatParticipants::kick(
 
 		_kickRequests.remove(KickRequest(channel, participant));
 		channel->applyEditBanned(participant, currentRights, rights);
-		applyKicked(channel, participant, true);
+		applyKicked(channel, participant, true, rights.until);
 	}).fail([this, kick] {
 		_kickRequests.remove(kick);
 	}).send();
@@ -828,26 +837,49 @@ rpl::producer<bool> ChatParticipants::kickedValue(
 	auto i = _kicked.find(key);
 	if (i == end(_kicked)) {
 		i = _kicked.emplace(key, std::make_unique<Kicked>()).first;
-		const auto raw = i->second.get();
-		raw->requestId = _api.request(MTPchannels_GetParticipant(
-			channel->inputChannel(),
-			participant->input()
-		)).done([=](const MTPchannels_ChannelParticipant &result) {
-			raw->requestId = 0;
-			raw->value = ChatParticipant(
-				result.data().vparticipant(),
-				channel).isKicked();
-		}).fail([=] {
-			raw->requestId = 0;
-		}).send();
+		requestKicked(channel, participant);
 	}
 	return i->second->value.value();
+}
+
+void ChatParticipants::requestKicked(
+		not_null<ChannelData*> channel,
+		not_null<PeerData*> participant) {
+	const auto i = _kicked.find(KickRequest(channel, participant));
+	Expects(i != end(_kicked));
+
+	const auto raw = i->second.get();
+	if (raw->requestId) {
+		return;
+	}
+	raw->requestId = _api.request(MTPchannels_GetParticipant(
+		channel->inputChannel(),
+		participant->input()
+	)).done([=](const MTPchannels_ChannelParticipant &result) {
+		raw->requestId = 0;
+		const auto member = ChatParticipant(
+			result.data().vparticipant(),
+			channel);
+		applyKicked(
+			channel,
+			participant,
+			member.isKicked(),
+			member.restrictions().until);
+	}).fail([=](const MTP::Error &error) {
+		raw->requestId = 0;
+		if (error.type() == u"USER_NOT_PARTICIPANT"_q) {
+			applyKicked(channel, participant, false);
+		} else if (raw->until) {
+			raw->expiryTimer.callOnce(kKickedRefreshRetry);
+		}
+	}).send();
 }
 
 void ChatParticipants::applyKicked(
 		not_null<ChannelData*> channel,
 		not_null<PeerData*> participant,
-		bool kicked) {
+		bool kicked,
+		TimeId until) {
 	const auto key = KickRequest(channel, participant);
 	auto i = _kicked.find(key);
 	if (i == end(_kicked)) {
@@ -855,7 +887,29 @@ void ChatParticipants::applyKicked(
 	} else if (const auto requestId = base::take(i->second->requestId)) {
 		_api.request(requestId).cancel();
 	}
-	i->second->value = kicked;
+	const auto raw = i->second.get();
+	raw->until = (kicked && !ChannelData::IsRestrictedForever(until))
+		? until
+		: 0;
+	raw->expiryTimer.cancel();
+	if (raw->until) {
+		raw->expiryTimer.setCallback([=] {
+			if (raw->until > base::unixtime::now()) {
+				applyKicked(channel, participant, true, raw->until);
+			} else {
+				requestKicked(channel, participant);
+			}
+		});
+		const auto remaining = raw->until - base::unixtime::now();
+		const auto delay = (remaining > 0)
+			? remaining * crl::time(1000)
+			: kKickedRefreshRetry;
+		raw->expiryTimer.callOnce(std::clamp(
+			delay,
+			crl::time(1000),
+			kKickedRefreshMaxDelay));
+	}
+	raw->value = kicked;
 }
 
 void ChatParticipants::loadSimilarPeers(not_null<PeerData*> peer) {

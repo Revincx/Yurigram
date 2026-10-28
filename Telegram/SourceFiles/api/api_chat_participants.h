@@ -133,7 +133,8 @@ public:
 	void kick(
 		not_null<ChannelData*> channel,
 		not_null<PeerData*> participant,
-		ChatRestrictionsInfo currentRights);
+		ChatRestrictionsInfo currentRights,
+		TimeId until = 0);
 	void unblock(
 		not_null<ChannelData*> channel,
 		not_null<PeerData*> participant);
@@ -192,12 +193,18 @@ private:
 
 	struct Kicked {
 		rpl::variable<bool> value = false;
+		base::Timer expiryTimer;
 		mtpRequestId requestId = 0;
+		TimeId until = 0;
 	};
+	void requestKicked(
+		not_null<ChannelData*> channel,
+		not_null<PeerData*> participant);
 	void applyKicked(
 		not_null<ChannelData*> channel,
 		not_null<PeerData*> participant,
-		bool kicked);
+		bool kicked,
+		TimeId until = 0);
 
 	base::flat_map<KickRequest, std::unique_ptr<Kicked>> _kicked;
 
