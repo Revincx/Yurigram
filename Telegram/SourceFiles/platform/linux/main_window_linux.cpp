@@ -22,6 +22,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/about_box.h"
 #include "lang/lang_keys.h"
 #include "storage/localstorage.h"
+#include "window/window_accounts_menu.h"
 #include "window/window_controller.h"
 #include "window/window_session_controller.h"
 #include "base/platform/base_platform_info.h"
@@ -229,6 +230,8 @@ void MainWindow::createGlobalMenu() {
 
 	quit->setMenuRole(QAction::QuitRole);
 	quit->setShortcutContext(Qt::WidgetShortcut);
+
+	Window::SetupAccountsMenu(file, [=] { return &controller(); });
 
 	auto edit = psMainMenu->addMenu(tr::lng_mac_menu_edit(tr::now));
 

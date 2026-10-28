@@ -2443,6 +2443,8 @@ PRIVATE
     window/section_memento.h
     window/section_widget.cpp
     window/section_widget.h
+    window/window_accounts_menu.cpp
+    window/window_accounts_menu.h
     window/window_adaptive.cpp
     window/window_adaptive.h
     window/window_chat_preview.cpp

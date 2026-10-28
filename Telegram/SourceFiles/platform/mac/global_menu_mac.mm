@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "core/app_name.h"
 #include "core/application.h"
 #include "core/sandbox.h"
+#include "window/window_accounts_menu.h"
 #include "window/window_controller.h"
 #include "window/window_session_controller.h"
 #include "window/main_window.h"
@@ -292,6 +293,9 @@ void Manager::ensureLanguageBound() {
 		return;
 	}
 	_languageBound = true;
+	Window::SetupAccountsMenu(_file, [] {
+		return Core::App().activePrimaryWindow();
+	});
 	retranslate();
 	Lang::Updated() | rpl::on_next([this] {
 		retranslate();
