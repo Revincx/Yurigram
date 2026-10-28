@@ -48,6 +48,10 @@ public:
 	void destroyMenu();
 
 	void addAction(rpl::producer<QString> text, Fn<void()> &&callback);
+	void addSubmenu(
+		rpl::producer<QString> text,
+		std::vector<TrayMenuAction> actions);
+	void addSeparator();
 
 	void showTrayMessage() const;
 	[[nodiscard]] bool hasTrayMessageSupport() const;
@@ -61,6 +65,7 @@ private:
 	base::unique_qptr<QSystemTrayIcon> _icon;
 	base::unique_qptr<QMenu> _menu;
 	base::unique_qptr<Ui::PopupMenu> _menuCustom;
+	std::vector<base::unique_qptr<QMenu>> _submenus;
 
 	base::unique_qptr<TrayEventFilter> _eventFilter;
 

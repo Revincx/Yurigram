@@ -26,6 +26,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_filter_unread_chats#one" = "{text} ({count} unread chat)";
 "lng_filter_unread_chats#other" = "{text} ({count} unread chats)";
 
+"lng_choose_account_from_tray" = "Choose account";
 "lng_disable_notifications_from_tray" = "Disable notifications";
 "lng_enable_notifications_from_tray" = "Enable notifications";
 "lng_open_from_tray" = "Open Telegram";

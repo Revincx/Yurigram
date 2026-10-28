@@ -240,8 +240,9 @@ void Tray::createMenu() {
 }
 
 void Tray::destroyMenu() {
-	_menu = nullptr;
+	_callbackFromTrayLifetime.destroy();
 	_actionsLifetime.destroy();
+	_menu = nullptr;
 }
 
 void Tray::addAction(rpl::producer<QString> text, Fn<void()> &&callback) {
@@ -249,23 +250,58 @@ void Tray::addAction(rpl::producer<QString> text, Fn<void()> &&callback) {
 		return;
 	}
 
-	// If we try to activate() window before the _menu is hidden,
-	// then the window will be shown in semi-active state (Qt bug).
-	// It will receive input events, but it will be rendered as inactive.
-	auto callbackLater = crl::guard(_menu.get(), [=] {
-		using namespace rpl::mappers;
-		_callbackFromTrayLifetime = _menu->shownValue(
-		) | rpl::filter(!_1) | rpl::take(1) | rpl::on_next([=] {
-			crl::on_main([=] { callback(); });
-		});
-	});
-
-	const auto action = _menu->addAction(QString(), std::move(callbackLater));
+	const auto action = _menu->addAction(
+		QString(),
+		callbackAfterHide(std::move(callback)));
 	std::move(
 		text
 	) | rpl::on_next([=](const QString &text) {
 		action->setText(text);
 	}, _actionsLifetime);
+}
+
+void Tray::addSubmenu(
+		rpl::producer<QString> text,
+		std::vector<TrayMenuAction> actions) {
+	if (!_menu) {
+		return;
+	}
+	auto submenu = std::make_unique<Ui::PopupMenu>(_menu.get());
+	for (auto &entry : actions) {
+		const auto action = submenu->addAction(
+			QString(),
+			callbackAfterHide(std::move(entry.callback)));
+		std::move(
+			entry.text
+		) | rpl::on_next([=](const QString &text) {
+			action->setText(text);
+		}, _actionsLifetime);
+	}
+	const auto action = _menu->addAction(QString(), std::move(submenu));
+	std::move(
+		text
+	) | rpl::on_next([=](const QString &text) {
+		action->setText(text);
+	}, _actionsLifetime);
+}
+
+void Tray::addSeparator() {
+	if (_menu) {
+		_menu->addSeparator();
+	}
+}
+
+Fn<void()> Tray::callbackAfterHide(Fn<void()> callback) {
+	// If we try to activate() window before the _menu is hidden,
+	// then the window will be shown in semi-active state (Qt bug).
+	// It will receive input events, but it will be rendered as inactive.
+	return crl::guard(_menu.get(), [=, callback = std::move(callback)] {
+		using namespace rpl::mappers;
+		_callbackFromTrayLifetime = _menu->shownValue(
+		) | rpl::filter(!_1) | rpl::take(1) | rpl::on_next([=] {
+			crl::on_main(_menu.get(), [=] { callback(); });
+		});
+	});
 }
 
 void Tray::showTrayMessage() const {

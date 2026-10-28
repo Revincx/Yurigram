@@ -398,10 +398,11 @@ void Tray::createMenu() {
 }
 
 void Tray::destroyMenu() {
+	_actionsLifetime.destroy();
+	_submenus.clear();
 	if (_menu) {
 		_menu->clear();
 	}
-	_actionsLifetime.destroy();
 }
 
 void Tray::addAction(rpl::producer<QString> text, Fn<void()> &&callback) {
@@ -454,6 +455,32 @@ void Tray::addAction(
 	) | rpl::on_next([=](const QString &text) {
 		action->setText(text);
 	}, _actionsLifetime);
+}
+
+void Tray::addSubmenu(
+		rpl::producer<QString> text,
+		std::vector<TrayMenuAction> actions) {
+	if (!_menu) {
+		return;
+	}
+	auto submenu = base::make_unique_q<QMenu>(_menu.get());
+	for (auto &entry : actions) {
+		const auto action = submenu->addAction(
+			QString(),
+			std::move(entry.callback));
+		std::move(
+			entry.text
+		) | rpl::on_next([=](const QString &text) {
+			action->setText(text);
+		}, _actionsLifetime);
+	}
+	const auto action = _menu->addMenu(submenu.get());
+	std::move(
+		text
+	) | rpl::on_next([=](const QString &text) {
+		action->setText(text);
+	}, _actionsLifetime);
+	_submenus.push_back(std::move(submenu));
 }
 
 void Tray::addSeparator() {

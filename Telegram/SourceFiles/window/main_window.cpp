@@ -753,7 +753,7 @@ WindowPosition MainWindow::initialPosition() const {
 		}
 	}
 	const auto active = Core::App().activeWindow();
-	return (!active || active == &controller())
+	return (!active || active == &controller() || active->widget()->isHidden())
 		? Core::AdjustToScale(
 			Core::App().settings().windowPosition(),
 			u"Window"_q)
@@ -766,17 +766,18 @@ WindowPosition MainWindow::nextInitialChildPosition(SeparateId childId) {
 	const auto adjust = [&](int value) {
 		return (value * 3 / 4);
 	};
-	const auto width = OptionNewWindowsSizeAsFirst.value()
-		? Core::App().settings().windowPosition().w
-		: childId.primary()
-		? st::windowDefaultWidth
+	const auto savedPosition = Core::AdjustToScale(
+		Core::App().settings().windowPosition(),
+		u"Window"_q);
+	const auto useSavedSize = childId.primary()
+		|| OptionNewWindowsSizeAsFirst.value();
+	const auto width = useSavedSize
+		? savedPosition.w
 		: childId.hasChatsList()
 		? (st::columnMinimalWidthLeft + adjust(st::windowDefaultWidth))
 		: adjust(st::windowDefaultWidth);
-	const auto height = OptionNewWindowsSizeAsFirst.value()
-		? Core::App().settings().windowPosition().h
-		: childId.primary()
-		? st::windowDefaultHeight
+	const auto height = useSavedSize
+		? savedPosition.h
 		: adjust(st::windowDefaultHeight);
 	const auto skip = ChildSkip();
 	const auto delta = _lastChildIndex

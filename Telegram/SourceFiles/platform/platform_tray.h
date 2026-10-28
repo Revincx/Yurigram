@@ -11,6 +11,11 @@ namespace Platform {
 
 class Tray;
 
+struct TrayMenuAction {
+	rpl::producer<QString> text;
+	Fn<void()> callback;
+};
+
 [[nodiscard]] bool HasMonochromeSetting();
 
 } // namespace Platform

@@ -52,6 +52,9 @@ public:
 		Fn<void()> &&callback,
 		std::shared_ptr<Ui::DynamicImage> icon,
 		int size);
+	void addSubmenu(
+		rpl::producer<QString> text,
+		std::vector<TrayMenuAction> actions);
 	void addSeparator();
 
 	void showTrayMessage() const;
@@ -62,6 +65,7 @@ public:
 private:
 	std::unique_ptr<NativeIcon> _nativeIcon;
 	base::unique_qptr<QMenu> _menu;
+	std::vector<base::unique_qptr<QMenu>> _submenus;
 
 	rpl::event_stream<> _showFromTrayRequests;
 	rpl::event_stream<> _aboutToShowRequests;

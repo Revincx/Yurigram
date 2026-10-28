@@ -43,6 +43,10 @@ public:
 	void destroyMenu();
 
 	void addAction(rpl::producer<QString> text, Fn<void()> &&callback);
+	void addSubmenu(
+		rpl::producer<QString> text,
+		std::vector<TrayMenuAction> actions);
+	void addSeparator();
 
 	void showTrayMessage() const;
 	[[nodiscard]] bool hasTrayMessageSupport() const;
@@ -62,6 +66,8 @@ public:
 	[[nodiscard]] static QString QuitJumpListIconPath();
 
 private:
+	[[nodiscard]] Fn<void()> callbackAfterHide(Fn<void()> callback);
+
 	base::unique_qptr<QPlatformSystemTrayIcon> _icon;
 	base::unique_qptr<Ui::PopupMenu> _menu;
 

@@ -1704,27 +1704,38 @@ void Application::closeWindow(not_null<Window::Controller*> window) {
 		_savedWindows->windowClosed(window);
 	}
 	const auto stackIt = ranges::find(_windowStack, window);
-	const auto nextFromStack = _windowStack.empty()
-		? nullptr
-		: (stackIt == end(_windowStack) || stackIt + 1 != end(_windowStack))
-		? _windowStack.back().get()
-		: (_windowStack.size() > 1)
-		? (stackIt - 1)->get()
-		: nullptr;
-	const auto next = nextFromStack
-		? nextFromStack
-		: (_windows.front().second.get() != window)
-		? _windows.front().second.get()
-		: (_windows.back().second.get() != window)
-		? _windows.back().second.get()
-		: nullptr;
+	auto next = (Window::Controller*)nullptr;
+	auto nextPrimary = (Window::Controller*)nullptr;
+	const auto consider = [&](not_null<Window::Controller*> candidate) {
+		if (candidate == window
+			|| _closingAsyncWindows.contains(candidate.get())) {
+			return;
+		}
+		if (!next
+			|| (next->widget()->isHidden()
+				&& !candidate->widget()->isHidden())) {
+			next = candidate;
+		}
+		if (candidate->isPrimary()
+			&& (!nextPrimary
+				|| (nextPrimary->widget()->isHidden()
+					&& !candidate->widget()->isHidden()))) {
+			nextPrimary = candidate;
+		}
+	};
+	for (const auto &candidate : ranges::views::reverse(_windowStack)) {
+		consider(candidate);
+	}
+	for (const auto &[id, candidate] : _windows) {
+		consider(candidate.get());
+	}
 	Assert(next != window);
 
 	if (_lastActivePrimaryWindow == window) {
-		_lastActivePrimaryWindow = next;
+		_lastActivePrimaryWindow = nextPrimary;
 	}
 	if (_windowInSettings == window) {
-		_windowInSettings = next;
+		_windowInSettings = nextPrimary;
 	}
 	if (stackIt != end(_windowStack)) {
 		_windowStack.erase(stackIt);
@@ -1732,7 +1743,9 @@ void Application::closeWindow(not_null<Window::Controller*> window) {
 	if (_lastActiveWindow == window) {
 		setLastActiveWindow(next);
 		if (_lastActiveWindow) {
-			_lastActiveWindow->activate();
+			if (!_lastActiveWindow->widget()->isHidden()) {
+				_lastActiveWindow->activate();
+			}
 			_lastActiveWindow->widget()->updateGlobalMenu();
 		}
 	}
@@ -1752,8 +1765,9 @@ void Application::closeWindow(not_null<Window::Controller*> window) {
 		: nullptr;
 	if (account
 		&& !_windows.contains(Window::SeparateId(account))
-		&& _lastActiveWindow) {
-		domain().activate(&_lastActiveWindow->account());
+		&& _lastActivePrimaryWindow
+		&& !_lastActivePrimaryWindow->widget()->isHidden()) {
+		domain().activate(&_lastActivePrimaryWindow->account());
 	}
 	if (_savedWindows) {
 		_savedWindows->scheduleSave();

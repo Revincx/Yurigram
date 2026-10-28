@@ -2523,6 +2523,7 @@ PRIVATE
     settings.cpp
     settings.h
     stdafx.h
+    tray_accounts_menu.cpp
     tray_accounts_menu.h
     tray.cpp
     tray.h
@@ -2531,14 +2532,8 @@ PRIVATE
 if (APPLE)
     nice_target_sources(Telegram ${src_loc}
     PRIVATE
-        tray_accounts_menu.cpp
         media/view/media_view_metal_texture.mm
         media/streaming/media_streaming_native_frame_mac.mm
-    )
-else()
-    nice_target_sources(Telegram ${src_loc}
-    PRIVATE
-        tray_accounts_menu_dummy.cpp
     )
 endif()
 

@@ -8,16 +8,15 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "tray_accounts_menu.h"
 
 #include "base/weak_ptr.h"
-#include "base/qt/qt_key_modifiers.h"
 #include "core/application.h"
 #include "data/data_peer.h"
 #include "data/data_user.h"
 #include "info/profile/info_profile_values.h"
+#include "lang/lang_keys.h"
 #include "main/main_account.h"
 #include "main/main_domain.h"
 #include "main/main_session.h"
-#include "styles/style_window.h"
-#include "ui/dynamic_thumbnails.h"
+#include "ui/text/text_utilities.h"
 
 namespace Core::TrayAccountsMenu {
 
@@ -52,33 +51,28 @@ void Fill(Platform::Tray &tray) {
 	if (accounts.size() <= 1) {
 		return;
 	}
-	tray.addSeparator();
-	constexpr auto kMaxLength = 30;
-	for (const auto account : accounts) {
+	auto actions = std::vector<Platform::TrayMenuAction>();
+	actions.reserve(accounts.size());
+	for (const auto &account : accounts) {
 		const auto user = account->session().user();
 		const auto weak = base::make_weak(account);
-		tray.addAction(
-			Info::Profile::NameValue(
+		actions.push_back({
+			.text = Info::Profile::NameValue(
 				user
-			) | rpl::map([=](const QString &name) {
-				return (name.size() > kMaxLength)
-					? (name.mid(0, kMaxLength) + Ui::kQEllipsis)
-					: name;
-			}),
-			[weak] {
+			) | rpl::map(Ui::Text::FixAmpersandInAction),
+			.callback = [weak] {
 				const auto strong = weak.get();
-				if (!strong || !strong->sessionExists()) {
+				if (!strong
+					|| !strong->sessionExists()
+					|| Core::App().passcodeLocked()) {
 					return;
 				}
-				if (base::IsCtrlPressed()) {
-					Core::App().ensureSeparateWindowFor({ strong });
-				} else {
-					Core::App().domain().maybeActivate(strong);
-				}
+				Core::App().ensureSeparateWindowFor({ strong });
 			},
-			Ui::MakeUserpicThumbnail(user, true),
-			st::notifyMacPhotoSize);
+		});
 	}
+	tray.addSubmenu(tr::lng_choose_account_from_tray(), std::move(actions));
+	tray.addSeparator();
 }
 
 } // namespace Core::TrayAccountsMenu

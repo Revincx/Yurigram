@@ -85,6 +85,8 @@ void Tray::rebuildMenu() {
 	_tray.destroyMenu();
 	_tray.createMenu();
 
+	TrayAccountsMenu::Fill(_tray);
+
 	{
 		auto minimizeText = rpl::merge(
 			_textUpdates.events(),
@@ -119,8 +121,6 @@ void Tray::rebuildMenu() {
 	_tray.addAction(
 		tr::lng_quit_from_tray() | rpl::map(TrayTextWithAppName),
 		[] { Core::Quit(); });
-
-	TrayAccountsMenu::Fill(_tray);
 
 	updateMenuText();
 }
