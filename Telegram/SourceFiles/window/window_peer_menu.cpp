@@ -49,6 +49,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/peers/add_participants_box.h"
 #include "boxes/peers/edit_forum_topic_box.h"
 #include "boxes/peers/edit_contact_box.h"
+#include "boxes/peers/edit_participant_box.h"
+#include "boxes/peers/edit_participants_box.h"
 #include "boxes/peers/peer_ban_box.h"
 #include "boxes/share_box.h"
 #include "boxes/peers/prepare_short_info_box.h"
@@ -84,6 +86,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "api/api_todo_lists.h"
 #include "api/api_updates.h"
 #include "mtproto/mtproto_config.h"
+#include "mtproto/mtproto_response.h"
 #include "history/history.h"
 #include "history/history_item_helpers.h" // GetErrorForSending.
 #include "history/history_widget.h"
@@ -243,6 +246,42 @@ constexpr auto kArchivedToastDuration = crl::time(5000);
 		}
 	}
 	return QString();
+}
+
+void ShowSenderRestrictions(
+		not_null<SessionController*> controller,
+		not_null<ChannelData*> channel,
+		not_null<UserData*> user) {
+	const auto show = controller->uiShow();
+	channel->session().api().request(MTPchannels_GetParticipant(
+		channel->inputChannel(),
+		user->input()
+	)).done(crl::guard(controller, [=](
+			const MTPchannels_ChannelParticipant &result) {
+		const auto &data = result.data();
+		channel->owner().processUsers(data.vusers());
+		const auto participant = Api::ChatParticipant(data.vparticipant(), channel);
+		const auto since = participant.restrictedSince();
+		auto box = Box<EditRestrictedBox>(
+			channel,
+			user,
+			participant.isCreatorOrAdmin(),
+			participant.restrictions(),
+			participant.rank(),
+			since ? channel->owner().userLoaded(participant.by()) : nullptr,
+			since);
+		const auto weak = base::make_weak(box.data());
+		const auto close = crl::guard(box.data(), [=] { weak->closeBox(); });
+		box->setSaveCallback(SaveRestrictedCallback(
+			show,
+			channel,
+			user,
+			[=](ChatRestrictionsInfo) { close(); },
+			close));
+		controller->show(std::move(box), Ui::LayerOption::CloseOther);
+	})).fail(crl::guard(controller, [=](const MTP::Error &error) {
+		MTP::ShowErrorFallback(show, error);
+	})).send();
 }
 
 base::options::toggle ViewProfileInChatsListContextMenu({
@@ -4938,6 +4977,18 @@ void AddSenderUserpicModerateAction(
 			HistoryItemsList{ not_null<HistoryItem*>(moderateItem) });
 	if (canBan) {
 		addAction({ .isSeparator = true });
+		if (moderateUser) {
+			addAction({
+				.text = tr::lng_context_restrict_user(tr::now),
+				.handler = [=] {
+					ShowSenderRestrictions(
+						controller,
+						not_null<ChannelData*>(moderateChannel),
+						not_null<UserData*>(moderateUser));
+				},
+				.icon = &st::menuIconPermissions,
+			});
+		}
 		addAction({
 			.text = tr::lng_context_ban_user(tr::now),
 			.handler = [=] {
