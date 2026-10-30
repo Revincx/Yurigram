@@ -230,7 +230,7 @@ protected:
 	void scrollTo(const Ui::ScrollToRequest &request);
 	[[nodiscard]] rpl::producer<int> scrollTopValue() const;
 	[[nodiscard]] int innerTopReserve() const {
-		return _innerTopReserve.current();
+		return _innerTopReserve;
 	}
 
 	void setPaintPadding(const style::margins &padding);
@@ -263,7 +263,7 @@ private:
 	base::unique_qptr<Ui::RpWidget> _searchWrap = nullptr;
 	QPointer<Ui::InputField> _searchField;
 	int _innerDesiredHeight = 0;
-	rpl::variable<int> _innerTopReserve = 0;
+	int _innerTopReserve = 0;
 	int _additionalScroll = 0;
 	int _addedHeight = 0;
 	int _maxVisibleHeight = 0;

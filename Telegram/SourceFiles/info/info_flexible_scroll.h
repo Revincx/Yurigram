@@ -47,7 +47,6 @@ public:
 private:
 	void setupScrollAnimation();
 	void setupScrollHandling();
-	void clearScrollState();
 	void scrollToY(int value);
 	void applyScrollToPinnedLayout(int scrollCurrent);
 

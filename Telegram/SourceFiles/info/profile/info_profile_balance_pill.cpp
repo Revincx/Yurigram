@@ -14,23 +14,22 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
 #include "ui/controls/ton_common.h"
+#include "ui/effects/animation_value.h"
 #include "ui/painter.h"
+#include "ui/rect.h"
 #include "ui/ui_utility.h"
 #include "wallet/wallet_fiat.h"
 
+#include "styles/style_info.h"
 #include "styles/style_info_profile_top_bar.h"
 
 namespace Info::Profile {
 namespace {
 
-[[nodiscard]] int FixedWidth() {
-	const auto &padding = st::infoProfileBalancePillPadding;
-	return padding.left()
-		+ st::infoProfileBalancePillIconSize
-		+ st::infoProfileBalancePillIconSkip
-		+ st::infoProfileBalancePillArrowSkip
-		+ st::infoProfileBalancePillArrow.width()
-		+ padding.right();
+constexpr auto kFadeStart = 0.6;
+
+[[nodiscard]] float64 FigureHeight(const style::font &font) {
+	return -font->metrics().tightBoundingRect(u"0123456789"_q).top();
 }
 
 [[nodiscard]] Wallet::AmountParts BalanceParts(int64 balance) {
@@ -48,25 +47,28 @@ BalancePill::BalancePill(
 	QWidget *parent,
 	not_null<UserData*> user,
 	rpl::producer<std::optional<QColor>> edgeColor)
-: AbstractButton(parent)
-, _colors(ComputePillColors(std::nullopt))
-, _baseline(PillTextBaseline())
-, _arrowTop(PillArrowTop()) {
+: AbstractButton(parent) {
 	setAttribute(Qt::WA_TransparentForMouseEvents);
 	hide();
+
+	const auto figure = FigureHeight(st::infoProfileBalancePillAmountFont);
+	const auto arrow = st::infoProfileBalancePillArrow.height();
+	_baseline = int(base::SafeRound(
+		(st::infoProfileBalancePillHeight + figure) / 2.));
+	_arrowTop = int(base::SafeRound(_baseline - (figure + arrow) / 2.));
 
 	std::move(
 		edgeColor
 	) | rpl::on_next([=](std::optional<QColor> color) {
 		if (_edgeColor != color || _icon.isNull()) {
 			_edgeColor = color;
-			refreshColors();
+			refreshIcon();
 		}
 	}, lifetime());
 
 	style::PaletteChanged(
 	) | rpl::on_next([=] {
-		refreshColors();
+		refreshIcon();
 	}, lifetime());
 
 	rpl::combine(
@@ -83,7 +85,11 @@ BalancePill::BalancePill(
 	}, lifetime());
 }
 
-void BalancePill::setOpacity(float64 opacity) {
+void BalancePill::place(int outerWidth, int statusTop, float64 progress) {
+	const auto opacity = std::clamp(
+		(progress - kFadeStart) / (1. - kFadeStart),
+		0.,
+		1.);
 	if (_opacity != opacity) {
 		_opacity = opacity;
 		++_appearanceRevision;
@@ -96,10 +102,13 @@ void BalancePill::setOpacity(float64 opacity) {
 			clearState();
 		}
 	}
-}
-
-int BalancePill::fittedWidth() const {
-	return _fittedWidth;
+	_top = statusTop + st::infoProfileTopBarBalanceSkip;
+	if (_outerWidth != outerWidth) {
+		_outerWidth = outerWidth;
+		refreshGeometry();
+	} else {
+		move((_outerWidth - width()) / 2, _top);
+	}
 }
 
 bool BalancePill::actionable() const {
@@ -149,24 +158,18 @@ void BalancePill::setContent(const QString &label, int64 balance) {
 		.big = st::infoProfileBalancePillAmountFont,
 		.small = st::infoProfileBalancePillFractionFont,
 	}, parts);
-	const auto labelSpace = _label.isEmpty()
-		? 0
-		: (st::infoProfileBalancePillLabelFont->width(_label)
-			+ st::infoProfileBalancePillLabelSkip);
-	setNaturalWidth(FixedWidth() + labelSpace + _amount.naturalWidth());
-	refreshLayout(width());
+	refreshGeometry();
 	accessibilityNameChanged();
 	update();
 	show();
 }
 
-void BalancePill::refreshColors() {
+void BalancePill::refreshIcon() {
 	++_appearanceRevision;
-	_colors = ComputePillColors(_edgeColor);
 	const auto tint = _edgeColor
 		? Ui::BlendColors(
 			*_edgeColor,
-			_colors.primary,
+			st::groupCallMembersFg->c,
 			st::infoProfileBalancePillColoredIconTint)
 		: st::currencyFg->c;
 	_icon = Ui::Earn::IconCurrencyTwoTone(
@@ -181,15 +184,22 @@ void BalancePill::refreshColors() {
 	update();
 }
 
-int BalancePill::resizeGetHeight(int newWidth) {
-	refreshLayout(newWidth);
-	return st::infoProfileBalancePillHeight;
-}
-
-void BalancePill::refreshLayout(int newWidth) {
+void BalancePill::refreshGeometry() {
+	if (_outerWidth <= 0) {
+		return;
+	}
 	const auto &font = st::infoProfileBalancePillLabelFont;
+	const auto &padding = st::infoProfileBalancePillPadding;
 	const auto labelSkip = st::infoProfileBalancePillLabelSkip;
-	const auto available = newWidth - FixedWidth();
+	const auto fixed = padding.left()
+		+ st::infoProfileBalancePillIconSize
+		+ st::infoProfileBalancePillIconSkip
+		+ st::infoProfileBalancePillArrowSkip
+		+ st::infoProfileBalancePillArrow.width()
+		+ padding.right();
+	const auto available = _outerWidth
+		- rect::m::sum::h(st::infoProfileTopBarActionButtonsPadding)
+		- fixed;
 	const auto labelAvailable = available
 		- _amount.naturalWidth()
 		- labelSkip;
@@ -201,13 +211,11 @@ void BalancePill::refreshLayout(int newWidth) {
 	_labelSpace = _labelShown.isEmpty()
 		? 0
 		: (font->width(_labelShown) + labelSkip);
-	const auto amountAvailable = std::max(available - _labelSpace, 1);
-	_amount.setAvailableWidth(amountAvailable);
-	_fittedWidth = std::min(
-		newWidth,
-		(FixedWidth()
-			+ _labelSpace
-			+ std::min(_amount.naturalWidth(), amountAvailable)));
+	_amount.setAvailableWidth(std::max(available - _labelSpace, 1));
+	resize(
+		fixed + _labelSpace + int(std::ceil(_amount.size().width())),
+		st::infoProfileBalancePillHeight);
+	move((_outerWidth - width()) / 2, _top);
 }
 
 void BalancePill::paintEvent(QPaintEvent *e) {
@@ -217,18 +225,36 @@ void BalancePill::paintEvent(QPaintEvent *e) {
 	auto p = QPainter(this);
 	auto hq = PainterHighQualityEnabler(p);
 	p.setOpacity(_opacity);
-	PaintPillBackground(p, rect(), _colors);
+	paintBackground(p);
 	if (!_contentHidden) {
 		paintContent(p);
 	}
 }
 
+void BalancePill::paintBackground(QPainter &p) const {
+	const auto radius = height() / 2.;
+	p.setPen(Qt::NoPen);
+	p.setBrush(_edgeColor
+		? anim::with_alpha(
+			st::groupCallMembersFg->c,
+			st::infoProfileBalancePillColoredBgOpacity)
+		: anim::with_alpha(
+			st::boxBg->c,
+			1. - st::infoProfileTopBarActionButtonBgOpacity));
+	p.drawRoundedRect(rect(), radius, radius);
+}
+
 void BalancePill::paintContent(QPainter &p) const {
-	const auto &fg = _colors.primary;
+	const auto colored = _edgeColor.has_value();
+	const auto fg = colored
+		? st::groupCallMembersFg->c
+		: st::windowBoldFg->c;
 	const auto &padding = st::infoProfileBalancePillPadding;
 	if (!_labelShown.isEmpty()) {
 		p.setFont(st::infoProfileBalancePillLabelFont);
-		p.setPen(_colors.secondary);
+		p.setPen(colored
+			? st::groupCallVideoSubTextFg->c
+			: st::windowSubTextFg->c);
 		p.drawText(padding.left(), _baseline, _labelShown);
 	}
 	const auto iconLeft = padding.left() + _labelSpace;

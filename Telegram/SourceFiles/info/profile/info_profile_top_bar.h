@@ -86,7 +86,7 @@ struct MenuCallback;
 namespace Info::Profile {
 
 class Badge;
-class PillsRow;
+class BalancePill;
 class StatusLabel;
 class TopBarActionButton;
 
@@ -110,7 +110,6 @@ public:
 		rpl::producer<bool> backToggles;
 		rpl::producer<> showFinished;
 		rpl::producer<TextWithEntities> customStatus;
-		Fn<void()> showSavedMusic;
 	};
 
 	struct AnimatedPatternPoint {
@@ -151,7 +150,7 @@ public:
 		not_null<Window::SessionController*> controller,
 		Wrap wrap);
 
-	rpl::producer<int> desiredHeightValue() const override;
+	rpl::producer<std::optional<QColor>> edgeColor() const;
 
 protected:
 	void resizeEvent(QResizeEvent *e) override;
@@ -165,7 +164,6 @@ private:
 		const QBrush &brush) const;
 	void paintEdges(QPainter &p, const QRect &clip) const;
 	void updateLabelsPosition();
-	[[nodiscard]] float64 progressForHeight(int height) const;
 	[[nodiscard]] int titleMostLeft() const;
 	[[nodiscard]] int statusMostLeft() const;
 	[[nodiscard]] QRect userpicGeometry() const;
@@ -184,10 +182,6 @@ private:
 	void setupBirthdayEffect();
 	void startUploadOverlay();
 	void setupActions(not_null<Window::SessionController*> controller);
-	void setupPills(
-		not_null<Window::SessionController*> controller,
-		Fn<void()> showSavedMusic);
-	void applyPillsReserve(int reserve);
 	void searchInCommunity(not_null<Window::SessionController*> controller);
 	void finalizeActions(
 		const std::vector<not_null<TopBarActionButton*>> &buttons);
@@ -274,9 +268,10 @@ private:
 	const std::unique_ptr<Badge> _verified;
 
 	const bool _hasActions;
+	const bool _hasBalance;
+	const int _balanceReserve;
 	const int _minForProgress;
-	std::unique_ptr<PillsRow> _pills;
-	rpl::variable<int> _pillsReserve = 0;
+	std::unique_ptr<BalancePill> _balancePill;
 
 	std::unique_ptr<Ui::GlareTooltip> _badgeTooltip;
 	std::vector<std::unique_ptr<Ui::GlareTooltip>> _badgeOldTooltips;

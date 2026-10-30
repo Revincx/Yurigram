@@ -189,17 +189,15 @@ Ui::RpWidget *ContentWidget::doSetInnerWidget(
 		_scroll->scrollTopValue(),
 		_scroll->heightValue(),
 		_innerWrap->entity()->desiredHeightValue(),
-		_innerTopReserve.value(),
-		tuple(_1, _1 + _2, _3, _4)
+		tuple(_1, _1 + _2, _3)
 	) | rpl::on_next([this](
 			int top,
 			int bottom,
-			int desired,
-			int reserve) {
+			int desired) {
 		_innerDesiredHeight = desired;
 		_innerWrap->setVisibleTopBottom(top, bottom);
 		_scrollTillBottomChanges.fire_copy(
-			std::max(desired + reserve - bottom, 0));
+			std::max(desired + _innerTopReserve - bottom, 0));
 	}, _innerWrap->lifetime());
 
 	rpl::merge(
@@ -212,16 +210,14 @@ Ui::RpWidget *ContentWidget::doSetInnerWidget(
 	rpl::combine(
 		_scroll->heightValue(),
 		_innerWrap->entity()->heightValue(),
-		_controller->wrapValue(),
-		_innerTopReserve.value()
+		_controller->wrapValue()
 	) | rpl::on_next([=](
 			int scrollHeight,
 			int innerHeight,
-			Wrap wrap,
-			int reserve) {
+			Wrap wrap) {
 		const auto added = (wrap == Wrap::Layer)
 			? 0
-			: std::max(scrollHeight - innerHeight - reserve, 0);
+			: std::max(scrollHeight - innerHeight - _innerTopReserve, 0);
 		if (_addedHeight != added) {
 			_addedHeight = added;
 			updateInnerPadding();
@@ -267,7 +263,7 @@ int ContentWidget::scrollTillBottom(int forHeight) const {
 		- _scrollTopSkip.current()
 		- _scrollBottomSkip.current();
 	const auto scrollBottom = _scroll->scrollTop() + scrollHeight;
-	const auto desired = _innerDesiredHeight + _innerTopReserve.current();
+	const auto desired = _innerDesiredHeight + _innerTopReserve;
 	return std::max(desired - scrollBottom, 0);
 }
 
@@ -298,12 +294,11 @@ void ContentWidget::applyAdditionalScroll(int additionalScroll) {
 
 void ContentWidget::updateInnerPadding() {
 	const auto addedToBottom = std::max(_additionalScroll, _addedHeight);
-	const auto reserve = _innerTopReserve.current();
-	_innerWrap->setPadding({ 0, reserve, 0, addedToBottom });
+	_innerWrap->setPadding({ 0, _innerTopReserve, 0, addedToBottom });
 }
 
 void ContentWidget::setInnerTopReserve(int reserve) {
-	if (_innerTopReserve.current() != reserve) {
+	if (_innerTopReserve != reserve) {
 		_innerTopReserve = reserve;
 		if (_innerWrap) {
 			updateInnerPadding();
@@ -340,12 +335,11 @@ rpl::producer<int> ContentWidget::desiredHeightValue() const {
 	return rpl::combine(
 		_innerWrap->entity()->desiredHeightValue(),
 		_scrollTopSkip.value(),
-		_scrollBottomSkip.value(),
-		_innerTopReserve.value()
+		_scrollBottomSkip.value()
 	//) | rpl::map(_1 + _2 + _3);
-	) | rpl::map([=](int desired, int, int, int) {
+	) | rpl::map([=](int desired, int, int) {
 		return desired
-			+ _innerTopReserve.current()
+			+ _innerTopReserve
 			+ _scrollTopSkip.current()
 			+ _scrollBottomSkip.current();
 	});
