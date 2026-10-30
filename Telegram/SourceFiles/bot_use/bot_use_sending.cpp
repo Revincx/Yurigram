@@ -809,14 +809,18 @@ bool SendLocation(
 		ShowSendError(history, error);
 		return false;
 	}
+	const auto location = Data::LocationPoint::FromCoordinates(
+		venue.lat,
+		venue.lon);
+	if (!location) {
+		ShowSendError(history, { u"GEO_POINT_INVALID"_q });
+		return false;
+	}
 	const auto info = FindBot(history, bot);
 	const auto id = FullMsgId(
 		history->peer->id,
 		history->owner().nextLocalMessageId());
-	const auto point = Data::LocationPoint(
-		venue.lat,
-		venue.lon,
-		Data::LocationPoint::NoAccessHash).toMTP();
+	const auto point = location->toMTP();
 	const auto media = venue.justLocation()
 		? MTPMessageMedia(MTP_messageMediaGeo(point))
 		: MTPMessageMedia(MTP_messageMediaVenue(
