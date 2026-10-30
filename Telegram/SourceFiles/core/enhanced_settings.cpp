@@ -290,6 +290,9 @@ const DescriptorList &DescriptorData() {
 			"show_recent_forward_targets",
 			&tr::lng_settings_show_recent_forward_targets,
 			"enhanced/show-recent-forward-targets"),
+		Bool(OptionId::HideGramBalance, "hide_gram_balance",
+			&tr::lng_settings_hide_gram_balance,
+			"enhanced/hide-gram-balance"),
 	};
 	return result;
 }

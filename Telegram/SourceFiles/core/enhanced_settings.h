@@ -89,6 +89,7 @@ enum class OptionId {
 	LlmTranslateContext,
 	LlmTranslateExtraParameters,
 	ShowRecentForwardTargets,
+	HideGramBalance,
 	Count,
 };
 
@@ -178,6 +179,8 @@ inline constexpr auto AllowScreenshots
 	= Key<bool>{ OptionId::AllowScreenshots };
 inline constexpr auto HideStarRatings
 	= Key<bool>{ OptionId::HideStarRatings };
+inline constexpr auto HideGramBalance
+	= Key<bool>{ OptionId::HideGramBalance };
 inline constexpr auto ShowPeerId = Key<bool>{ OptionId::ShowPeerId };
 inline constexpr auto PeerIdType = Key<int>{ OptionId::PeerIdType };
 inline constexpr auto LlmTranslateEndpoint

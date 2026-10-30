@@ -583,6 +583,21 @@ struct DecodeEnhancedSettingsResult {
 
 	builder.add(nullptr, [] {
 		return Builder::SearchEntry{
+			.id = u"enhanced/hide-gram-balance"_q,
+			.title = tr::lng_settings_hide_gram_balance(tr::now),
+			.keywords = {
+				u"gram"_q,
+				u"balance"_q,
+				u"wallet"_q,
+				u"profile"_q,
+				u"hide"_q,
+			},
+			.deeplink = u"tg://settings/enhanced/hide-gram-balance"_q,
+		};
+	});
+
+	builder.add(nullptr, [] {
+		return Builder::SearchEntry{
 			.id = u"enhanced/force-mobile"_q,
 			.title = tr::lng_settings_force_mobile(tr::now),
 			.keywords = { u"mobile"_q, u"layout"_q, u"force"_q },
@@ -810,6 +825,7 @@ struct DecodeEnhancedSettingsResult {
 		addToggleOption(content, EnhancedSettings::Option::HideCounter);
 		addToggleOption(content, EnhancedSettings::Option::HideStories);
 		addToggleOption(content, EnhancedSettings::Option::HideStarRatings);
+		addToggleOption(content, EnhancedSettings::Option::HideGramBalance);
 		addToggleOption(content, EnhancedSettings::Option::ForceMobile);
 		addToggleOption(
 			content,

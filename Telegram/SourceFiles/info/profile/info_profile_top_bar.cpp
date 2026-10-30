@@ -24,6 +24,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "calls/calls_instance.h"
 #include "chat_helpers/stickers_lottie.h"
 #include "core/application.h"
+#include "core/enhanced_settings.h"
 #include "core/shortcuts.h"
 #include "data/components/recent_shared_media_gifts.h"
 #include "data/data_birthday.h"
@@ -383,6 +384,7 @@ TopBar::TopBar(
 	&& descriptor.source != Source::Preview
 	&& (_wrap.current() != Wrap::Side || !_peer->isNotificationsUser()))
 , _hasBalance(_peer->isUser()
+	&& !EnhancedSettings::Get(EnhancedSettings::Option::HideGramBalance)
 	&& !_savedMessages
 	&& !_topic
 	&& (_source == Source::Profile

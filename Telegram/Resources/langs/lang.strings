@@ -9471,6 +9471,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_settings_screen_shot_mode" = "Screenshot Mode";
 "lng_settings_allow_screenshots" = "Allow screenshots";
 "lng_settings_hide_star_ratings" = "Hide user star ratings";
+"lng_settings_hide_gram_balance" = "Hide user Gram balance";
 "lng_settings_show_peer_id" = "Show Peer ID";
 "lng_settings_peer_id_type" = "Peer ID type";
 

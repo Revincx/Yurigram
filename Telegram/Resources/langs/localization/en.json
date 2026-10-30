@@ -74,6 +74,7 @@
     "lng_settings_show_seconds": "Time with seconds",
     "lng_settings_hide_counter": "Hide online users counter",
     "lng_settings_hide_stories": "Hide Stories",
+    "lng_settings_hide_gram_balance": "Hide user Gram balance",
     "lng_settings_screen_shot_mode": "Screenshot Mode",
     "lng_settings_skip_message": "Skip to next unread chat",
     "lng_settings_skip_message_desc": "Note: Allow ALT+↑/↓ shortcut to skip to next unread chat",
