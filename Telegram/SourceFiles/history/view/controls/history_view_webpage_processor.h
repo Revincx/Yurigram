@@ -94,6 +94,7 @@ public:
 	void apply(Data::WebPageDraft draft, bool reparse = true);
 	[[nodiscard]] Data::WebPageDraft draft() const;
 	[[nodiscard]] Data::WebPageDraft draftForSending() const;
+	[[nodiscard]] bool disabled() const;
 	[[nodiscard]] std::shared_ptr<WebpageResolver> resolver() const;
 	[[nodiscard]] const std::vector<MessageLinkRange> &links() const;
 	[[nodiscard]] QString link() const;

@@ -25,7 +25,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_saved_messages.h"
 #include "data/data_saved_sublist.h"
 #include "data/data_shared_media.h"
-#include "data/data_message_reactions.h"
 #include "data/data_folder.h"
 #include "data/data_changes.h"
 #include "data/stickers/data_custom_emoji.h"
@@ -342,6 +341,7 @@ rpl::producer<bool> NotificationsEnabledValue(
 	if (!topic) {
 		return NotificationsEnabledValue(thread->peer());
 	}
+	const auto weak = base::make_weak(topic);
 	return rpl::merge(
 		topic->session().changes().topicFlagsValue(
 			topic,
@@ -352,7 +352,9 @@ rpl::producer<bool> NotificationsEnabledValue(
 			UpdateFlag::Notifications
 		) | rpl::to_empty,
 		topic->owner().notifySettings().defaultUpdates(topic->peer())
-	) | rpl::map([=] {
+	) | rpl::filter([=] {
+		return (weak.get() != nullptr);
+	}) | rpl::map([=] {
 		return !topic->owner().notifySettings().isMuted(topic);
 	}) | rpl::distinct_until_changed();
 }
@@ -700,16 +702,6 @@ rpl::producer<bool> CanAddMemberValue(not_null<PeerData*> peer) {
 		});
 	}
 	return rpl::single(false);
-}
-
-rpl::producer<int> FullReactionsCountValue(
-		not_null<Main::Session*> session) {
-	const auto reactions = &session->data().reactions();
-	return rpl::single(rpl::empty) | rpl::then(
-		reactions->defaultUpdates()
-	) | rpl::map([=] {
-		return int(reactions->list(Data::Reactions::Type::Active).size());
-	}) | rpl::distinct_until_changed();
 }
 
 rpl::producer<bool> CanViewParticipantsValue(

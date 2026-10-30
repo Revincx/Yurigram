@@ -21,6 +21,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_element.h"
 #include "history/view/history_view_cursor_state.h"
 #include "history/view/history_view_keyboard_text_selection.h"
+#include "history/view/history_view_touch_scroll.h"
 #include "history/history_inner_widget_accessibility.h"
 #include "history/history_view_highlight_manager.h"
 #include "history/history_view_top_toast.h"
@@ -42,6 +43,7 @@ struct ChatPaintContextArgs;
 enum class TouchScrollState;
 struct PeerUserpicView;
 class MessageSendingAnimationController;
+struct MessageSendingReveal;
 } // namespace Ui
 
 namespace Dialogs::Ui {
@@ -354,6 +356,7 @@ public:
 	void restoreScrollPosition();
 
 	void resizeToWidth(int newWidth, int minHeight);
+	void shiftScrollBaseline(int delta);
 
 	void saveState(not_null<ListMemento*> memento);
 	void restoreState(not_null<ListMemento*> memento);
@@ -384,6 +387,7 @@ public:
 		not_null<HistoryItem*> item) const;
 	[[nodiscard]] MessageSelection getSelectedTextSelection(
 		not_null<HistoryItem*> item) const;
+	void clearSelected();
 	void cancelSelection();
 	void selectItem(not_null<HistoryItem*> item);
 	void selectItemAsGroup(not_null<HistoryItem*> item);
@@ -717,6 +721,7 @@ private:
 	void rememberScrollAnchor();
 	void saveScrollState();
 	void restoreScrollState();
+	void applyScrollTopState();
 
 	[[nodiscard]] bool jumpToBottomInsteadOfUnread() const;
 	void showAroundPosition(
@@ -820,7 +825,6 @@ private:
 	SelectionModeResult inSelectionMode() const;
 	bool overSelectedItems() const;
 	void clearTextSelection();
-	void clearSelected();
 	void setTextSelection(
 		not_null<Element*> view,
 		MessageSelection selection);
@@ -902,7 +906,9 @@ private:
 	void revealItemsCallback();
 	void maybeMarkReactionsRead(not_null<HistoryItem*> item);
 
-	void startMessageSendingAnimation(not_null<HistoryItem*> item);
+	std::optional<Ui::MessageSendingReveal> startMessageSendingAnimation(
+		not_null<HistoryItem*> item,
+		bool textFlightOnly = false);
 	void showPremiumStickerTooltip(
 		not_null<const HistoryView::Element*> view);
 
@@ -990,6 +996,7 @@ private:
 		not_null<Element*>,
 		ItemRevealAnimation> _itemRevealAnimations;
 	int _itemsRevealHeight = 0;
+	rpl::event_stream<> _itemsRevealHeightChanges;
 	base::flat_set<not_null<const HistoryItem*>> _animatedStickersPlayed;
 	base::flat_map<not_null<PeerData*>, Ui::PeerUserpicView> _userpics;
 	base::flat_map<not_null<PeerData*>, Ui::PeerUserpicView> _userpicsCache;
@@ -1123,6 +1130,7 @@ private:
 	crl::time _touchAccelerationTime = 0;
 	crl::time _touchTime = 0;
 	base::Timer _touchScrollTimer;
+	TouchScroll _touchElastic;
 	Ui::MiddleClickAutoscroll _middleClickAutoscroll;
 
 	rpl::event_stream<EditMessageRequest> _requestedToEditMessage;

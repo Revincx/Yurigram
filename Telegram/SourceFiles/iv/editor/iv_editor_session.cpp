@@ -3167,11 +3167,14 @@ private:
 	void applyMapSelection(
 		QPointer<Widget> editor,
 		::Data::InputVenue venue) {
-		if (!editor) {
+		const auto point = ::Data::LocationPoint::FromCoordinates(
+			venue.lat,
+			venue.lon);
+		if (!editor || !point) {
 			return;
 		}
 		_editor = editor;
-		editor->insertPreparedBlock(makeMapBlock(std::move(venue)));
+		editor->insertPreparedBlock(makeMapBlock(*point, std::move(venue)));
 	}
 
 	[[nodiscard]] RichPage::Block makeAttachmentBlock(
@@ -3254,11 +3257,9 @@ private:
 		return SplitGroupedMediaBlock(std::move(block));
 	}
 
-	[[nodiscard]] RichPage::Block makeMapBlock(::Data::InputVenue venue) const {
-		const auto point = ::Data::LocationPoint(
-			venue.lat,
-			venue.lon,
-			::Data::LocationPoint::NoAccessHash);
+	[[nodiscard]] RichPage::Block makeMapBlock(
+			const ::Data::LocationPoint &point,
+			::Data::InputVenue venue) const {
 		const auto preview = ::Data::ComputeLocation(point);
 		auto caption = QString();
 		if (!venue.title.isEmpty() && !venue.address.isEmpty()) {
@@ -3268,8 +3269,8 @@ private:
 		}
 		auto block = RichPage::Block();
 		block.kind = RichPage::BlockKind::Map;
-		block.latitude = venue.lat;
-		block.longitude = venue.lon;
+		block.latitude = point.lat();
+		block.longitude = point.lon();
 		block.accessHash = point.accessHash();
 		block.width = preview.width;
 		block.height = preview.height;

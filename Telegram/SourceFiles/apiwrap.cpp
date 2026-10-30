@@ -2758,11 +2758,6 @@ void ApiWrap::clearWebPageRequest(not_null<WebPageData*> page) {
 	}
 }
 
-void ApiWrap::clearWebPageRequests() {
-	_webPagesPending.clear();
-	_webPagesTimer.cancel();
-}
-
 void ApiWrap::resolveWebPages() {
 	auto ids = QVector<MTPInputMessage>(); // temp_req_id = -1
 	using IndexAndMessageIds = QPair<int32, QVector<MTPInputMessage>>;

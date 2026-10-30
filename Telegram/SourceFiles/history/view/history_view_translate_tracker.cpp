@@ -66,10 +66,6 @@ TranslateTracker::~TranslateTracker() {
 	cancelSentRequest();
 }
 
-rpl::producer<bool> TranslateTracker::trackingLanguage() const {
-	return _trackingLanguage.value();
-}
-
 QString TranslateTracker::providerKey(not_null<HistoryItem*> item) const {
 	if (item->richPage() && IsServerMsgId(item->id)) {
 		return u"telegram"_q;

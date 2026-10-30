@@ -111,7 +111,6 @@ public:
 		Effects,
 	};
 	[[nodiscard]] const std::vector<Reaction> &list(Type type) const;
-	[[nodiscard]] const std::vector<MyTagInfo> &myTagsInfo() const;
 	[[nodiscard]] const QString &myTagTitle(const ReactionId &id) const;
 	[[nodiscard]] ReactionId favoriteId() const;
 	[[nodiscard]] const Reaction *favorite() const;
@@ -233,8 +232,6 @@ private:
 
 	void recentUpdated();
 	void defaultUpdated();
-	void myTagsUpdated();
-	void tagsUpdated();
 	void effectsUpdated();
 
 	[[nodiscard]] std::optional<Reaction> resolveById(const ReactionId &id);

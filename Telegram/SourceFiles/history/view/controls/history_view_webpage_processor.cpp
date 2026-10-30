@@ -286,6 +286,10 @@ Data::WebPageDraft WebpageProcessor::draftForSending() const {
 	return _draft;
 }
 
+bool WebpageProcessor::disabled() const {
+	return _parser.disabled();
+}
+
 std::shared_ptr<WebpageResolver> WebpageProcessor::resolver() const {
 	return _resolver;
 }
