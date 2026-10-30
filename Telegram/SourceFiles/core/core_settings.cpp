@@ -10,6 +10,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/platform/base_platform_info.h"
 #include "calls/group/calls_group_common.h"
 #include "chat_helpers/spellchecker_locale_ids.h"
+#include "core/version.h"
 #include "history/view/history_view_quick_action.h"
 #include "lang/lang_keys.h"
 #include "platform/platform_notifications_manager.h"
@@ -220,7 +221,7 @@ Settings::Settings()
 Settings::~Settings() = default;
 
 void Settings::resetToDefaults() {
-	addFromSerialized(Settings().serialize());
+	addFromSerialized(Settings().serialize(), AppVersion);
 }
 
 QByteArray Settings::serialize() const {

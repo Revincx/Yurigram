@@ -17,6 +17,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/send_files_box.h"
 #include "core/application.h"
 #include "core/core_settings.h"
+#include "core/version.h"
 #include "data/components/promo_suggestions.h"
 
 namespace Main {
@@ -35,7 +36,7 @@ SessionSettings::SessionSettings()
 }
 
 void SessionSettings::resetToDefaults() {
-	addFromSerialized(SessionSettings().serialize());
+	addFromSerialized(SessionSettings().serialize(), AppVersion);
 }
 
 QByteArray SessionSettings::serialize() const {
