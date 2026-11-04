@@ -8,10 +8,6 @@ namespace Storage {
 class Domain;
 } // namespace Storage
 
-namespace Data {
-struct InputVenue;
-} // namespace Data
-
 namespace BotUse {
 
 struct Operation;
@@ -104,7 +100,8 @@ public:
 	[[nodiscard]] OperationId sendLocation(
 		BotId bot,
 		const Api::SendAction &action,
-		const Data::InputVenue &venue,
+		float64 lat,
+		float64 lon,
 		Completion done = {});
 	[[nodiscard]] OperationId sendSticker(
 		BotId bot,

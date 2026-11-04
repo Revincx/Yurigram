@@ -7,7 +7,6 @@ class HistoryItem;
 class DocumentData;
 class PhotoData;
 namespace Main { class Session; }
-namespace Data { struct InputVenue; }
 
 namespace BotUse {
 
@@ -74,7 +73,8 @@ void FailLocalMediaUpload(
 [[nodiscard]] bool SendLocation(
 	BotId bot,
 	Api::SendAction action,
-	const Data::InputVenue &venue);
+	float64 lat,
+	float64 lon);
 [[nodiscard]] bool SendPrepared(
 	BotId bot,
 	not_null<Main::Session*> session,

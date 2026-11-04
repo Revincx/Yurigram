@@ -964,7 +964,7 @@ bool SendDice(MessageToSend &message) {
 
 void SendLocation(SendAction action, float64 lat, float64 lon) {
 	if (const auto bot = BotUse::Selected(action.history)) {
-		if (!BotUse::SendLocation(bot, action, { .lat = lat, .lon = lon })) {
+		if (!BotUse::SendLocation(bot, action, lat, lon)) {
 			return;
 		}
 		return;
@@ -977,22 +977,6 @@ void SendLocation(SendAction action, float64 lat, float64 lon) {
 				MTP_double(lat),
 				MTP_double(lon),
 				MTPint()))); // accuracy_radius
-}
-
-void SendVenue(SendAction action, Data::InputVenue venue) {
-	SendSimpleMedia(
-		action,
-		MTP_inputMediaVenue(
-			MTP_inputGeoPoint(
-				MTP_flags(0),
-				MTP_double(venue.lat),
-				MTP_double(venue.lon),
-				MTPint()), // accuracy_radius
-			MTP_string(venue.title),
-			MTP_string(venue.address),
-			MTP_string(venue.provider),
-			MTP_string(venue.id),
-			MTP_string(venue.venueType)));
 }
 
 void FillMessagePostFlags(

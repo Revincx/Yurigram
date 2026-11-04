@@ -802,16 +802,15 @@ bool SendText(BotId bot, Api::MessageToSend message, std::optional<MsgId> localI
 bool SendLocation(
 		BotId bot,
 		Api::SendAction action,
-		const Data::InputVenue &venue) {
+		float64 lat,
+		float64 lon) {
 	action.clearDraft = false;
 	const auto history = action.history;
 	if (const auto error = ValidateSend(bot, action)) {
 		ShowSendError(history, error);
 		return false;
 	}
-	const auto location = Data::LocationPoint::FromCoordinates(
-		venue.lat,
-		venue.lon);
+	const auto location = Data::LocationPoint::FromCoordinates(lat, lon);
 	if (!location) {
 		ShowSendError(history, { u"GEO_POINT_INVALID"_q });
 		return false;
@@ -820,26 +819,17 @@ bool SendLocation(
 	const auto id = FullMsgId(
 		history->peer->id,
 		history->owner().nextLocalMessageId());
-	const auto point = location->toMTP();
-	const auto media = venue.justLocation()
-		? MTPMessageMedia(MTP_messageMediaGeo(point))
-		: MTPMessageMedia(MTP_messageMediaVenue(
-			point,
-			MTP_string(venue.title),
-			MTP_string(venue.address),
-			MTP_string(venue.provider),
-			MTP_string(venue.id),
-			MTP_string(venue.venueType)));
 	history->addNewLocalMessage(
 		LocalFields(action, info.userId, id.msg),
 		TextWithEntities(),
-		media);
+		MTP_messageMediaGeo(location->toMTP()));
 	history->session().botUseChats().beginSend(id, info.userId);
 	history->session().api().sendAction(action);
 	const auto operation = history->session().domain().botUse().sendLocation(
 		bot,
 		action,
-		venue,
+		lat,
+		lon,
 		CompletionFor(history, { id }));
 	if (!operation) {
 		return false;
