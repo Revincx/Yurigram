@@ -6399,11 +6399,11 @@ void HistoryWidget::sendTextWithTags(
 		: std::make_optional(session().data().nextLocalMessageId());
 
 	auto wasScrollBottom = std::optional<int>();
-	if (hasText && message.webPage.url.isEmpty()) {
+	if (nextLocalMessageId && hasText && message.webPage.url.isEmpty()) {
 		auto from = Ui::PrepareTextSending(
 			_field,
 			textWithTags,
-			nextLocalMessageId,
+			*nextLocalMessageId,
 			(options.scheduled != 0));
 		if (from) {
 			if (from->fieldText
@@ -6442,11 +6442,11 @@ void HistoryWidget::sendTextWithTags(
 		(options.scheduled
 			? Data::HistoryUpdate::Flag::ScheduledSent
 			: Data::HistoryUpdate::Flag::MessageSent));
-	if (wasScrollBottom) {
+	if (wasScrollBottom && nextLocalMessageId) {
 		const auto lift = _scroll->y() + _scroll->height() - *wasScrollBottom;
 		const auto item = session().data().message(
 			_history->peer,
-			nextLocalMessageId);
+			*nextLocalMessageId);
 		if (item && lift > 0) {
 			liftItemReveal(item, lift);
 		}
