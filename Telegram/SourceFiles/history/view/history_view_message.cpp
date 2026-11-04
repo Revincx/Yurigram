@@ -2561,7 +2561,7 @@ void Message::paintFromName(
 		const auto y = trect.top();
 		auto color = nameFg;
 		color.setAlpha(115);
-		const auto id = from ? from->emojiStatusId() : EmojiStatusId();
+		const auto id = from ? fromNameStatusId(from) : EmojiStatusId();
 		if (_fromNameStatus->id != id) {
 			const auto that = const_cast<Message*>(this);
 			_fromNameStatus->custom = id
@@ -2588,7 +2588,7 @@ void Message::paintFromName(
 					y + _fromNameStatus->skip),
 				.paused = context.paused || On(PowerSaving::kEmojiStatus),
 			});
-		} else {
+		} else if (from && from->isPremium()) {
 			st::dialogsPremiumIcon.icon.paint(p, x, y, width(), color);
 		}
 	}
@@ -3397,6 +3397,69 @@ void Message::clickHandlerPressedChanged(
 		toggleCommentsButtonRipple(pressed);
 	} else if (_topicButton && (handler == _topicButton->link)) {
 		toggleTopicButtonRipple(pressed);
+	} else if (const auto rich = richpage()
+		; rich
+		&& ((handler == rich->handler)
+			|| (handler == rich->handlerHorizontalScrollPressed)
+			|| (handler == rich->pressedPlaceholderHandler)
+			|| (handler == rich->handlerButtonRowHandler)
+			|| (handler == rich->pressedButtonRowHandler)
+			|| (handler == rich->handlerInlineButtonHandler)
+			|| (handler == rich->pressedInlineButtonHandler))) {
+		if (pressed) {
+			if ((handler == rich->handler)
+				&& rich->handlerHorizontalScrollHit
+				&& rich->article.beginHorizontalScroll(
+					rich->handlerHorizontalScrollPoint,
+					false)) {
+				rich->handlerHorizontalScrollActive = true;
+				rich->handlerHorizontalScrollPressed = handler;
+			}
+		} else if (rich->handlerHorizontalScrollActive
+			&& (handler == rich->handlerHorizontalScrollPressed)) {
+			rich->article.endHorizontalScroll();
+			rich->handlerHorizontalScrollActive = false;
+			rich->handlerHorizontalScrollPressed = nullptr;
+		}
+		if (pressed) {
+			if ((handler == rich->handler) && rich->handlerPlaceholderId) {
+				rich->pressedPlaceholderId = rich->handlerPlaceholderId;
+				rich->pressedPlaceholderHandler = handler;
+				rich->article.addPlaceholderRipple(
+					rich->pressedPlaceholderId,
+					rich->handlerPlaceholderPoint);
+			}
+		} else if (handler == rich->pressedPlaceholderHandler) {
+			rich->article.stopPlaceholderRipple(
+				base::take(rich->pressedPlaceholderId));
+			rich->pressedPlaceholderHandler = nullptr;
+		}
+		if (pressed) {
+			if ((handler == rich->handlerButtonRowHandler)
+				&& (rich->handlerButtonRow.index >= 0)) {
+				rich->pressedButtonRow = rich->handlerButtonRow;
+				rich->pressedButtonRowHandler = handler;
+				rich->article.addButtonRowRipple(
+					rich->pressedButtonRow.id,
+					rich->pressedButtonRow.index,
+					rich->pressedButtonRow.localPoint);
+			}
+		} else if (handler == rich->pressedButtonRowHandler) {
+			rich->article.stopButtonRowRipple(rich->pressedButtonRow.id);
+			rich->pressedButtonRow = {};
+			rich->pressedButtonRowHandler = nullptr;
+		}
+		if (pressed) {
+			if ((handler == rich->handlerInlineButtonHandler)
+				&& rich->handlerInlineButtonPoint) {
+				rich->pressedInlineButtonHandler = handler;
+				rich->article.addInlineButtonRipple(
+					*rich->handlerInlineButtonPoint);
+			}
+		} else if (handler == rich->pressedInlineButtonHandler) {
+			rich->article.stopInlineButtonRipple();
+			rich->pressedInlineButtonHandler = nullptr;
+		}
 	} else if (_viewButton) {
 		_viewButton->checkLink(handler, pressed);
 	} else if (const auto reply = Get<Reply>()
@@ -3436,64 +3499,6 @@ void Message::clickHandlerPressedChanged(
 		&& IsRippleLink(handler)
 		&& !text().linkRangeFor(handler).empty()) {
 		startLinkRipple();
-	} else if (const auto rich = richpage()
-		; rich
-		&& ((handler == rich->handler)
-			|| (handler == rich->handlerHorizontalScrollPressed)
-			|| (handler == rich->handlerButtonRowHandler)
-			|| (handler == rich->pressedButtonRowHandler)
-			|| (handler == rich->handlerInlineButtonHandler)
-			|| (handler == rich->pressedInlineButtonHandler))) {
-		if (pressed) {
-			if ((handler == rich->handler)
-				&& rich->handlerHorizontalScrollHit
-				&& rich->article.beginHorizontalScroll(
-					rich->handlerHorizontalScrollPoint,
-					false)) {
-				rich->handlerHorizontalScrollActive = true;
-				rich->handlerHorizontalScrollPressed = handler;
-			}
-		} else if (rich->handlerHorizontalScrollActive
-			&& (handler == rich->handlerHorizontalScrollPressed)) {
-			rich->article.endHorizontalScroll();
-			rich->handlerHorizontalScrollActive = false;
-			rich->handlerHorizontalScrollPressed = nullptr;
-		}
-		if ((handler == rich->handler) && rich->handlerPlaceholderId) {
-			if (pressed) {
-				rich->article.addPlaceholderRipple(
-					rich->handlerPlaceholderId,
-					rich->handlerPlaceholderPoint);
-			} else {
-				rich->article.stopPlaceholderRipple(rich->handlerPlaceholderId);
-			}
-		}
-		if (pressed) {
-			if ((handler == rich->handlerButtonRowHandler)
-				&& (rich->handlerButtonRow.index >= 0)) {
-				rich->pressedButtonRow = rich->handlerButtonRow;
-				rich->pressedButtonRowHandler = handler;
-				rich->article.addButtonRowRipple(
-					rich->pressedButtonRow.id,
-					rich->pressedButtonRow.index,
-					rich->pressedButtonRow.localPoint);
-			}
-		} else if (handler == rich->pressedButtonRowHandler) {
-			rich->article.stopButtonRowRipple(rich->pressedButtonRow.id);
-			rich->pressedButtonRow = {};
-			rich->pressedButtonRowHandler = nullptr;
-		}
-		if (pressed) {
-			if ((handler == rich->handlerInlineButtonHandler)
-				&& rich->handlerInlineButtonPoint) {
-				rich->pressedInlineButtonHandler = handler;
-				rich->article.addInlineButtonRipple(
-					*rich->handlerInlineButtonPoint);
-			}
-		} else if (handler == rich->pressedInlineButtonHandler) {
-			rich->article.stopInlineButtonRipple();
-			rich->pressedInlineButtonHandler = nullptr;
-		}
 	} else if (_reactions) {
 		_reactions->clickHandlerPressedChanged(
 			handler,
@@ -4275,7 +4280,9 @@ bool Message::getStateFromName(
 		const auto nameWidth = std::min(
 			nameText->maxWidth(),
 			nameAvailableWidth);
-		if (statusWidth && availableWidth > statusWidth) {
+		if (statusWidth
+			&& availableWidth > statusWidth
+			&& (from->isPremium() || fromNameStatusId(from))) {
 			const auto x = availableLeft
 				+ nameWidth
 				- (_fromNameStatus->custom ? (2 * _fromNameStatus->skip) : 0);
@@ -4432,6 +4439,12 @@ void Message::ensureFromNameStatusLink(not_null<PeerData*> peer) const {
 			Settings::ShowEmojiStatusPremium(controller, peer);
 		}
 	});
+}
+
+EmojiStatusId Message::fromNameStatusId(not_null<PeerData*> from) const {
+	return (data()->hideLinks() || from->hideEmojiStatus())
+		? EmojiStatusId()
+		: from->emojiStatusId();
 }
 
 bool Message::getStateTopicButton(
@@ -5523,10 +5536,14 @@ bool Message::embedReactionsInBubble() const {
 }
 
 void Message::validateFromNameText(PeerData *from) const {
-	if (!from) {
-		if (_fromNameStatus) {
-			_fromNameStatus = nullptr;
+	const auto clearStatus = [&] {
+		const auto status = base::take(_fromNameStatus);
+		if (status && status->custom) {
+			const_cast<Message*>(this)->checkHeavyPart();
 		}
+	};
+	if (!from) {
+		clearStatus();
 		return;
 	}
 	const auto version = from->nameVersion();
@@ -5547,8 +5564,8 @@ void Message::validateFromNameText(PeerData *from) const {
 			const auto emoji = Ui::Text::AdjustCustomEmojiSize(size);
 			_fromNameStatus->skip = (size - emoji) / 2;
 		}
-	} else if (_fromNameStatus) {
-		_fromNameStatus = nullptr;
+	} else {
+		clearStatus();
 	}
 }
 
@@ -7086,6 +7103,11 @@ bool Message::textAppearCheckLine() {
 				&& ((appearing->revealedLineWidth < line->width)
 					|| (appearing->shownHeight < finalLineHeight))));
 	if (!use) {
+		if (!line) {
+			// The width tick reads lines[shownLine], which is now past the end.
+			appearing->widthAnimation.stop();
+			appearing->heightAnimation.stop();
+		}
 		if (data()->isRegular()) {
 			// We are inside these animations' tick, can't destroy them now.
 			crl::on_main(this, [=] {

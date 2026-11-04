@@ -22,7 +22,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 constexpr auto AppId = "{9DB6C981-7FD2-41B5-AEF2-20C933FD3F21}"_cs;
 constexpr auto AppNameOld = "Telegram Win (Unofficial)"_cs;
 constexpr auto AppFile = "Yurigram"_cs;
-constexpr auto AppVersion = 7003004;
-constexpr auto AppVersionStr = "7.3.4";
-constexpr auto AppBetaVersion = true;
+constexpr auto AppVersion = 7003005;
+constexpr auto AppVersionStr = "7.3.5";
+constexpr auto AppBetaVersion = false;
 constexpr auto AppAlphaVersion = TDESKTOP_ALPHA_VERSION;
