@@ -847,6 +847,13 @@ void StickerSetBox::handleError(Error error) {
 
 void StickerSetBox::updateTitleAndButtons() {
 	setTitle(_inner->title());
+	for (const auto child : parentWidget()->children()) {
+		const auto label = dynamic_cast<Ui::FlatLabel*>(child);
+		if (label && &label->st() == &getDelegate()->style().title) {
+			label->setSelectable(true);
+			break;
+		}
+	}
 	updateButtons();
 }
 
