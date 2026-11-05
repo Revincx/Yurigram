@@ -854,7 +854,6 @@ Widget::Widget(
 
 		setupMoreChatsBar();
 		setupDownloadBar();
-		setupShortcuts(controller);
 	}
 	setupSwipeBack();
 
@@ -1678,34 +1677,6 @@ void Widget::setupDownloadBar() {
 				_connecting->raise();
 			}
 		}
-	}, lifetime());
-}
-
-void Widget::setupShortcuts(not_null<Window::SessionController *> controller) {
-	Shortcuts::Requests(
-	) | rpl::filter([=] {
-		return isActiveWindow()
-		       && !controller->isLayerShown()
-		       && !controller->window().locked();
-	}) | rpl::on_next([=](not_null<Shortcuts::Request*> request) {
-		using Command = Shortcuts::Command;
-
-		request->check(Command::GlobalSearch) && request->handle([=] {
-			if (_openedFolder) {
-				controller->closeFolder();
-				setInnerFocus();
-				return true;
-			} else {
-				if (controller->adaptive().isOneColumn()) {
-					controller->clearSectionStack();
-					controller->showBackFromStack();
-				} else {
-					setInnerFocus();
-				}
-				return true;
-			}
-			return false;
-		});
 	}, lifetime());
 }
 

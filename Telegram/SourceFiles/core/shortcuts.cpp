@@ -77,7 +77,6 @@ const auto CommandByName = base::flat_map<QString, Command>{
 	{ u"lock_telegram"_q                 , Command::Lock },
 	{ u"minimize_telegram"_q             , Command::Minimize },
 	{ u"quit_telegram"_q                 , Command::Quit },
-	{ u"global_search"_q                 , Command::GlobalSearch },
 	{ u"reopen_closed_window"_q          , Command::ReopenClosedWindow },
 	{ u"close_other_windows"_q           , Command::CloseOtherWindows },
 
@@ -528,7 +527,6 @@ void Manager::fillDefaults() {
 	set(u"ctrl+l"_q                  , Command::Lock);
 	set(u"ctrl+m"_q                  , Command::Minimize);
 	set(u"ctrl+q"_q                  , Command::Quit);
-	set(u"ctrl+t"_q                  , Command::GlobalSearch);
 	set(u"ctrl+shift+t"_q            , Command::ReopenClosedWindow);
 	set(u"ctrl+shift+w"_q            , Command::CloseOtherWindows);
 

@@ -19,7 +19,6 @@ enum class Command {
 	Lock,
 	Minimize,
 	Quit,
-	GlobalSearch,
 	ReopenClosedWindow,
 	CloseOtherWindows,
 
