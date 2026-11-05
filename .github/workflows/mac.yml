@@ -89,7 +89,13 @@ jobs:
     permissions:
       contents: write
 
+    concurrency:
+      group: yurigram-channel-update-${{ matrix.arch == 'arm64' && 'armac' || 'mac' }}
+      cancel-in-progress: false
+      queue: max
+
     strategy:
+      fail-fast: false
       matrix:
         arch: [arm64, x86_64]
         defines:
@@ -164,6 +170,7 @@ jobs:
           path: ${{ env.REPO_NAME }}/out/Release/artifact/
 
       - name: Pack and sign update.
+        id: pack-update
         if: env.UPLOAD_ARTIFACT == 'true' && env.ONLY_CACHE == 'false'
         env:
           UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.UPDATE_SIGNING_PRIVATE_KEY }}
@@ -194,6 +201,14 @@ jobs:
             -arch "${{ matrix.arch }}" -version "$VERSION" \
             -channel stable -keys-loc "$REPO/Telegram/Resources/update" \
             -local-key "$KEY_FILE" -local-key-id "$UPDATE_SIGNING_KEY_ID"
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            UPDATE_ARCH=arm
+          else
+            UPDATE_ARCH=x64
+          fi
+          PACKAGE="$PWD/td-update-mac-$UPDATE_ARCH-$VERSION"
+          test -f "$PACKAGE"
+          echo "package=$PACKAGE" >> "$GITHUB_OUTPUT"
 
       - name: Upload update artifact.
         if: env.UPLOAD_ARTIFACT == 'true' && env.ONLY_CACHE == 'false'
@@ -222,3 +237,20 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ inputs.tag }}
           file: ${{ steps.package-release.outputs.archive }}
+
+      - name: Publish Telegram update.
+        if: env.UPLOAD_ARTIFACT == 'true' && env.ONLY_CACHE == 'false'
+        timeout-minutes: 20
+        env:
+          UPDATE_API_ID: ${{ secrets.UPDATE_API_ID }}
+          UPDATE_API_HASH: ${{ secrets.UPDATE_API_HASH }}
+          UPDATE_BOT_TOKEN: ${{ secrets.UPDATE_BOT_TOKEN }}
+          UPDATE_CHAT_ID: ${{ secrets.UPDATE_CHAT_ID }}
+          UPDATE_PLATFORM: ${{ matrix.arch == 'arm64' && 'armac' || 'mac' }}
+          UPDATE_PACKAGE: ${{ steps.pack-update.outputs.package }}
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/yurigram-update-publisher"
+          UPDATE_PYTHON="$RUNNER_TEMP/yurigram-update-publisher/bin/python"
+          "$UPDATE_PYTHON" -m pip install Telethon==1.45.0
+          "$UPDATE_PYTHON" "$REPO_NAME/Telegram/build/publish_update.py" --platform "$UPDATE_PLATFORM" --package "$UPDATE_PACKAGE" --chat-id "$UPDATE_CHAT_ID"
