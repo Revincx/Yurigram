@@ -1,26 +1,30 @@
 name: Linux Packaged ARM64.
 
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and upload to
+        required: true
+        type: string
+      runner:
+        description: Linux ARM64 runner label selected by the release dispatcher
+        required: true
+        type: string
 
 env:
   PACKAGE_NAME: yurigram
-  REPO_TAG: ${{ github.event.release.tag_name }}
+  REPO_TAG: ${{ inputs.tag }}
   IMAGE_REPOSITORY: ghcr.io/${{ github.repository }}/centos_env
   IMAGE_RECIPE_VERSION: v1
 
 jobs:
   image:
     name: Get or Build ARM64 Docker Image
-    strategy:
-      matrix:
-        runner:
-          - avrea-ubuntu-latest-arm-8-vcpu
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 360
     env:
-      BUILDX_CACHE_ENDPOINT: ${{ startsWith(matrix.runner, 'avrea-') && ',url_v2=https://cache.avrea.com/' || '' }}
+      BUILDX_CACHE_ENDPOINT: ${{ startsWith(inputs.runner, 'avrea-') && ',url_v2=https://cache.avrea.com/' || '' }}
     permissions:
       contents: read
       packages: write
@@ -32,9 +36,10 @@ jobs:
 
     steps:
       - name: Clone.
+        id: checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ env.REPO_TAG }}
+          ref: refs/tags/${{ env.REPO_TAG }}
 
       - name: Free up disk space.
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
@@ -96,7 +101,7 @@ jobs:
           tags: ${{ steps.image.outputs.image-ref }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.checkout.outputs.commit }}
           cache-from: type=gha${{ env.BUILDX_CACHE_ENDPOINT }},scope=centos-env-arm64
           cache-to: type=gha${{ env.BUILDX_CACHE_ENDPOINT }},mode=max,scope=centos-env-arm64
           push: true
@@ -109,7 +114,7 @@ jobs:
   build:
     name: Build Linux ARM64 Release Package
     needs: image
-    runs-on: avrea-ubuntu-latest-arm-8-vcpu
+    runs-on: ${{ inputs.runner }}
     timeout-minutes: 360
     permissions:
       contents: write
@@ -121,7 +126,7 @@ jobs:
         with:
           submodules: recursive
           path: ${{ env.PACKAGE_NAME }}
-          ref: ${{ env.REPO_TAG }}
+          ref: refs/tags/${{ env.REPO_TAG }}
 
       - name: Free up disk space.
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
@@ -192,5 +197,5 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          release_id: ${{ github.event.release.id }}
+          tag: ${{ inputs.tag }}
           file: ${{ steps.build.outputs.archive }}

@@ -1,0 +1,56 @@
+name: Dispatch Release Workflows.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  actions: write
+
+env:
+  RUNNER_PROVIDER: ${{ vars.RELEASE_RUNNER_PROVIDER || 'avrea' }}
+
+jobs:
+  dispatch:
+    name: Dispatch ${{ matrix.workflow }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - workflow: linux_packaged.yml
+            runner_inputs:
+              runner: ${{ vars.RELEASE_LINUX_X64_RUNNER || (vars.RELEASE_RUNNER_PROVIDER == 'github' && 'ubuntu-24.04' || 'avrea-ubuntu-latest-8-vcpu') }}
+          - workflow: linux_packaged_arm64.yml
+            runner_inputs:
+              runner: ${{ vars.RELEASE_LINUX_ARM64_RUNNER || (vars.RELEASE_RUNNER_PROVIDER == 'github' && 'ubuntu-24.04-arm' || 'avrea-ubuntu-latest-arm-8-vcpu') }}
+          - workflow: win.yml
+            runner_inputs:
+              runner_x64: ${{ vars.RELEASE_WINDOWS_X64_RUNNER || (vars.RELEASE_RUNNER_PROVIDER == 'github' && 'windows-2025' || 'avrea-windows-2025-8-vcpu') }}
+              runner_arm64: ${{ vars.RELEASE_WINDOWS_ARM64_RUNNER || 'windows-11-arm' }}
+          - workflow: mac.yml
+            runner_inputs:
+              runner: ${{ vars.RELEASE_MACOS_RUNNER || (vars.RELEASE_RUNNER_PROVIDER == 'github' && 'macos-latest' || 'avrea-macos-26-8-vcpu') }}
+    steps:
+      - name: Dispatch release build on dev.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WORKFLOW: ${{ matrix.workflow }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RUNNER_INPUTS: ${{ toJSON(matrix.runner_inputs) }}
+        run: |
+          case "$RUNNER_PROVIDER" in
+            github|avrea) ;;
+            *)
+              echo "::error::RELEASE_RUNNER_PROVIDER must be github or avrea."
+              exit 1
+              ;;
+          esac
+
+          jq -n --arg tag "$RELEASE_TAG" --argjson runners "$RUNNER_INPUTS" \
+            '{ref: "dev", inputs: ($runners + {tag: $tag})}' \
+            | gh api --method POST \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2026-03-10" \
+              "repos/$GITHUB_REPOSITORY/actions/workflows/$WORKFLOW/dispatches" \
+              --input -

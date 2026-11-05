@@ -2,14 +2,24 @@ name: MacOS.
 
 on:
   workflow_dispatch:
-  release:
-    types: [published]
+    inputs:
+      tag:
+        description: Release tag to build and upload to
+        required: true
+        type: string
+      runner:
+        description: macOS runner label selected by the release dispatcher
+        required: true
+        type: string
+
+env:
+  REPO_TAG: ${{ inputs.tag }}
 
 jobs:
 
   prepare-libraries:
     name: Prepare Libraries
-    runs-on: macos-latest
+    runs-on: ${{ inputs.runner }}
 
     strategy:
       matrix:
@@ -26,7 +36,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           submodules: recursive
-          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref }}
+          ref: refs/tags/${{ env.REPO_TAG }}
           path: ${{ env.REPO_NAME }}
 
       - name: First set up.
@@ -74,7 +84,7 @@ jobs:
 
   build:
     name: MacOS
-    runs-on: macos-latest
+    runs-on: ${{ inputs.runner }}
     needs: prepare-libraries
     permissions:
       contents: write
@@ -95,7 +105,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           submodules: recursive
-          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref }}
+          ref: refs/tags/${{ env.REPO_TAG }}
           path: ${{ env.REPO_NAME }}
 
       - name: Restore libraries cache.
@@ -132,11 +142,7 @@ jobs:
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           cd $REPO_NAME
-          if [ "${{ github.event_name }}" = "release" ]; then
-            VERSION="${{ github.event.release.tag_name }}"
-          else
-            VERSION="v$(grep 'AppVersionStr' Telegram/SourceFiles/core/version.h | cut -d '"' -f 2)"
-          fi
+          VERSION="$REPO_TAG"
           cd out/Release
           mkdir -p Yurigram.app/Contents/Frameworks
           cp Updater Yurigram.app/Contents/Frameworks/Updater
@@ -200,7 +206,7 @@ jobs:
 
       - name: Package release artifact.
         id: package-release
-        if: github.event_name == 'release' && env.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           ARCHIVE="$REPO_NAME/out/Release/${{ steps.prepare-artifact.outputs.name }}.zip"
           (
@@ -210,9 +216,9 @@ jobs:
           echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
 
       - name: Upload release package.
-        if: github.event_name == 'release' && env.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          release_id: ${{ github.event.release.id }}
+          tag: ${{ inputs.tag }}
           file: ${{ steps.package-release.outputs.archive }}

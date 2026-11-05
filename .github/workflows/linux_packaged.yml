@@ -1,22 +1,29 @@
 name: Linux Packaged.
 
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and upload to
+        required: true
+        type: string
+      runner:
+        description: Linux x64 runner label selected by the release dispatcher
+        required: true
+        type: string
 
 jobs:
 
   build:
-    
     name: Build Linux Release Package
-    runs-on: avrea-ubuntu-latest-8-vcpu
+    runs-on: ${{ inputs.runner }}
     permissions:
       contents: write
       packages: read
 
     env:
       PACKAGE_NAME: yurigram
-      REPO_TAG: ${{ github.event.release.tag_name }}
+      REPO_TAG: ${{ inputs.tag }}
       IMAGE_REPOSITORY: ghcr.io/telegramdesktop/tdesktop/centos_env
 
     steps:
@@ -25,7 +32,7 @@ jobs:
         with:
           submodules: recursive
           path: ${{ env.PACKAGE_NAME }}
-          ref: ${{ env.REPO_TAG }}
+          ref: refs/tags/${{ env.REPO_TAG }}
           
       - name: Setup envs.
         run: |
@@ -154,6 +161,6 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          release_id: ${{ github.event.release.id }}
+          tag: ${{ inputs.tag }}
           file: ${{ env.PACKAGE_NAME }}-${{ env.REPO_TAG }}-${{ env.ARCH }}.tar.gz
         

@@ -2,14 +2,28 @@ name: Windows.
 
 on:
   workflow_dispatch:
-  release:
-    types: [published]
+    inputs:
+      tag:
+        description: Release tag to build and upload to
+        required: true
+        type: string
+      runner_x64:
+        description: Windows x64 runner label selected by the release dispatcher
+        required: true
+        type: string
+      runner_arm64:
+        description: Windows ARM64 runner label selected by the release dispatcher
+        required: true
+        type: string
+
+env:
+  REPO_TAG: ${{ inputs.tag }}
 
 jobs:
 
   windows:
     name: Windows
-    runs-on: ${{ matrix.arch == 'arm64' && 'windows-11-arm' || 'avrea-windows-2025-8-vcpu' }}
+    runs-on: ${{ matrix.arch == 'arm64' && inputs.runner_arm64 || inputs.runner_x64 }}
     permissions:
       contents: write
 
@@ -62,7 +76,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           submodules: recursive
-          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref }}
+          ref: refs/tags/${{ env.REPO_TAG }}
           path: TBuild/${{ env.REPO_NAME }}
 
       - name: First set up.
@@ -149,11 +163,7 @@ jobs:
         run: |
           cd "$TBUILD/$REPO_NAME"
           ARTIFACT_NAME="Yurigram_Win"
-          if [ "${{ github.event_name }}" = "release" ]; then
-            VERSION="${{ github.event.release.tag_name }}"
-          else
-            VERSION="v$(grep 'AppVersionStr' Telegram/SourceFiles/core/version.h | cut -d '"' -f 2)"
-          fi
+          VERSION="$REPO_TAG"
 
           ARCH=""
           if [ -n "${{ matrix.arch }}" ]; then
@@ -307,7 +317,7 @@ jobs:
 
       - name: Package release artifact.
         id: package-release
-        if: github.event_name == 'release' && env.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         shell: pwsh
         run: |
           $archive = "$env:ARTIFACT_NAME.zip"
@@ -315,11 +325,11 @@ jobs:
           Add-Content -Path $env:GITHUB_OUTPUT -Value "archive=$archive"
 
       - name: Upload release package.
-        if: github.event_name == 'release' && env.UPLOAD_ARTIFACT == 'true'
+        if: env.UPLOAD_ARTIFACT == 'true'
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          release_id: ${{ github.event.release.id }}
+          tag: ${{ inputs.tag }}
           file: ${{ steps.package-release.outputs.archive }}
 
       - name: Save ThirdParty cache.
