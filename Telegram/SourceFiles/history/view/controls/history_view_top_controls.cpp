@@ -795,12 +795,10 @@ void TopControls::checkPinnedBarState() {
 	const auto migrated = migratedPeer();
 	const auto topicRootId = activeThread()->topicRootId();
 	const auto monoforumPeerId = fullHistory ? PeerId(0) : _monoforumPeerId;
-	const auto hiddenId = _history->peer->canPinMessages()
-		? MsgId(0)
-		: _history->peer->session().settings().hiddenPinnedMessageId(
-			_history->peer->id,
-			topicRootId,
-			monoforumPeerId);
+	const auto hiddenId = _history->session().settings().hiddenPinnedMessageId(
+		_history->peer->id,
+		topicRootId,
+		monoforumPeerId);
 	const auto currentPinnedId = Data::ResolveTopPinnedId(
 		_history->peer,
 		topicRootId,
