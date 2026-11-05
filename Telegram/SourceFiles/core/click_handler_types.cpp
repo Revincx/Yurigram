@@ -1,4 +1,4 @@
-﻿/*
+/*
 This file is part of Telegram Desktop,
 the official desktop application for the Telegram messaging service.
 
@@ -563,7 +563,12 @@ void HiddenUrlClickHandler::Open(QString url, QVariant context) {
 		const auto open = [=] {
 			UrlClickHandler::Open(url, openContext);
 		};
-		if (!EnhancedSettings::Get(EnhancedSettings::Option::DisableLinkWarning)
+		const auto displayed = parsedUrl.isValid()
+			? DisplayUrlWithUnicodeHost(parsedUrl)
+			: url;
+		const auto suspicious = SuspiciousRanges(displayed);
+		if ((!EnhancedSettings::Get(EnhancedSettings::Option::DisableLinkWarning)
+				|| !suspicious.empty())
 			&& (forceConfirmation
 				|| (confirmAfterIvFallback && !canTryIv)
 				|| (HiddenUrlRequiresConfirmation(parsedUrl, my)
@@ -571,10 +576,6 @@ void HiddenUrlClickHandler::Open(QString url, QVariant context) {
 			if (!my.show) {
 				Core::App().hideMediaView();
 			}
-			const auto displayed = parsedUrl.isValid()
-				? DisplayUrlWithUnicodeHost(parsedUrl)
-				: url;
-			const auto suspicious = SuspiciousRanges(displayed);
 			const auto visible = ranges::all_of(suspicious, [&](
 					const SuspiciousRange &range) {
 				return ranges::all_of(
