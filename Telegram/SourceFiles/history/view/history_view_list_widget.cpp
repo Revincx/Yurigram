@@ -1,4 +1,4 @@
-﻿/*
+/*
 This file is part of Telegram Desktop,
 the official desktop application for the Telegram messaging service.
 
@@ -6473,6 +6473,50 @@ bool ListWidget::lastMessageEditRequestNotify() const {
 		editMessageRequestNotify(item->fullId());
 		return true;
 	}
+}
+
+ListWidget::EditMessageLookup ListWidget::findEditableMessage(
+		FullMsgId current,
+		EditDirection direction) const {
+	using State = EditMessageLookup::State;
+	const auto next = (direction == EditDirection::Next);
+	const auto count = int(_items.size());
+	auto index = count;
+	if (current) {
+		const auto item = session().data().message(current);
+		if (!item) {
+			return {};
+		}
+		const auto group = item->groupId();
+		const auto i = ranges::find_if(_items, [&](not_null<Element*> view) {
+			return view->data()->fullId() == current
+				|| (group && view->data()->groupId() == group);
+		});
+		if (i == end(_items)) {
+			return {};
+		}
+		index = int(i - begin(_items));
+	} else if (next || !loadedAtBottom()) {
+		return {};
+	}
+	const auto now = base::unixtime::now();
+	const auto step = next ? 1 : -1;
+	for (index += step; index >= 0 && index < count; index += step) {
+		const auto item = _items[index]->data();
+		if (item->isSponsored()
+			|| item->isUploading()
+			|| !item->allowsEdit(now)) {
+			continue;
+		}
+		const auto target = session().data().groups().findItemToEdit(item);
+		if (target->fullId() != current
+			&& !target->isUploading()
+			&& target->allowsEdit(now)) {
+			return { State::Found, target->fullId() };
+		}
+	}
+	const auto boundaryKnown = next ? loadedAtBottom() : loadedAtTop();
+	return { boundaryKnown ? State::Boundary : State::NotLoaded };
 }
 
 auto ListWidget::replyToMessageRequested() const

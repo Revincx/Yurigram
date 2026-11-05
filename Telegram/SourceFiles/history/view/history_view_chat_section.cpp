@@ -6481,10 +6481,48 @@ void ChatWidget::setupShortcuts() {
 	) | rpl::filter([=] {
 		return Ui::AppInFocus()
 			&& Ui::InFocusChain(this)
+			&& window()->isActiveWindow()
+			&& !controller()->window().locked()
 			&& !controller()->isLayerShown()
 			&& (Core::App().activeWindow() == &controller()->window());
 	}) | rpl::on_next([=](not_null<Shortcuts::Request*> request) {
 		using Command = Shortcuts::Command;
+		const auto selected = _inner->getSelectedItems();
+		if (!selected.empty()
+			&& ranges::all_of(selected, &SelectedItem::canForward)) {
+			request->check(Command::FastForward, 1) && request->handle([=] {
+				confirmForwardSelected();
+				return true;
+			});
+			request->check(Command::FastCopy, 1) && request->handle([=] {
+				confirmForwardNoQuoteSelected();
+				return true;
+			});
+		}
+		if (!_bottom->isButtonActive()
+			&& _composeControls->fieldForMention()
+			&& !_composeControls->isRecording()) {
+			using Direction = ListWidget::EditDirection;
+			using State = ListWidget::EditMessageLookup::State;
+			const auto current = _composeControls->editingMessageId();
+			const auto previous = _inner->findEditableMessage(
+				current,
+				Direction::Previous);
+			(previous.state == State::Found)
+				&& request->check(Command::EditPreviousMessage, 1)
+				&& request->handle([=] {
+					return editAdjacentMessage(Direction::Previous);
+				});
+			const auto next = _inner->findEditableMessage(
+				current,
+				Direction::Next);
+			current
+				&& (next.state != State::NotLoaded)
+				&& request->check(Command::EditNextMessage, 1)
+				&& request->handle([=] {
+					return editAdjacentMessage(Direction::Next);
+				});
+		}
 		request->check(Command::Search, 1) && request->handle([=] {
 			searchRequested();
 			return true;
@@ -6528,6 +6566,32 @@ void ChatWidget::setupShortcuts() {
 				});
 		}
 	}, lifetime());
+}
+
+bool ChatWidget::editAdjacentMessage(ListWidget::EditDirection direction) {
+	using State = ListWidget::EditMessageLookup::State;
+	const auto current = _composeControls->editingMessageId();
+	const auto result = _inner->findEditableMessage(current, direction);
+	if (result.state == State::NotLoaded
+		|| (result.state == State::Boundary
+			&& (!current || direction != ListWidget::EditDirection::Next))) {
+		return false;
+	}
+	_composeControls->confirmDiscardEdit(crl::guard(this, [=] {
+		if (_composeControls->editingMessageId() != current) {
+			return;
+		}
+		const auto checked = _inner->findEditableMessage(current, direction);
+		if (checked.state != result.state || checked.id != result.id) {
+			return;
+		}
+		if (checked.state == State::Found) {
+			_inner->editMessageRequestNotify(checked.id);
+		} else {
+			_composeControls->cancelEditMessage();
+		}
+	}));
+	return true;
 }
 
 void ChatWidget::setupComposeStash() {

@@ -234,9 +234,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_iv.h"
 #include "styles/style_layers.h"
 
-#include <QtGui/QWindow>
 #include <QtCore/QMimeData>
-#include <QShortcut>
+#include <QtGui/QWindow>
+#include <QtWidgets/QApplication>
 
 namespace {
 
@@ -256,11 +256,6 @@ constexpr auto kCommonModifiers = 0
 	| Qt::ShiftModifier
 	| Qt::MetaModifier
 	| Qt::ControlModifier;
-
-[[nodiscard]] bool IsEditCycleModifiers(Qt::KeyboardModifiers modifiers) {
-	return (modifiers & (kCommonModifiers | Qt::AltModifier))
-		== (Qt::AltModifier | Qt::ShiftModifier);
-}
 
 const auto kPsaAboutPrefix = "cloud_lng_about_psa_";
 
@@ -571,26 +566,6 @@ HistoryWidget::HistoryWidget(
 	});
 
 	const auto rawTextEdit = _field->rawTextEdit().get();
-	const auto linkPreviewShortcut = new QShortcut(
-		QKeySequence("ctrl+shift+k"),
-		rawTextEdit,
-		nullptr,
-		nullptr,
-		Qt::WidgetShortcut);
-	QObject::connect(linkPreviewShortcut, &QShortcut::activated, [=] {
-		editLinkPreview();
-	});
-	const auto botUseShortcut = new QShortcut(
-		QKeySequence("ctrl+shift+b"),
-		rawTextEdit,
-		nullptr,
-		nullptr,
-		Qt::WidgetShortcut);
-	QObject::connect(botUseShortcut, &QShortcut::activated, [=] {
-		if (_peer) {
-			Ui::ShowChooseBotUse(_peer, controller->uiShow());
-		}
-	});
 	rpl::merge(
 		_field->scrollTop().changes() | rpl::to_empty,
 		base::qt_signal_producer(
@@ -2852,9 +2827,37 @@ void HistoryWidget::setupShortcuts() {
 			&& Ui::AppInFocus()
 			&& Ui::InFocusChain(this)
 			&& !controller()->isLayerShown()
+			&& !controller()->window().locked()
 			&& window()->isActiveWindow();
 	}) | rpl::on_next([=](not_null<Shortcuts::Request*> request) {
 		using Command = Shortcuts::Command;
+		if (QApplication::focusWidget() == _field->rawTextEdit().get()
+			&& !_field->isHidden()) {
+			canEditLinkPreview()
+				&& request->check(Command::EditLinkPreview, 1)
+				&& request->handle([=] {
+					editLinkPreview();
+					return true;
+				});
+			Ui::CanChooseBotUse(_history->peer)
+				&& request->check(Command::ChooseBotUse, 1)
+				&& request->handle([=] {
+					Ui::ShowChooseBotUse(_history->peer, controller()->uiShow());
+					return true;
+				});
+		}
+		if (!_field->isHidden() && !_voiceRecordBar->isActive()) {
+			findEditableMessage(false)
+				&& request->check(Command::EditPreviousMessage, 1)
+				&& request->handle([=] { return editPreviousMessage(); });
+			const auto canEditNext = _editMsgId
+				&& _replyEditMsg
+				&& _replyEditMsg->mainView()
+				&& (findEditableMessage(true) || _history->loadedAtBottom());
+			canEditNext
+				&& request->check(Command::EditNextMessage, 1)
+				&& request->handle([=] { return editNextMessage(); });
+		}
 		request->check(Command::Search, 1) && request->handle([=] {
 			controller()->searchInChat(_history);
 			return true;
@@ -3930,23 +3933,30 @@ void HistoryWidget::setupPreview() {
 	}, _preview->lifetime());
 }
 
-void HistoryWidget::editLinkPreview() {
+bool HistoryWidget::canEditLinkPreview() const {
 	if (!_history
 		|| !_preview
-		|| !_field->isVisible()
+		|| _field->isHidden()
 		|| _history->peer->amRestricted(ChatRestriction::EmbedLinks)) {
-		return;
+		return false;
 	}
 	if (_editMsgId) {
 		const auto item = session().data().message(_history->peer, _editMsgId);
 		if (!item) {
-			return;
+			return false;
 		}
 		const auto media = item->media();
 		if (media && !media->webpage()) {
-			return;
+			return false;
 		}
 	} else if (!_canSendTexts || !canWriteMessage()) {
+		return false;
+	}
+	return true;
+}
+
+void HistoryWidget::editLinkPreview() {
+	if (!canEditLinkPreview()) {
 		return;
 	}
 	const auto draft = _preview->draft();
@@ -7260,12 +7270,6 @@ bool HistoryWidget::eventFilter(QObject *obj, QEvent *e) {
 #endif
 				return replyToNextMessage();
 			}
-		} else if (IsEditCycleModifiers(k->modifiers())) {
-			if (k->key() == Qt::Key_Up) {
-				return editPreviousMessage();
-			} else if (k->key() == Qt::Key_Down) {
-				return editNextMessage();
-			}
 		}
 	}
 	return RpWidget::eventFilter(obj, e);
@@ -9922,16 +9926,6 @@ void HistoryWidget::keyPressEvent(QKeyEvent *e) {
 		if (!replyToNextMessage()) {
 			e->ignore();
 		}
-	} else if (e->key() == Qt::Key_Up
-		&& IsEditCycleModifiers(e->modifiers())) {
-		if (!editPreviousMessage()) {
-			e->ignore();
-		}
-	} else if (e->key() == Qt::Key_Down
-		&& IsEditCycleModifiers(e->modifiers())) {
-		if (!editNextMessage()) {
-			e->ignore();
-		}
 	} else if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) {
 		if (!_botStart->isHidden()) {
 			sendBotStartCommand();
@@ -10087,34 +10081,48 @@ bool HistoryWidget::replyToNextMessage() {
 	return false;
 }
 
-bool HistoryWidget::editPreviousMessage() {
+HistoryItem *HistoryWidget::findEditableMessage(bool next) const {
 	if (!_history) {
-		return false;
+		return nullptr;
 	}
-	const auto target = [&]() -> HistoryItem* {
-		if (!_editMsgId || !_replyEditMsg) {
-			return _history->lastEditableMessage();
+	const auto from = _editMsgId
+		? _replyEditMsg
+		: next ? nullptr : _history->lastEditableMessage();
+	auto view = from ? from->mainView() : nullptr;
+	if (view && _editMsgId) {
+		view = next
+			? view->nextDisplayedInBlocks()
+			: view->previousDisplayedInBlocks();
+	}
+	const auto now = base::unixtime::now();
+	for (; view; view = next
+			? view->nextDisplayedInBlocks()
+			: view->previousDisplayedInBlocks()) {
+		const auto item = view->data();
+		if (item->isSponsored()
+			|| item->isUploading()
+			|| !item->allowsEdit(now)) {
+			continue;
 		}
-		const auto view = _replyEditMsg->mainView();
-		if (!view) {
-			return nullptr;
+		const auto target = session().data().groups().findItemToEdit(item);
+		if (target->id != _editMsgId
+			&& !target->isUploading()
+			&& target->allowsEdit(now)) {
+			return target;
 		}
-		const auto now = base::unixtime::now();
-		auto previous = view->previousDisplayedInBlocks();
-		while (previous && !previous->data()->allowsEdit(now)) {
-			previous = previous->previousDisplayedInBlocks();
-		}
-		if (!previous) {
-			return nullptr;
-		}
-		return session().data().groups().findItemToEdit(previous->data());
-	}();
+	}
+	return nullptr;
+}
+
+bool HistoryWidget::editPreviousMessage() {
+	const auto target = findEditableMessage(false);
 	if (!target) {
 		return false;
 	}
 	const auto id = target->fullId();
 	confirmDiscardEdit(crl::guard(this, [=] {
-		if (const auto item = session().data().message(id)) {
+		const auto item = findEditableMessage(false);
+		if (item && item->fullId() == id) {
 			editMessage(item, {});
 		}
 	}));
@@ -10129,42 +10137,48 @@ bool HistoryWidget::editNextMessage() {
 	if (!view) {
 		return false;
 	}
-	const auto now = base::unixtime::now();
-	auto next = view->nextDisplayedInBlocks();
-	while (next && !next->data()->allowsEdit(now)) {
-		next = next->nextDisplayedInBlocks();
-	}
-	if (next) {
-		const auto id = session().data().groups().findItemToEdit(
-			next->data())->fullId();
+	if (const auto next = findEditableMessage(true)) {
+		const auto id = next->fullId();
 		confirmDiscardEdit(crl::guard(this, [=] {
-			if (const auto item = session().data().message(id)) {
+			const auto item = findEditableMessage(true);
+			if (item && item->fullId() == id) {
 				editMessage(item, {});
 			}
 		}));
-	} else {
+	} else if (_history->loadedAtBottom()) {
 		confirmDiscardEdit(crl::guard(this, [=] {
-			cancelEdit();
+			if (_history->loadedAtBottom() && !findEditableMessage(true)) {
+				cancelEdit();
+			}
 		}));
+	} else {
+		return false;
 	}
 	return true;
 }
 
 void HistoryWidget::confirmDiscardEdit(Fn<void()> proceed) {
+	const auto history = _history;
+	const auto editId = _editMsgId;
+	const auto guarded = crl::guard(this, [=] {
+		if (_history == history && _editMsgId == editId) {
+			proceed();
+		}
+	});
 	if (_editMsgId
 		&& _replyEditMsg
 		&& EditTextChanged(_replyEditMsg, _field->getTextWithTags())) {
 		controller()->show(Ui::MakeConfirmBox({
 			.text = tr::lng_cancel_edit_post_sure(),
 			.confirmed = crl::guard(this, [=](Fn<void()> &&close) {
-				proceed();
+				guarded();
 				close();
 			}),
 			.confirmText = tr::lng_cancel_edit_post_yes(),
 			.cancelText = tr::lng_cancel_edit_post_no(),
 		}));
 	} else {
-		proceed();
+		guarded();
 	}
 }
 

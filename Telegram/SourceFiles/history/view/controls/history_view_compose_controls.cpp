@@ -137,6 +137,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/effects/reaction_fly_animation.h"
 #include "webrtc/webrtc_environment.h"
 #include "window/window_adaptive.h"
+#include "window/window_controller.h"
 #include "window/window_peer_menu.h"
 #include "window/window_session_controller.h"
 #include "mainwindow.h"
@@ -147,7 +148,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_iv.h"
 #include "styles/style_layers.h"
 
-#include <QShortcut>
+#include <QtWidgets/QApplication>
 
 namespace HistoryView {
 namespace {
@@ -2943,6 +2944,7 @@ void ComposeControls::init() {
 	initWriteRestriction();
 	initVoiceRecordBar();
 	initKeyHandler();
+	initEnhancedShortcuts();
 	initEditStarsButton();
 	_minStarsCount.changes() | rpl::on_next([=] {
 		initEditStarsButton();
@@ -3304,6 +3306,45 @@ void ComposeControls::initKeyHandler() {
 	});
 }
 
+void ComposeControls::initEnhancedShortcuts() {
+	Shortcuts::Requests(
+	) | rpl::filter([=] {
+		return _regularWindow
+			&& _history
+			&& _mode == Mode::Normal
+			&& !_wrap->isHidden()
+			&& !_field->isHidden()
+			&& _wrap->window()->isActiveWindow()
+			&& !_regularWindow->window().locked()
+			&& !_regularWindow->isLayerShown()
+			&& QApplication::focusWidget() == _field->rawTextEdit().get();
+	}) | rpl::on_next([=](not_null<Shortcuts::Request*> request) {
+		using Command = Shortcuts::Command;
+		using Section = Dialogs::EntryState::Section;
+		const auto sections = {
+			Section::History,
+			Section::Replies,
+			Section::SavedSublist,
+		};
+		if (!ranges::contains(sections, _currentDialogsEntryState.section)) {
+			return;
+		}
+		canEditLinkPreview()
+			&& request->check(Command::EditLinkPreview, 1)
+			&& request->handle([=] {
+				editLinkPreview();
+				return true;
+			});
+		!_botUseVideoStream
+			&& Ui::CanChooseBotUse(_history->peer)
+			&& request->check(Command::ChooseBotUse, 1)
+			&& request->handle([=] {
+				Ui::ShowChooseBotUse(_history->peer, _show);
+				return true;
+			});
+	}, _wrap->lifetime());
+}
+
 void ComposeControls::initField() {
 	_field->setMaxHeight(st::historyComposeFieldMaxHeight);
 	updateSubmitSettings();
@@ -3370,26 +3411,6 @@ void ComposeControls::initField() {
 	_field->setEditLanguageCallback(DefaultEditLanguageCallback(_show));
 
 	const auto rawTextEdit = _field->rawTextEdit().get();
-	const auto linkPreviewShortcut = new QShortcut(
-		QKeySequence("ctrl+shift+k"),
-		rawTextEdit,
-		nullptr,
-		nullptr,
-		Qt::WidgetShortcut);
-	QObject::connect(linkPreviewShortcut, &QShortcut::activated, [=] {
-		editLinkPreview();
-	});
-	const auto botUseShortcut = new QShortcut(
-		QKeySequence("ctrl+shift+b"),
-		rawTextEdit,
-		nullptr,
-		nullptr,
-		Qt::WidgetShortcut);
-	QObject::connect(botUseShortcut, &QShortcut::activated, [=] {
-		if (_history && !_botUseVideoStream) {
-			Ui::ShowChooseBotUse(_history->peer, _show);
-		}
-	});
 	rpl::merge(
 		_field->scrollTop().changes() | rpl::to_empty,
 		base::qt_signal_producer(
@@ -6155,24 +6176,37 @@ void ComposeControls::cancelEditMessage() {
 	updateControlsGeometry(_wrap->size());
 }
 
-void ComposeControls::maybeCancelEditMessage() {
+void ComposeControls::confirmDiscardEdit(Fn<void()> proceed) {
 	Expects(_history != nullptr);
 
-	const auto item = _history->owner().message(_header->editMsgId());
+	const auto history = _history;
+	const auto key = draftKey(DraftType::Edit);
+	const auto editId = editingMessageId();
+	const auto guarded = crl::guard(_wrap.get(), [=] {
+		if (_history == history
+			&& draftKey(DraftType::Edit) == key
+			&& editingMessageId() == editId) {
+			proceed();
+		}
+	});
+	const auto item = _history->owner().message(editId);
 	if (item && EditTextChanged(item, _field->getTextWithTags())) {
-		const auto guard = _field.get();
 		_show->show(Ui::MakeConfirmBox({
 			.text = tr::lng_cancel_edit_post_sure(),
-			.confirmed = crl::guard(guard, [this](Fn<void()> &&close) {
-				cancelEditMessage();
+			.confirmed = [=](Fn<void()> &&close) {
+				guarded();
 				close();
-			}),
+			},
 			.confirmText = tr::lng_cancel_edit_post_yes(),
 			.cancelText = tr::lng_cancel_edit_post_no(),
 		}));
 	} else {
-		cancelEditMessage();
+		guarded();
 	}
+}
+
+void ComposeControls::maybeCancelEditMessage() {
+	confirmDiscardEdit([=] { cancelEditMessage(); });
 }
 
 void ComposeControls::replyToMessage(FullReplyTo id) {
@@ -6414,23 +6448,34 @@ void ComposeControls::initWebpageProcess() {
 	_header->previewReady(_preview->parsedValue());
 }
 
-void ComposeControls::editLinkPreview() {
+bool ComposeControls::canEditLinkPreview() const {
 	if (_mode != Mode::Normal
 		|| !_history
 		|| !_preview
-		|| !_field->isVisible()
+		|| _field->isHidden()
+		|| _voiceRecordBar->isActive()
 		|| _history->peer->amRestricted(ChatRestriction::EmbedLinks)) {
-		return;
+		return false;
 	}
 	if (isEditingMessage()) {
 		const auto item = _history->owner().message(_header->editMsgId());
 		if (!item) {
-			return;
+			return false;
 		}
 		const auto media = item->media();
 		if (media && !media->webpage()) {
-			return;
+			return false;
 		}
+	} else if (_writeRestriction.current()
+		|| !Data::CanSendTexts(_history->peer)) {
+		return false;
+	}
+	return true;
+}
+
+void ComposeControls::editLinkPreview() {
+	if (!canEditLinkPreview()) {
+		return;
 	}
 	const auto draft = _preview->draft();
 	const auto initialUrl = draft.removed ? QString() : draft.url;

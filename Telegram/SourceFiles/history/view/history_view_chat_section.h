@@ -374,6 +374,7 @@ private:
 
 	void setupDragArea();
 	void setupShortcuts();
+	bool editAdjacentMessage(ListWidget::EditDirection direction);
 	void setupComposeStash();
 
 	void searchRequested();

@@ -53,6 +53,8 @@ const auto AutoRepeatCommands = base::flat_set<Command>{
 	Command::ChatNext,
 	Command::ChatFirst,
 	Command::ChatLast,
+	Command::EditPreviousMessage,
+	Command::EditNextMessage,
 };
 
 const auto MediaCommands = base::flat_set<Command>{
@@ -132,6 +134,12 @@ const auto CommandByName = base::flat_map<QString, Command>{
 
 	{ u"record_voice"_q                  , Command::RecordVoice },
 	{ u"stash_message"_q                 , Command::StashMessage },
+	{ u"fast_forward"_q                  , Command::FastForward },
+	{ u"fast_copy"_q                     , Command::FastCopy },
+	{ u"edit_previous_message"_q         , Command::EditPreviousMessage },
+	{ u"edit_next_message"_q             , Command::EditNextMessage },
+	{ u"edit_link_preview"_q             , Command::EditLinkPreview },
+	{ u"choose_bot_use"_q                , Command::ChooseBotUse },
 
 	// Shortcuts that have no default values.
 	{ u"message"_q                       , Command::JustSendMessage },
@@ -145,9 +153,6 @@ const auto CommandByName = base::flat_map<QString, Command>{
 	{ u"archive_chat"_q                  , Command::ArchiveChat },
 	{ u"record_round"_q                  , Command::RecordRound },
 	{ u"show_admin_log"_q                , Command::ShowAdminLog },
-	//
-	{ u"fast_forward"_q      , Command::FastForward },
-	{ u"fast_copy"_q         , Command::FastCopy },
 };
 
 const base::flat_map<Command, QString> &CommandNames() {
@@ -243,34 +248,6 @@ QString CustomFilePath() {
 	return cWorkingDir() + u"tdata/shortcuts-custom.json"_q;
 }
 
-bool DefaultFileIsValid() {
-	QFile file(DefaultFilePath());
-	if (!file.open(QIODevice::ReadOnly)) {
-		return false;
-	}
-	auto error = QJsonParseError{ 0, QJsonParseError::NoError };
-	const auto document = QJsonDocument::fromJson(
-		base::parse::stripComments(file.readAll()),
-		&error);
-	file.close();
-
-	if (error.error != QJsonParseError::NoError || !document.isArray()) {
-		return false;
-	}
-	const auto shortcuts = document.array();
-	if (shortcuts.isEmpty() || !(*shortcuts.constBegin()).isObject()) {
-		return false;
-	}
-	const auto versionObject = (*shortcuts.constBegin()).toObject();
-	const auto version = versionObject.constFind(u"version"_q);
-	if (version == versionObject.constEnd()
-		|| !(*version).isString()
-		|| (*version).toString() != QString::number(AppVersion)) {
-		return false;
-	}
-	return true;
-}
-
 void WriteDefaultCustomFile() {
 	const auto path = CustomFilePath();
 	auto input = QFile(":/misc/default_shortcuts-custom.json");
@@ -299,9 +276,7 @@ void WriteDefaultCustomFile() {
 void Manager::fill() {
 	fillDefaults();
 
-	if (!DefaultFileIsValid()) {
-		writeDefaultFile();
-	}
+	writeDefaultFile();
 	if (!readCustomFile()) {
 		WriteDefaultCustomFile();
 	}
@@ -583,6 +558,10 @@ void Manager::fillDefaults() {
 	set(u"ctrl+r"_q                  , Command::ReadChat);
 	set(u"alt+f"_q                   , Command::FastForward);
 	set(u"alt+c"_q                   , Command::FastCopy);
+	set(u"alt+shift+up"_q            , Command::EditPreviousMessage);
+	set(u"alt+shift+down"_q          , Command::EditNextMessage);
+	set(u"ctrl+shift+k"_q            , Command::EditLinkPreview);
+	set(u"ctrl+shift+b"_q            , Command::ChooseBotUse);
 
 	set(u"ctrl+\\"_q                 , Command::ShowChatMenu);
 	set(u"ctrl+]"_q                  , Command::ShowChatPreview);
@@ -595,17 +574,12 @@ void Manager::fillDefaults() {
 }
 
 void Manager::writeDefaultFile() {
-	auto file = QFile(DefaultFilePath());
-	if (!file.open(QIODevice::WriteOnly)) {
-		return;
-	}
 	const char *defaultHeader = R"HEADER(
 // This is a list of default shortcuts for Telegram Desktop
 // Please don't modify it, its content is not used in any way
 // You can place your own shortcuts in the 'shortcuts-custom.json' file
 
 )HEADER";
-	file.write(defaultHeader);
 
 	auto shortcuts = QJsonArray();
 	auto version = QJsonObject();
@@ -641,7 +615,19 @@ void Manager::writeDefaultFile() {
 
 	auto document = QJsonDocument();
 	document.setArray(shortcuts);
-	file.write(document.toJson(QJsonDocument::Indented));
+	const auto content = QByteArray(defaultHeader)
+		+ document.toJson(QJsonDocument::Indented);
+	auto file = QFile(DefaultFilePath());
+	if (file.open(QIODevice::ReadOnly)) {
+		const auto unchanged = (file.readAll() == content);
+		file.close();
+		if (unchanged) {
+			return;
+		}
+	}
+	if (file.open(QIODevice::WriteOnly)) {
+		file.write(content);
+	}
 }
 
 void Manager::writeCustomFile() {

@@ -631,6 +631,7 @@ private:
 	bool replyToNextMessage();
 	bool editPreviousMessage();
 	bool editNextMessage();
+	[[nodiscard]] HistoryItem *findEditableMessage(bool next) const;
 	void confirmDiscardEdit(Fn<void()> proceed);
 	[[nodiscard]] bool showSlowmodeError();
 
@@ -700,6 +701,7 @@ private:
 	void saveEditMessage(Api::SendOptions options = {});
 
 	void setupPreview();
+	[[nodiscard]] bool canEditLinkPreview() const;
 	void editLinkPreview();
 	void editDraftOptions();
 	void jumpToReply(FullReplyTo to);

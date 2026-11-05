@@ -1,6 +1,13 @@
 {
     "lng_intro_about2": "Welcome to the Yurigram app.\nIt's fast and secure.",
 
+    "lng_shortcuts_fast_forward": "Forward selected messages",
+    "lng_shortcuts_fast_copy": "Forward messages (w/o quote)",
+    "lng_shortcuts_edit_previous_message": "Edit previous editable message",
+    "lng_shortcuts_edit_next_message": "Edit next editable message",
+    "lng_shortcuts_edit_link_preview": "Add or edit link preview URL",
+    "lng_shortcuts_choose_bot_use": "Choose BotUse identity",
+
     "lng_settings_enhanced": "Enhanced Settings",
     "lng_bot_use_settings": "BotUse Settings",
     "lng_bot_use_about": "We recommend reading the {link} before using BotUse.",

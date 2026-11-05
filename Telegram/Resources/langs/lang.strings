@@ -776,6 +776,12 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_shortcuts_record_voice_message" = "Record Voice Message";
 "lng_shortcuts_record_round_message" = "Record Round Message";
 "lng_shortcuts_admin_log" = "Group/Channel Recent Actions";
+"lng_shortcuts_fast_forward" = "Forward selected messages";
+"lng_shortcuts_fast_copy" = "Forward messages (w/o quote)";
+"lng_shortcuts_edit_previous_message" = "Edit previous editable message";
+"lng_shortcuts_edit_next_message" = "Edit next editable message";
+"lng_shortcuts_edit_link_preview" = "Add or edit link preview URL";
+"lng_shortcuts_choose_bot_use" = "Choose BotUse identity";
 
 "lng_attach" = "Add attachment";
 "lng_attach_replace" = "Replace attachment";

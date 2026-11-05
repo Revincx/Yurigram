@@ -494,6 +494,22 @@ public:
 		FullMsgId item,
 		std::optional<uint64> bot = std::nullopt) const;
 	[[nodiscard]] bool lastMessageEditRequestNotify() const;
+	enum class EditDirection {
+		Previous,
+		Next,
+	};
+	struct EditMessageLookup {
+		enum class State {
+			Found,
+			Boundary,
+			NotLoaded,
+		};
+		State state = State::NotLoaded;
+		FullMsgId id;
+	};
+	[[nodiscard]] EditMessageLookup findEditableMessage(
+		FullMsgId current,
+		EditDirection direction) const;
 	[[nodiscard]] auto replyToMessageRequested() const
 		-> rpl::producer<ReplyToMessageRequest>;
 	void replyToMessageRequestNotify(

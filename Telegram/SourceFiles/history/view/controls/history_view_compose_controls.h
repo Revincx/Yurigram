@@ -289,6 +289,7 @@ public:
 	[[nodiscard]] uint64 editBotUse() const { return _editBotUse; }
 	[[nodiscard]] FullMsgId editingMessageId() const { return _editingId; }
 	void cancelEditMessage();
+	void confirmDiscardEdit(Fn<void()> proceed);
 	void maybeCancelEditMessage(); // Confirm if changed and cancel.
 
 	void replyToMessage(FullReplyTo id);
@@ -380,11 +381,13 @@ private:
 		not_null<PeerData*> peer,
 		std::shared_ptr<Data::GroupCall> videoStream);
 	void initWebpageProcess();
+	[[nodiscard]] bool canEditLinkPreview() const;
 	void editLinkPreview();
 	void initForwardProcess();
 	void initWriteRestriction();
 	void initVoiceRecordBar();
 	void initKeyHandler();
+	void initEnhancedShortcuts();
 	void initLikeButton();
 	void initEditStarsButton();
 	void initAiButton();

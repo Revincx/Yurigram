@@ -7132,23 +7132,31 @@ void HistoryInner::setupShortcuts() {
 	Shortcuts::Requests(
 	) | rpl::filter([=] {
 		return Ui::AppInFocus()
-			   && Ui::InFocusChain(this)
-			   && !_controller->isLayerShown();
+			&& Ui::InFocusChain(this)
+			&& window()->isActiveWindow()
+			&& !_controller->window().locked()
+			&& !_controller->isLayerShown();
 	}) | rpl::on_next([=](not_null<Shortcuts::Request*> request) {
 		using Command = Shortcuts::Command;
+		const auto selected = getSelectionState();
+		if (!selected.count || selected.canForwardCount != selected.count) {
+			return;
+		}
 		request->check(Command::FastForward, 1) && request->handle([=] {
-			auto selectedState = getSelectionState();
-			if (selectedState.count > 0 && selectedState.canForwardCount == selectedState.count) {
+			const auto selected = getSelectionState();
+			if (selected.count && selected.canForwardCount == selected.count) {
 				_widget->forwardSelected();
+				return true;
 			}
-			return true;
+			return false;
 		});
 		request->check(Command::FastCopy, 1) && request->handle([=] {
-			auto selectedState = getSelectionState();
-			if (selectedState.count > 0 && selectedState.canForwardCount == selectedState.count) {
+			const auto selected = getSelectionState();
+			if (selected.count && selected.canForwardCount == selected.count) {
 				_widget->forwardNoQuoteSelected();
+				return true;
 			}
-			return true;
+			return false;
 		});
 	}, lifetime());
 }

@@ -98,6 +98,10 @@ enum class Command {
 
 	FastForward,
 	FastCopy,
+	EditPreviousMessage,
+	EditNextMessage,
+	EditLinkPreview,
+	ChooseBotUse,
 };
 
 [[maybe_unused]] constexpr auto kShowFolder = {
