@@ -95,6 +95,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_context_menu.h"
 #include "history/view/history_view_schedule_box.h"
 #include "iv/editor/iv_editor_session.h"
+#include "iv/iv_instance.h"
 #include "wallet/wallet_panel.h"
 #include "window/window_separate_id.h"
 #include "window/window_session_controller.h"
@@ -365,6 +366,7 @@ private:
 	void addToggleMuteSubmenu(bool addSeparator);
 	void addSupportInfo();
 	void addInfo();
+	void addViewPeerInfo();
 	void addChatEnhancedSettings();
 	void addStoryArchive();
 	void addNewWindow(bool addSeparator = true);
@@ -2087,8 +2089,32 @@ void Filler::fillHistoryActions() {
 	addLeaveChat();
 }
 
+void Filler::addViewPeerInfo() {
+	if (!_peer
+		|| _topic
+		|| _sublist
+		|| !EnhancedSettings::Get(EnhancedSettings::Option::ShowPeerInfo)) {
+		return;
+	}
+	const auto peer = _peer;
+	const auto controller = _controller;
+	_addAction(tr::lng_context_view_peer_info(tr::now), [=] {
+		peer->session().api().exportPeerAsBase64(
+			peer,
+			crl::guard(controller, [](const QString &base64) {
+				Core::App().iv().showTLViewer(
+					MTP::details::kCurrentLayer,
+					base64);
+			}),
+			crl::guard(controller, [=](const MTP::Error &error) {
+				MTP::ShowErrorFallback(controller->uiShow(), error);
+			}));
+	}, &st::menuIconInfo);
+}
+
 void Filler::fillProfileActions() {
 	addTTLSubmenu(true);
+	addViewPeerInfo();
 	addSupportInfo();
 	addNewContact();
 	addShareContact();

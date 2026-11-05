@@ -293,6 +293,8 @@ const DescriptorList &DescriptorData() {
 		Bool(OptionId::HideGramBalance, "hide_gram_balance",
 			&tr::lng_settings_hide_gram_balance,
 			"enhanced/hide-gram-balance"),
+		Bool(OptionId::ShowPeerInfo, "show_peer_info",
+			&tr::lng_settings_show_peer_info, "enhanced/show-peer-info"),
 	};
 	return result;
 }

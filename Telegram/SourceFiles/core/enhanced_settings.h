@@ -90,6 +90,7 @@ enum class OptionId {
 	LlmTranslateExtraParameters,
 	ShowRecentForwardTargets,
 	HideGramBalance,
+	ShowPeerInfo,
 	Count,
 };
 
@@ -183,6 +184,7 @@ inline constexpr auto HideGramBalance
 	= Key<bool>{ OptionId::HideGramBalance };
 inline constexpr auto ShowPeerId = Key<bool>{ OptionId::ShowPeerId };
 inline constexpr auto PeerIdType = Key<int>{ OptionId::PeerIdType };
+inline constexpr auto ShowPeerInfo = Key<bool>{ OptionId::ShowPeerInfo };
 inline constexpr auto LlmTranslateEndpoint
 	= Key<QString>{ OptionId::LlmTranslateEndpoint };
 inline constexpr auto LlmTranslateModel

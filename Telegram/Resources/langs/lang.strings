@@ -9475,6 +9475,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_settings_hide_gram_balance" = "Hide user Gram balance";
 "lng_settings_show_peer_id" = "Show Peer ID";
 "lng_settings_peer_id_type" = "Peer ID type";
+"lng_settings_show_peer_info" = "Show peer info";
 
 "lng_settings_skip_message" = "Skip to next unread chat";
 "lng_settings_skip_message_desc" = "Note: Allow ALT+↑/↓ shortcut to skip to next unread chat";
@@ -9551,6 +9552,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_context_repeater" = "Repeater";
 "lng_context_hide_message" = "Hide";
 "lng_context_view_as_json" = "View As JSON";
+"lng_context_view_peer_info" = "View Peer Info";
 "lng_context_more_forward" = "More forwards";
 
 "lng_pinned_message_show" = "Show pinned message";

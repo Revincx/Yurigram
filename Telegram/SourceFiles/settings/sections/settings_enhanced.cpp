@@ -529,6 +529,15 @@ struct DecodeEnhancedSettingsResult {
 
 	builder.add(nullptr, [] {
 		return Builder::SearchEntry{
+			.id = u"enhanced/show-peer-info"_q,
+			.title = tr::lng_settings_show_peer_info(tr::now),
+			.keywords = { u"peer"_q, u"info"_q, u"json"_q, u"tlv"_q },
+			.deeplink = u"tg://settings/enhanced/show-peer-info"_q,
+		};
+	});
+
+	builder.add(nullptr, [] {
+		return Builder::SearchEntry{
 			.id = u"enhanced/hide-all-chats"_q,
 			.title = tr::lng_settings_hide_all_chats(tr::now),
 			.keywords = { u"hide"_q, u"all"_q, u"chats"_q },
@@ -1026,6 +1035,8 @@ struct DecodeEnhancedSettingsResult {
 					});
 				}));
 			});
+
+		addToggleOption(content, EnhancedSettings::Option::ShowPeerInfo);
 
 		const auto showServerConfig = AddButtonWithIcon(
 			content,

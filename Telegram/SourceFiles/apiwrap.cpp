@@ -842,6 +842,35 @@ void ApiWrap::exportMessageAsBase64(not_null<HistoryItem*> item, Fn<void(const Q
 	}
 }
 
+void ApiWrap::exportPeerAsBase64(
+		not_null<PeerData*> peer,
+		Fn<void(const QString &)> done,
+		Fn<void(const MTP::Error &)> fail) {
+	const auto requestDone = [=](const auto &, const MTP::Response &response) {
+		const auto &buffer = response.reply;
+		const auto bytes = QByteArray(
+			reinterpret_cast<const char*>(buffer.constData()),
+			buffer.size() * sizeof(mtpPrime));
+		done(QString::fromLatin1(
+			bytes.toBase64(QByteArray::Base64UrlEncoding)));
+	};
+	if (const auto user = peer->asUser()) {
+		request(MTPusers_GetFullUser(
+			user->inputUser()
+		)).done(requestDone).fail(std::move(fail)).send();
+	} else if (const auto chat = peer->asChat()) {
+		request(MTPmessages_GetFullChat(
+			chat->inputChat()
+		)).done(requestDone).fail(std::move(fail)).send();
+	} else if (const auto channel = peer->asChannel()) {
+		request(MTPchannels_GetFullChannel(
+			channel->inputChannel()
+		)).done(requestDone).fail(std::move(fail)).send();
+	} else {
+		Unexpected("Peer type in exportPeerAsBase64.");
+	}
+}
+
 QString ApiWrap::exportDirectMessageLink(
 		not_null<HistoryItem*> item,
 		bool inRepliesContext,
