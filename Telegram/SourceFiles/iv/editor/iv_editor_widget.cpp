@@ -1151,6 +1151,11 @@ Widget::Widget(
 			return base::EventFilterResult::Cancel;
 		} else if (handleUndoRedoShortcutOverride(event)) {
 			return base::EventFilterResult::Cancel;
+		} else if (!searchBlockedByLayer()
+			&& (hasFocus() || _field->hasFocus())
+			&& (handleFieldBlockInsertShortcut(event)
+				|| handleStructuralBlockInsertShortcut(event))) {
+			return base::EventFilterResult::Cancel;
 		}
 		return base::EventFilterResult::Continue;
 	});
