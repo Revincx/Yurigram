@@ -344,6 +344,33 @@ window.TL_SCHEMA_FULL = {
     result.clientSeed = e.bytes();
     return result;
   },
+  1157021774: function (e) {
+    var result = { _: `inputMediaWidget` };
+    var t = e.uint();
+    result.flags = t;
+    result.allowQueries = !!(t & 1);
+    result.sharedWidget = !!(t & 2);
+    result.width = e.int();
+    result.height = e.int();
+    result.html = e.string();
+    if (t & 4) {
+      result.publicData = e.string();
+    }
+    if (t & 8) {
+      result.chatData = e.string();
+    }
+    return result;
+  },
+  2089114805: function (e) {
+    var result = { _: `inputMediaWidgetId` };
+    var t = e.uint();
+    result.flags = t;
+    result.widgetId = e.long();
+    if (t & 1) {
+      result.chatData = e.string();
+    }
+    return result;
+  },
   480546647: function (e) {
     var result = { _: `inputChatPhotoEmpty` };
     return result;
@@ -573,6 +600,7 @@ window.TL_SCHEMA_FULL = {
     result.botCanManageBots = !!(n & 262144);
     result.botGuestchat = !!(n & 524288);
     result.botGuard = !!(n & 1048576);
+    result.botForumSidebar = !!(n & 4194304);
     result.id = e.long();
     if (t & 1) {
       result.accessHash = e.long();
@@ -761,6 +789,7 @@ window.TL_SCHEMA_FULL = {
     result.monoforum = !!(n & 131072);
     result.forumTabs = !!(n & 524288);
     result.inNews = !!(n & 2097152);
+    result.forumSidebar = !!(n & 8388608);
     result.id = e.long();
     if (t & 8192) {
       result.accessHash = e.long();
@@ -1558,6 +1587,30 @@ window.TL_SCHEMA_FULL = {
     result.flags = t;
     result.rtmpStream = !!(t & 1);
     result.call = e.object();
+    return result;
+  },
+  574157332: function (e) {
+    var result = { _: `messageMediaWidget` };
+    var t = e.uint();
+    result.flags = t;
+    result.isCopy = !!(t & 1);
+    result.canQuery = !!(t & 2);
+    result.backgroundQuery = !!(t & 4);
+    result.width = e.int();
+    result.height = e.int();
+    result.payload = e.bytes();
+    if (t & 8) {
+      result.publicData = e.string();
+    }
+    if (t & 8) {
+      result.publicDataHash = e.long();
+    }
+    if (t & 16) {
+      result.chatData = e.string();
+    }
+    if (t & 32) {
+      result.widgetId = e.long();
+    }
     return result;
   },
   3064919984: function (e) {
@@ -4374,6 +4427,107 @@ window.TL_SCHEMA_FULL = {
     result.sessionIds = e.vector(e.long);
     return result;
   },
+  593913436: function (e) {
+    var result = { _: `updateEditForumTopic` };
+    var t = e.uint();
+    result.flags = t;
+    result.peer = e.object();
+    result.topicId = e.int();
+    if (t & 1) {
+      result.title = e.string();
+    }
+    if (t & 2) {
+      result.iconEmojiId = e.long();
+    }
+    if (t & 4) {
+      result.closed = e.object();
+    }
+    if (t & 8) {
+      result.hidden = e.object();
+    }
+    return result;
+  },
+  3010723432: function (e) {
+    var result = { _: `updateBotWidgetQuery` };
+    var t = e.uint();
+    result.flags = t;
+    result.queryId = e.long();
+    result.queryType = e.object();
+    result.userId = e.long();
+    result.peer = e.object();
+    result.msgId = e.int();
+    result.chatInstance = e.long();
+    result.chatType = e.string();
+    result.data = e.bytes();
+    if (t & 1) {
+      result.widgetId = e.long();
+    }
+    if (t & 2) {
+      result.walletCard = e.object();
+    }
+    return result;
+  },
+  2784001544: function (e) {
+    var result = { _: `updateInlineBotWidgetQuery` };
+    var t = e.uint();
+    result.flags = t;
+    result.queryId = e.long();
+    result.queryType = e.object();
+    result.userId = e.long();
+    result.inlineMessageId = e.object();
+    result.chatInstance = e.long();
+    result.chatType = e.string();
+    result.data = e.bytes();
+    if (t & 1) {
+      result.widgetId = e.long();
+    }
+    if (t & 2) {
+      result.walletCard = e.object();
+    }
+    return result;
+  },
+  4203331319: function (e) {
+    var result = { _: `updateBotWidgetCopyQuery` };
+    var t = e.uint();
+    result.flags = t;
+    result.queryId = e.long();
+    result.queryType = e.object();
+    result.userId = e.long();
+    result.data = e.bytes();
+    result.widgetId = e.long();
+    if (t & 2) {
+      result.walletCard = e.object();
+    }
+    return result;
+  },
+  3148904669: function (e) {
+    var result = { _: `updateMessageWidgetData` };
+    var t = e.uint();
+    result.flags = t;
+    result.peer = e.object();
+    result.msgId = e.int();
+    if (t & 1) {
+      result.publicData = e.string();
+    }
+    if (t & 1) {
+      result.publicDataHash = e.long();
+    }
+    if (t & 2) {
+      result.chatData = e.string();
+    }
+    result.pts = e.int();
+    result.ptsCount = e.int();
+    return result;
+  },
+  1934372475: function (e) {
+    var result = { _: `updateTranscribedAudioFile` };
+    var t = e.uint();
+    result.flags = t;
+    result.pending = !!(t & 1);
+    result.transcriptionId = e.long();
+    result.text = e.string();
+    return result;
+  },
   2775329342: function (e) {
     var result = { _: `updates.state` };
     result.pts = e.int();
@@ -6382,6 +6536,49 @@ window.TL_SCHEMA_FULL = {
     result.richMessage = e.object();
     return result;
   },
+  4120355824: function (e) {
+    var result = { _: `inputBotInlineMessageWidget` };
+    var t = e.uint();
+    result.flags = t;
+    result.allowQueries = !!(t & 1);
+    result.sharedWidget = !!(t & 2);
+    result.invertMedia = !!(t & 64);
+    result.width = e.int();
+    result.height = e.int();
+    result.html = e.string();
+    if (t & 4) {
+      result.publicData = e.string();
+    }
+    if (t & 8) {
+      result.chatData = e.string();
+    }
+    if (t & 16) {
+      result.replyMarkup = e.object();
+    }
+    result.message = e.string();
+    if (t & 32) {
+      result.entities = e.vector(e.object);
+    }
+    return result;
+  },
+  4270553387: function (e) {
+    var result = { _: `inputBotInlineMessageWidgetId` };
+    var t = e.uint();
+    result.flags = t;
+    result.invertMedia = !!(t & 8);
+    result.widgetId = e.long();
+    if (t & 1) {
+      result.chatData = e.string();
+    }
+    if (t & 2) {
+      result.replyMarkup = e.object();
+    }
+    result.message = e.string();
+    if (t & 4) {
+      result.entities = e.vector(e.object);
+    }
+    return result;
+  },
   2294256409: function (e) {
     var result = { _: `inputBotInlineResult` };
     var t = e.uint();
@@ -6558,6 +6755,35 @@ window.TL_SCHEMA_FULL = {
       result.replyMarkup = e.object();
     }
     result.richMessage = e.object();
+    return result;
+  },
+  3131144244: function (e) {
+    var result = { _: `botInlineMessageWidget` };
+    var t = e.uint();
+    result.flags = t;
+    result.invertMedia = !!(t & 32);
+    result.width = e.int();
+    result.height = e.int();
+    result.payload = e.bytes();
+    if (t & 1) {
+      result.publicData = e.string();
+    }
+    if (t & 1) {
+      result.publicDataHash = e.long();
+    }
+    if (t & 2) {
+      result.chatData = e.string();
+    }
+    if (t & 4) {
+      result.replyMarkup = e.object();
+    }
+    if (t & 8) {
+      result.widgetId = e.long();
+    }
+    result.message = e.string();
+    if (t & 16) {
+      result.entities = e.vector(e.object);
+    }
     return result;
   },
   295067450: function (e) {
@@ -15480,6 +15706,60 @@ window.TL_SCHEMA_FULL = {
     result.nftAddress = e.string();
     result.payload = e.bytes();
     result.amount = e.long();
+    return result;
+  },
+  1162684215: function (e) {
+    var result = { _: `userWallet` };
+    var t = e.uint();
+    result.flags = t;
+    result.address = e.string();
+    result.balance = e.long();
+    if (t & 1) {
+      result.publicKey = e.bytes();
+    }
+    if (t & 1) {
+      result.stateInit = e.bytes();
+    }
+    return result;
+  },
+  383307531: function (e) {
+    var result = { _: `widgetQueryTypeData` };
+    var t = e.uint();
+    result.flags = t;
+    result.withWallet = !!(t & 1);
+    return result;
+  },
+  421545948: function (e) {
+    var result = { _: `widgetQueryTypeSignData` };
+    result.wallet = e.object();
+    result.signData = e.object();
+    return result;
+  },
+  4282069940: function (e) {
+    var result = { _: `widgetQueryTypeSentTransaction` };
+    result.wallet = e.object();
+    result.msgHash = e.string();
+    return result;
+  },
+  2511810595: function (e) {
+    var result = { _: `messages.botWidgetQueryAnswer` };
+    var t = e.uint();
+    result.flags = t;
+    if (t & 1) {
+      result.result = e.string();
+    }
+    return result;
+  },
+  3105451607: function (e) {
+    var result = { _: `messages.widgetPublicDataNotModified` };
+    result.period = e.int();
+    return result;
+  },
+  71908351: function (e) {
+    var result = { _: `messages.widgetPublicData` };
+    result.hash = e.long();
+    result.data = e.string();
+    result.period = e.int();
     return result;
   },
   3567203526: function (e) {
