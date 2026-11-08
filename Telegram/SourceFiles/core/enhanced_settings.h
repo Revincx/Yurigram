@@ -70,6 +70,7 @@ enum class OptionId {
 	RemoveMediaSpoiler,
 	HideDeleteForOthersCheckbox,
 	StickerHeight,
+	WidgetMaxWidth,
 	HideCounter,
 	TranslateProvider,
 	TranslateToTc,
@@ -161,6 +162,7 @@ inline constexpr auto RemoveMediaSpoiler
 inline constexpr auto HideDeleteForOthersCheckbox
 	= Key<bool>{ OptionId::HideDeleteForOthersCheckbox };
 inline constexpr auto StickerHeight = Key<int>{ OptionId::StickerHeight };
+inline constexpr auto WidgetMaxWidth = Key<int>{ OptionId::WidgetMaxWidth };
 inline constexpr auto HideCounter = Key<bool>{ OptionId::HideCounter };
 inline constexpr auto TranslateProvider
 	= Key<QString>{ OptionId::TranslateProvider };

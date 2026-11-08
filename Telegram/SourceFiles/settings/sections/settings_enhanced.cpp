@@ -820,6 +820,13 @@ struct DecodeEnhancedSettingsResult {
 			EnhancedSettings::Option::StickerHeight,
 			StickerHeightLabel,
 			true);
+		addIntegerSliderOption(
+			content,
+			EnhancedSettings::Option::WidgetMaxWidth,
+			[](int value) {
+				return QString::number(value) + u"%"_q;
+			},
+			false);
 
 		addToggleOption(
 			content,

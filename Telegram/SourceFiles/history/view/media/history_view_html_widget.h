@@ -93,8 +93,11 @@ private:
 	[[nodiscard]] int rowTop() const;
 	[[nodiscard]] QRect cardRect() const;
 	[[nodiscard]] int optimalCardWidth() const;
+	[[nodiscard]] int limitedCardWidth() const;
 	[[nodiscard]] int cardHeight() const;
+	[[nodiscard]] int originalCardHeight() const;
 	[[nodiscard]] double maxCssHeight() const;
+	[[nodiscard]] bool canOverlayInfo() const;
 	[[nodiscard]] int infoHeight() const;
 	[[nodiscard]] bool timeOverCorner() const;
 	[[nodiscard]] QSize infoBackingSize() const;
@@ -122,7 +125,7 @@ private:
 	mutable std::optional<HtmlWidgetGeometry> _placed;
 	mutable uint32 _placedEpoch = 0;
 	mutable uint32 _placedAt = 0;
-	int _cardWidth = 0;
+	double _displayScale = 1.;
 	mutable bool _heavy = false;
 	bool _cardHovered = false;
 	mutable bool _placedReplaced = false;

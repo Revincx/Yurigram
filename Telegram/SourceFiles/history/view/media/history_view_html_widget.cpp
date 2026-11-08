@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "history/view/media/history_view_html_widget.h"
 
+#include "core/enhanced_settings.h"
 #include "data/data_message_reaction_id.h"
 #include "data/data_session.h"
 #include "history/view/history_view_cursor_state.h"
@@ -207,13 +208,14 @@ void HtmlWidget::rememberPlacement() const {
 }
 
 QSize HtmlWidget::countOptimalSize() {
-	return { optimalCardWidth(), cardHeight() + infoHeight() };
+	const auto cardWidth = limitedCardWidth();
+	_displayScale = cardWidth / double(optimalCardWidth());
+	return { cardWidth, cardHeight() + infoHeight() };
 }
 
 QSize HtmlWidget::countCurrentSize(int newWidth) {
-	const auto cardWidth = std::min(newWidth, maxWidth());
-	// customInfoLayout() needs it below, before Object stores the width.
-	_cardWidth = cardWidth;
+	const auto cardWidth = std::max(1, std::min(newWidth, maxWidth()));
+	_displayScale = cardWidth / double(optimalCardWidth());
 	if (!_runtime) {
 		return { cardWidth, cardHeight() + infoHeight() };
 	}
@@ -223,7 +225,9 @@ QSize HtmlWidget::countCurrentSize(int newWidth) {
 		: (_placedReplaced && _placed)
 		? std::make_optional(_placed->card)
 		: std::nullopt;
-	_runtime->setSize(cardWidth, maxCssHeight());
+	_runtime->setDisplayScale(_displayScale);
+	// Display limits must not reflow the document or change its viewport.
+	_runtime->setSize(optimalCardWidth(), maxCssHeight());
 	_runtime->setSafeArea(contentSafeArea());
 	const auto card = cardHeight();
 	_runtime->laidOut(card);
@@ -242,6 +246,10 @@ bool HtmlWidget::needsBubble() const {
 }
 
 bool HtmlWidget::customInfoLayout() const {
+	return (_displayScale == 1.) && canOverlayInfo();
+}
+
+bool HtmlWidget::canOverlayInfo() const {
 	if ((_parent->media() != this)
 		|| _parent->hidesBottomInfo()
 		|| _parent->hasCommentsButton()
@@ -253,7 +261,7 @@ bool HtmlWidget::customInfoLayout() const {
 	const auto infoSkip = st::msgPadding.left()
 		+ st::msgPadding.right()
 		+ 2 * st::msgDateDelta.x();
-	const auto cardWidth = _cardWidth ? _cardWidth : optimalCardWidth();
+	const auto cardWidth = optimalCardWidth();
 	return (corner.width() <= kMaxSafeAreaCorner)
 		&& (corner.height() <= kMaxSafeAreaInset)
 		&& (_parent->infoWidth() + infoSkip <= cardWidth);
@@ -284,7 +292,17 @@ int HtmlWidget::optimalCardWidth() const {
 		: st::msgMaxWidth;
 }
 
+int HtmlWidget::limitedCardWidth() const {
+	const auto limit = EnhancedSettings::Get(
+		EnhancedSettings::Option::WidgetMaxWidth);
+	return std::min(optimalCardWidth(), st::msgMaxWidth * limit / 100);
+}
+
 int HtmlWidget::cardHeight() const {
+	return int(std::ceil(originalCardHeight() * _displayScale));
+}
+
+int HtmlWidget::originalCardHeight() const {
 	if (_anchors.height > 0) {
 		return Tgw::LogicalHeight(maxCssHeight());
 	}
@@ -353,7 +371,8 @@ QSize HtmlWidget::cssCornerSize() const {
 }
 
 Tgw::ContentSafeArea HtmlWidget::contentSafeArea() const {
-	if (!timeOverCorner()) {
+	// Preserve the original layout when the timestamp moves below the card.
+	if (!isBubbleBottom() || !canOverlayInfo()) {
 		return {};
 	}
 	const auto corner = cssCornerSize();
@@ -377,7 +396,7 @@ Tgw::RendererCore *HtmlWidget::pointerCore() const {
 
 QPointF HtmlWidget::cssPoint(QPoint point) const {
 	const auto local = point - cardRect().topLeft();
-	return QPointF(local) * (kCssPercent / style::Scale());
+	return QPointF(local) * (kCssPercent / style::Scale() / _displayScale);
 }
 
 Tgw::RendererCore *HtmlWidget::touchCore(QPoint point) const {
@@ -391,7 +410,8 @@ QPointF HtmlWidget::gesturePoint(QPoint point) const {
 	if (!style::RightToLeft()) {
 		return css;
 	}
-	const auto width = cardRect().width() * (kCssPercent / style::Scale());
+	const auto width = cardRect().width()
+		* (kCssPercent / style::Scale() / _displayScale);
 	return QPointF(width - css.x(), css.y());
 }
 
@@ -422,7 +442,8 @@ void HtmlWidget::draw(Painter &p, const PaintContext &context) const {
 		const auto &frame = core->frame(
 			MediaRoundingMask(adjustedBubbleRounding(square)),
 			card.size(),
-			(_anchors.height <= 0));
+			(_anchors.height <= 0),
+			_displayScale);
 		if (!frame.isNull()) {
 			p.save();
 			p.setClipRect(card, Qt::IntersectClip);

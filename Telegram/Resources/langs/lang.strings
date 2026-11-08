@@ -9239,6 +9239,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_settings_rich_message_preview_blocks_count#other" = "{count} blocks";
 "lng_settings_sticker_height" = "Sticker height";
 "lng_settings_sticker_height_pixels" = "{height} px";
+"lng_settings_widget_max_width" = "Maximum widget width";
 "lng_settings_button" = "Button";
 "lng_settings_show_emoji_button_as_text" = "Show emoji button as text";
 "lng_settings_extra_context_menu_options" = "Extra context menu options";

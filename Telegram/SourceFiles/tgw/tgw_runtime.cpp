@@ -11,6 +11,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "base/qt_signal_producer.h"
 #include "core/src/renderer.h"
 #include "core/application.h"
+#include "core/enhanced_settings.h"
 #include "data/data_session.h"
 #include "data/data_user.h"
 #include "history/view/history_view_element.h"
@@ -657,6 +658,11 @@ Runtime::Runtime(RuntimeDescriptor &&descriptor)
 				runtime->emojiRefreshed();
 			}
 		}, registry.applicationLifetime);
+		EnhancedSettings::Changes(
+			EnhancedSettings::Option::WidgetMaxWidth
+		) | rpl::on_next([] {
+			RefreshSizes();
+		}, registry.applicationLifetime);
 	}
 	registry.list.emplace_back(this);
 }
@@ -834,6 +840,15 @@ void Runtime::setSafeArea(ContentSafeArea area) {
 	}
 	_safeArea = area;
 	syncHostSafeArea();
+}
+
+void Runtime::setDisplayScale(double scale) {
+	Expects(std::isfinite(scale) && scale > 0. && scale <= 1.);
+	if (_displayScale == scale) {
+		return;
+	}
+	_displayScale = scale;
+	markHeight(true);
 }
 
 void Runtime::laidOut(int height) {
@@ -1204,6 +1219,18 @@ void Runtime::RefreshVisibility() {
 	}
 	if (watched) {
 		WatchersChanged();
+	}
+}
+
+void Runtime::RefreshSizes() {
+	auto runtimes = std::vector<base::weak_ptr<Runtime>>();
+	for (const auto &runtime : Runtimes().list) {
+		runtimes.push_back(base::make_weak(runtime.get()));
+	}
+	for (const auto &weak : runtimes) {
+		if (const auto runtime = weak.get()) {
+			runtime->_item->history()->owner().requestViewResize(runtime->_view);
+		}
 	}
 }
 
@@ -1826,7 +1853,8 @@ void Runtime::applySize() {
 }
 
 int Runtime::effectiveHeight() const {
-	return height().value_or(st::tgwPlaceholderHeight);
+	return int(std::ceil(
+		height().value_or(st::tgwPlaceholderHeight) * _displayScale));
 }
 
 ResizeAnchor Runtime::heightAnchor() const {

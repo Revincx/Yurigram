@@ -111,6 +111,7 @@ public:
 		Fn<void()> repaint,
 		Fn<void()> heavyChanged);
 	void setSize(int width, double maxHeight);
+	void setDisplayScale(double scale);
 	void setSafeArea(ContentSafeArea area);
 	void laidOut(int height);
 	void setTheme(std::shared_ptr<const twidget::WidgetTheme> theme);
@@ -130,6 +131,7 @@ private:
 	static void PostCheck();
 	static void Check();
 	static void RefreshVisibility();
+	static void RefreshSizes();
 	static void ScheduleStarts();
 	static void Drain();
 	static void Sample(const std::shared_ptr<Host> &host);
@@ -238,6 +240,7 @@ private:
 	uint64 _summaryRequest = 0;
 	uint64 _logHost = 0;
 	double _maxHeight = 0.;
+	double _displayScale = 1.;
 	int _generation = 0;
 	int _width = 0;
 	HeightLayout _layout;

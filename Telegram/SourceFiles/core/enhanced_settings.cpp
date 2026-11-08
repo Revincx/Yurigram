@@ -222,6 +222,16 @@ const DescriptorList &DescriptorData() {
 			result.effects = OptionEffect::RefreshStickers;
 			return result;
 		}(),
+		[] {
+			auto result = Integer(
+				OptionId::WidgetMaxWidth,
+				"widget_max_width",
+				&tr::lng_settings_widget_max_width,
+				"enhanced/widget-max-width",
+				{ .minimum = 25, .maximum = 100 });
+			result.defaultValue = 100;
+			return result;
+		}(),
 		Bool(OptionId::HideCounter, "hide_counter",
 			&tr::lng_settings_hide_counter, "enhanced/hide-counter"),
 		Descriptor{

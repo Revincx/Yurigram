@@ -127,7 +127,8 @@ public:
 	[[nodiscard]] const QImage &frame(
 		Images::CornersMaskRef corners,
 		QSize cardArea,
-		bool autoHeight);
+		bool autoHeight,
+		double displayScale = 1.);
 	[[nodiscard]] int64 frameBytes() const;
 	void dropFrame();
 	void refreshFrame();
@@ -198,7 +199,8 @@ private:
 		const std::vector<twlite::Command> &list,
 		QRect area,
 		Images::CornersMaskRef corners,
-		QSize card);
+		QSize card,
+		double cssToDevice);
 
 	void finish(const std::vector<twidget::Json> &out, Changes changes);
 	[[nodiscard]] Changes forwardAll(const std::vector<twidget::Json> &out);
@@ -218,6 +220,7 @@ private:
 	QImage _frame;
 	QSize _frameSize;
 	QSize _frameArea;
+	double _frameScale = 1.;
 	Images::CornersMaskRef _frameCorners;
 	std::optional<double> _height;
 	std::string _pendingSize;

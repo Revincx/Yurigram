@@ -134,6 +134,14 @@ private:
 		DeviceSide(renderer.px_height()));
 }
 
+[[nodiscard]] QSize ScaledDeviceSize(
+		const twlite::Renderer &renderer,
+		double scale) {
+	return QSize(
+		int(std::ceil(renderer.width() * renderer.dpr() * scale)),
+		int(std::ceil(renderer.viewport_height() * renderer.dpr() * scale)));
+}
+
 [[nodiscard]] bool FitsCard(
 		QSize frame,
 		QSize card,
@@ -966,9 +974,14 @@ not_null<twlite::Renderer*> RendererCore::renderer() const {
 const QImage &RendererCore::frame(
 		Images::CornersMaskRef corners,
 		QSize cardArea,
-		bool autoHeight) {
+		bool autoHeight,
+		double displayScale) {
+	Expects(std::isfinite(displayScale)
+		&& displayScale > 0.
+		&& displayScale <= 1.);
 	const auto ratio = style::DevicePixelRatio();
 	const auto card = cardArea * ratio;
+	const auto cssToDevice = _renderer->dpr() * displayScale;
 	const auto fits = [&] {
 		return !_frame.isNull()
 			&& (_frameArea == cardArea)
@@ -978,7 +991,8 @@ const QImage &RendererCore::frame(
 	};
 	// A released core shows its last picture, whatever build it holds.
 	if ((_detached || !_renderer->dirty())
-		&& (_frameSize == DeviceSize(*_renderer))
+		&& (_frameSize == ScaledDeviceSize(*_renderer, displayScale))
+		&& (_frameScale == displayScale)
 		&& (_frameCorners == corners)
 		&& (_frameArea == cardArea)
 		&& (_frame.isNull() || fits())) {
@@ -989,7 +1003,7 @@ const QImage &RendererCore::frame(
 	// may delete with an idle face, so it is rasterized at once and only
 	// the pixels are kept.
 	const auto list = _renderer->paint();
-	const auto size = DeviceSize(*_renderer);
+	const auto size = ScaledDeviceSize(*_renderer, displayScale);
 	const auto settled = (_renderer->stats().builds != builds);
 	if (!FitsCard(size, card, ratio, autoHeight)) {
 		// A size the list has not laid out yet keeps this card's picture.
@@ -1006,15 +1020,18 @@ const QImage &RendererCore::frame(
 	auto damage = std::vector<twlite::Rect>();
 	const auto area = (inPlace
 		&& _frameRepaintable
+		&& (_frameScale == displayScale)
 		&& fits()
 		&& (_frameSize == size)
 		&& (_frame.size() == size)
 		&& _renderer->damage(damage))
-		? RepaintArea(damage, _renderer->dpr(), corners, card, size)
+		? RepaintArea(damage, cssToDevice, corners, card, size)
 		: std::nullopt;
-	auto limit = area ? repaintFrame(list, *area, corners, card) : std::nullopt;
+	auto limit = area
+		? repaintFrame(list, *area, corners, card, cssToDevice)
+		: std::nullopt;
 	if (!limit) {
-		auto painted = PaintFrame(list, *_backend, size, _renderer->dpr());
+		auto painted = PaintFrame(list, *_backend, size, cssToDevice);
 		limit = std::move(painted.limit);
 		if (limit->isEmpty() || !fits()) {
 			_frame = std::move(painted.image);
@@ -1027,6 +1044,7 @@ const QImage &RendererCore::frame(
 	const auto refused = !limit->isEmpty();
 	_frameRepaintable = inPlace && !refused && !_frame.isNull();
 	_frameSize = size;
+	_frameScale = displayScale;
 	_frameCorners = corners;
 	_frameArea = cardArea;
 	if (refused && !_detached && !_stopped) {
@@ -1045,7 +1063,8 @@ std::optional<QString> RendererCore::repaintFrame(
 		const std::vector<twlite::Command> &list,
 		QRect area,
 		Images::CornersMaskRef corners,
-		QSize card) {
+		QSize card,
+		double cssToDevice) {
 	if (area.isEmpty()) {
 		return QString();
 	}
@@ -1057,7 +1076,7 @@ std::optional<QString> RendererCore::repaintFrame(
 		*_backend,
 		_frame,
 		area,
-		_renderer->dpr());
+		cssToDevice);
 	if (result && result->isEmpty()) {
 		_frame = RoundFrame(std::move(_frame), corners, card, area);
 	} else {
@@ -1091,6 +1110,7 @@ void RendererCore::takeFrameFrom(RendererCore &other) {
 	_frame = base::take(other._frame);
 	_frameSize = base::take(other._frameSize);
 	_frameArea = base::take(other._frameArea);
+	_frameScale = other._frameScale;
 	_frameCorners = base::take(other._frameCorners);
 	_frameRepaintable = false;
 	other._frameRepaintable = false;
