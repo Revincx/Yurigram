@@ -536,6 +536,8 @@ PRIVATE
     ui/controls/choose_bot_use_button.h
     ui/controls/send_button.cpp
     ui/controls/send_button.h
+    ui/controls/slider_tick_labels.cpp
+    ui/controls/slider_tick_labels.h
     ui/controls/stars_rating.cpp
     ui/controls/stars_rating.h
     ui/controls/subsection_tabs_slider.cpp
