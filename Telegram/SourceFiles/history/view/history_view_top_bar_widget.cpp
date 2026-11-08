@@ -897,9 +897,8 @@ void TopBarWidget::infoClicked() {
 void TopBarWidget::backClicked() {
 	if (_activeChat.key.folder()) {
 		if (EnhancedSettings::Get(EnhancedSettings::Option::HideAllChats)) {
-			const auto filters = &_controller->session().data().chatsFilters();
-			const auto lookup_id = filters->lookupId(_controller->session().premium() ? 0 : 1);
-			_controller->setActiveChatsFilter(lookup_id);
+			const auto &filters = _controller->session().data().chatsFilters();
+			_controller->setActiveChatsFilter(filters.defaultId());
 		} else {
 			_controller->closeFolder();
 		}

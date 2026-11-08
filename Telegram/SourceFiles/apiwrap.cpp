@@ -536,16 +536,16 @@ void ApiWrap::toggleHistoryArchived(
 		if (archived) {
 			history->setFolder(_session->data().folder(archiveId));
 		} else {
+			history->clearFolder();
 			if (EnhancedSettings::Get(EnhancedSettings::Option::HideAllChats)) {
 				if (const auto window = Core::App().activeWindow()) {
 					if (const auto controller = window->sessionController()) {
-						const auto filters = &_session->data().chatsFilters();
-						const auto lookup_id = filters->lookupId(controller->session().premium() ? 0 : 1);
-						controller->setActiveChatsFilter(lookup_id);
+						if (&controller->session() == _session) {
+							const auto &filters = _session->data().chatsFilters();
+							controller->setActiveChatsFilter(filters.defaultId());
+						}
 					}
 				}
-			} else {
-				history->clearFolder();
 			}
 		}
 		if (const auto data = _historyArchivedRequests.take(history)) {

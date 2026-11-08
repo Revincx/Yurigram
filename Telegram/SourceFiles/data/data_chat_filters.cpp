@@ -909,7 +909,7 @@ const std::vector<ChatFilter> &ChatFilters::list() const {
 }
 
 FilterId ChatFilters::defaultId() const {
-	return lookupId(0);
+	return _list.empty() ? FilterId() : lookupId(0);
 }
 
 FilterId ChatFilters::lookupId(int index) const {
