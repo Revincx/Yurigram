@@ -9271,7 +9271,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_settings_use_gt_api" = "Use Google Translate";
 "lng_settings_translate_to_tc" = "使用正體中文翻譯訊息";
 "lng_settings_screen_shot_mode" = "Screenshot Mode";
-"lng_settings_allow_screenshots" = "Allow screenshots";
+"lng_settings_no_content_protection" = "No content protection";
 "lng_settings_hide_star_ratings" = "Hide user star ratings";
 "lng_settings_hide_gram_balance" = "Hide user Gram balance";
 "lng_settings_show_peer_id" = "Show Peer ID";

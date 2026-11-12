@@ -14,7 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 namespace Core {
 
 ScreenshotProtection::ScreenshotProtection() {
-	EnhancedSettings::Watch(EnhancedSettings::Option::AllowScreenshots
+	EnhancedSettings::Watch(EnhancedSettings::Option::NoContentProtection
 	) | rpl::on_next([=] {
 		refresh();
 	}, _lifetime);
@@ -64,7 +64,7 @@ void ScreenshotProtection::addReason(
 }
 
 bool ScreenshotProtection::activeFor(not_null<QWidget*> window) const {
-	if (EnhancedSettings::Get(EnhancedSettings::Option::AllowScreenshots)) {
+	if (EnhancedSettings::Get(EnhancedSettings::Option::NoContentProtection)) {
 		return false;
 	}
 	for (const auto &[id, reason] : _reasons) {

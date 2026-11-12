@@ -187,12 +187,15 @@ auto GenerateCodes() {
 			? u"WebView transport blocked."_q
 			: u"WebView transport unblocked."_q);
 	});
-	codes.emplace(u"allow-screenshot"_q, [](SessionController *window) {
-		const auto allowed = !EnhancedSettings::Get(EnhancedSettings::Option::AllowScreenshots);
-		EnhancedSettings::Set(EnhancedSettings::Option::AllowScreenshots, allowed);
-		Ui::Toast::Show(allowed
-			? u"Screenshot protection disabled."_q
-			: u"Screenshot protection enabled."_q);
+	codes.emplace(u"no-content-protection"_q, [](SessionController *window) {
+		const auto disabled = !EnhancedSettings::Get(
+			EnhancedSettings::Option::NoContentProtection);
+		EnhancedSettings::Set(
+			EnhancedSettings::Option::NoContentProtection,
+			disabled);
+		Ui::Toast::Show(disabled
+			? u"Content protection disabled."_q
+			: u"Content protection enabled."_q);
 	});
 	codes.emplace(u"resetapp"_q, [](SessionController *window) {
 		if (!window) {

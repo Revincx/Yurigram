@@ -659,6 +659,11 @@ void HistoryInner::setupSharingDisallowed() {
 		}
 	};
 
+	EnhancedSettings::Watch(EnhancedSettings::Option::NoContentProtection
+	) | rpl::on_next([=] {
+		clearIfRestricted();
+	}, lifetime());
+
 	if (const auto chat = _peer->asChat()) {
 		auto rights = chat->adminRightsValue();
 		auto canDelete = std::move(
@@ -872,7 +877,9 @@ bool HistoryInner::hasSelectRestriction() const {
 		return false;
 	} else if (session().frozen()) {
 		return true;
-	} else if (!_sharingDisallowed.current()) {
+	} else if (!_sharingDisallowed.current()
+		|| EnhancedSettings::Get(
+			EnhancedSettings::Option::NoContentProtection)) {
 		return false;
 	} else if (const auto chat = _peer->asChat()) {
 		return !chat->canDeleteMessages();

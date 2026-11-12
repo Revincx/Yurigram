@@ -81,7 +81,7 @@ enum class OptionId {
 	SendCommentAfterForwarding,
 	MprisCallHangup,
 	ScreenshotMode,
-	AllowScreenshots,
+	NoContentProtection,
 	HideStarRatings,
 	ShowPeerId,
 	PeerIdType,
@@ -178,8 +178,8 @@ inline constexpr auto SendCommentAfterForwarding
 inline constexpr auto MprisCallHangup
 	= Key<bool>{ OptionId::MprisCallHangup };
 inline constexpr auto ScreenshotMode = Key<bool>{ OptionId::ScreenshotMode };
-inline constexpr auto AllowScreenshots
-	= Key<bool>{ OptionId::AllowScreenshots };
+inline constexpr auto NoContentProtection
+	= Key<bool>{ OptionId::NoContentProtection };
 inline constexpr auto HideStarRatings
 	= Key<bool>{ OptionId::HideStarRatings };
 inline constexpr auto HideGramBalance

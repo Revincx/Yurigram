@@ -1073,7 +1073,7 @@ OverlayWidget::OverlayWidget()
 			_window,
 			_screenshotProtected);
 	}, lifetime());
-	EnhancedSettings::Watch(EnhancedSettings::Option::AllowScreenshots
+	EnhancedSettings::Watch(EnhancedSettings::Option::NoContentProtection
 	) | rpl::skip(1) | rpl::on_next([=] {
 		refreshScreenshotProtection();
 	}, lifetime());
@@ -6324,7 +6324,7 @@ void OverlayWidget::setSystemMediaControls(
 }
 
 bool OverlayWidget::contentNeedsScreenshotProtection() const {
-	if (EnhancedSettings::Get(EnhancedSettings::Option::AllowScreenshots)) {
+	if (EnhancedSettings::Get(EnhancedSettings::Option::NoContentProtection)) {
 		return false;
 	}
 	if (const auto story = _stories ? _stories->story() : nullptr) {
