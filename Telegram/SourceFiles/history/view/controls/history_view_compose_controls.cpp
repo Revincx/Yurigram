@@ -138,6 +138,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "webrtc/webrtc_environment.h"
 #include "window/window_adaptive.h"
 #include "window/window_controller.h"
+#include "window/window_columns.h"
 #include "window/window_peer_menu.h"
 #include "window/window_session_controller.h"
 #include "mainwindow.h"
@@ -5961,11 +5962,11 @@ bool ComposeControls::pushTabbedSelectorToThirdSection(
 	} else if (!Data::CanSendAnyOf(
 			thread,
 			Data::TabbedPanelSendRestrictions())) {
-		Core::App().settings().setTabbedReplacedWithInfo(true);
+		_regularWindow->columns().setTabbedReplacedWithInfo(true);
 		_regularWindow->showPeerInfo(thread, params.withThirdColumn());
 		return false;
 	}
-	Core::App().settings().setTabbedReplacedWithInfo(false);
+	_regularWindow->columns().setTabbedReplacedWithInfo(false);
 	_tabbedSelectorToggle->setColorOverrides(
 		&st::historyAttachEmojiActive,
 		&st::historyRecordVoiceFgActive,
@@ -6022,7 +6023,7 @@ void ComposeControls::toggleTabbedSelectorMode() {
 	if (_tabbedPanel) {
 		if (_regularWindow->canShowThirdSection()
 				&& !_regularWindow->adaptive().isOneColumn()) {
-			Core::App().settings().setTabbedSelectorSectionEnabled(true);
+			_regularWindow->columns().setTabbedSelectorSectionEnabled(true);
 			Core::App().saveSettingsDelayed();
 			const auto thread = _history->threadFor(
 				_topicRootId,

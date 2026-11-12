@@ -86,21 +86,22 @@ write a proposed routing file inside the ignored transaction, but only the
 orchestrator writes tracked AI state.
 
 Treat natural-language hints as evidence, not required syntax. Segment the
-inbox into requests, then decide for each request whether to:
+inbox into requests, then put every task into a project: an existing one, or a
+new one when no existing project covers the area. There are no standalone
+tasks; publication refuses a new task without a live project.
 
-- create a standalone task with no project;
-- add one or more tasks to an existing project;
-- create a new project when durable shared context is useful.
-
-Every project is branch-bound: its tasks are performed on a branch named by
-its slug, in tdesktop and in each top-level submodule it changes, by checkouts the owner
-switched to that branch, several at once if the owner wants. Give a new
-project a short slug, one or two words such as `net` or `scale`, because it
-becomes a branch name; existing projects keep theirs. Plan a long or
-experimental project, such as a rewrite, as a task graph that can run for
-days: tasks that migrate one part each, differential tests against the old
-implementation, and `improve` tasks; the project planner extends it as
-results come in.
+A project is a bundle of tasks and the branch they are performed on, not a
+knowledge base. Its tasks run on a branch named by its slug, in tdesktop and
+in each top-level submodule it changes. The workflow switches a checkout onto
+that branch by itself, and every approval rebases the task's commits onto the
+shared branch and pushes them, so the owner integrates finished work one
+project branch at a time. Name a new project for the area its tasks touch, or
+for the kind of work when several requests share one, in one to three words
+such as `uploads`, `window-layout` or `code-health`, because the slug becomes
+a branch name. Existing projects keep their slugs. Plan a long or experimental
+project, such as a rewrite, as a task graph that can run for days: tasks that
+migrate one part each, differential tests against the old implementation, and
+`improve` tasks; the project planner extends it as results come in.
 
 Never create a task whose work is to move an existing source commit between
 branches: no backport, forward-port, cherry-pick, rebase, merge, branch sync,
@@ -119,7 +120,7 @@ is affirmatively established. A task belongs to the existing project when it
 builds on project code or behavior, requires source changes shipped by project
 tasks, assumes the project's branch or accumulated context, or must be ordered
 after project work. Touching shared infrastructure or an additional
-non-project consumer does not by itself make the task standalone: projects
+non-project consumer does not by itself move the task elsewhere: projects
 record feature and code lineage, not exclusive ownership of every touched
 file.
 
@@ -237,7 +238,7 @@ Create `state.yaml` in this exact field order:
 status: todo
 type: implement
 created: YYYY-MM-DD
-project: null
+project: <project-slug>
 depends_on: []
 claimed_by: null
 claimed_at: null
@@ -253,7 +254,7 @@ Do not write a `model` field. It records which model finished the task, so only
 boundary; a task
 carrying one before it is claimed is malformed.
 
-Use a project slug instead of `null` when routed to a project. Use a YAML list
+`project` is always a live project's slug. Use a YAML list
 of task identifiers for dependencies. Dependencies record code lineage as well
 as readiness: keep an approved source task in `depends_on` when the new task's
 implementation assumes its shipped changes. State that prerequisite in
@@ -277,8 +278,10 @@ a target. The performer runs it in the improve lane
 (`.agents/skills/perform-task/references/improve-lane.md`); missing the target
 never blocks it. Hard requirements stay acceptance criteria.
 
-For a new project, create `projects/<slug>/project.md` with a concise durable
-scope and `projects/<slug>/tasks.md` with task links. For an existing project,
+For a new project, create `projects/<slug>/project.md` with a `# ` title and
+one paragraph naming the area or kind of work it bundles, and
+`projects/<slug>/tasks.md` with task links. Nothing else belongs in a new
+`project.md`: each task carries its own context. For an existing project,
 append every newly assigned task link, including inherited follow-ups, with
 only concise optional grouping. Put routing and decision prose in task
 specifications or the receipt, following the shared policy.
@@ -301,8 +304,9 @@ resolve to live state, create nothing and reuse that receipt for finalization.
 Before committing, verify:
 
 - every request and supplied file is accounted for;
-- every new task has `task.md`, valid `state.yaml`, and a falsifiable
-  acceptance result;
+- every new task has `task.md`, valid `state.yaml`, a falsifiable
+  acceptance result, and a live project, created or restored in this
+  transaction when it is new or archived;
 - every task link, dependency, and copied input exists;
 - no supplied video and no full frame extraction is tracked;
 - no task or project reference points into `projects/archive/`;
