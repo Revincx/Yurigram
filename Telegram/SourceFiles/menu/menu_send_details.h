@@ -65,6 +65,7 @@ struct Details {
 	Fn<bool()> disableSharingAllowed;
 	Fn<bool()> sharingDisabled;
 	Fn<void()> toggleSharing;
+	bool replyToForward = false;
 };
 
 } // namespace SendMenu

@@ -1122,6 +1122,7 @@ Widget::Widget(
 			.chosen = [=](InsertSuggestionCommand command) {
 				applyInsertSuggestion(command);
 			},
+			.lists = [=] { return canInsertListAtCaret(); },
 			.media = static_cast<bool>(_requestMedia),
 			.map = static_cast<bool>(_requestMap),
 		});
@@ -8631,7 +8632,7 @@ bool Widget::handleInsertSuggestionsKey(QKeyEvent *e) {
 		|| (modifiers != Qt::NoModifier)
 		|| _field->isHidden()
 		|| (_fieldMode != State::FieldMode::Rich)
-		|| !_state->isActiveTopLevelParagraph()
+		|| !_state->isActiveInsertableParagraph()
 		|| !_field->getLastText().isEmpty()) {
 		return false;
 	}

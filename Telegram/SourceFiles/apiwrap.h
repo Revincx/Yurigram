@@ -355,10 +355,11 @@ public:
 	}
 	void sendAction(const SendAction &action);
 	void finishForwarding(const SendAction &action);
-	void forwardMessages(
+	FullMsgId forwardMessages(
 		Data::ResolvedForwardDraft &&draft,
 		SendAction action,
-		FnMut<void()> &&successCallback = nullptr);
+		FnMut<void()> &&successCallback = nullptr,
+		Fn<void(const MessageIdsList&)> sentCallback = nullptr);
 	void forwardMessagesUnquoted(
 		Data::ResolvedForwardDraft &&draft,
 		const SendAction &action,
